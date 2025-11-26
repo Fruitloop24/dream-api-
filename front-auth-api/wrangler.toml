@@ -1,0 +1,7 @@
+name = "config-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[[kv_namespaces]]
+binding = "TOKENS_KV"
+id = "1f71f940ccc043459b6049059fbac30b"

@@ -1,0 +1,19 @@
+name = "auth-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[dev]
+port = 8788
+
+# KV namespace for storing user tokens (encrypted)
+[[kv_namespaces]]
+binding = "TOKENS_KV"
+id = "1f71f940ccc043459b6049059fbac30b"
+
+# OAuth app secrets (set via wrangler secret put)
+# GITHUB_CLIENT_ID
+# GITHUB_CLIENT_SECRET
+# CLOUDFLARE_CLIENT_ID
+# CLOUDFLARE_CLIENT_SECRET
+# STRIPE_CLIENT_ID
+# STRIPE_CLIENT_SECRET

@@ -1,0 +1,24 @@
+name = "api-prev"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# KV namespace bindings
+[[kv_namespaces]]
+binding = "USAGE_KV"
+id = "2b116f97974a4461a03f91792198cefc"
+
+[[kv_namespaces]]
+binding = "TOKENS_KV"
+id = "1f71f940ccc043459b6049059fbac30b"
+
+[vars]
+# Non-secret variables
+CLERK_JWT_TEMPLATE = "pan-api"
+
+# Observability - Logging
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
