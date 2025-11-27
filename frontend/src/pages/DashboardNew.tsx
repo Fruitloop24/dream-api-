@@ -7,19 +7,23 @@
  * - Display API key + platformId
  */
 
-import { useUser, UserButton } from '@clerk/clerk-react';
+import { useUser, UserButton, useAuth } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
+const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
+
 export default function Dashboard() {
   const { isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
   const navigate = useNavigate();
 
   const [hasPaid, setHasPaid] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
-  const [platformId] = useState('plt_demo123'); // TODO: Generate real one
-  const [apiKey] = useState('pk_live_demo_key_abc123xyz'); // TODO: Generate real one
+  const [platformId, setPlatformId] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -35,24 +39,93 @@ export default function Dashboard() {
     }
   }, [user]);
 
+  // Load credentials if user has paid
+  useEffect(() => {
+    if (hasPaid && !platformId) {
+      loadCredentials();
+    }
+  }, [hasPaid, platformId]);
+
   // Check if Stripe is connected (check URL params after OAuth)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('stripe') === 'connected') {
       setStripeConnected(true);
-      // TODO: Also check KV or metadata for persistent state
+    }
+    // Check if payment was successful
+    if (params.get('payment') === 'success') {
+      generateCredentials();
     }
   }, []);
 
+  const loadCredentials = async () => {
+    try {
+      const token = await getToken();
+      const response = await fetch(`${FRONT_AUTH_API}/get-credentials`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPlatformId(data.platformId);
+        setApiKey(data.apiKey);
+      }
+    } catch (error) {
+      console.error('Failed to load credentials:', error);
+    }
+  };
+
+  const generateCredentials = async () => {
+    try {
+      setLoading(true);
+      const token = await getToken();
+      const response = await fetch(`${FRONT_AUTH_API}/generate-credentials`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPlatformId(data.platformId);
+        setApiKey(data.apiKey);
+      }
+    } catch (error) {
+      console.error('Failed to generate credentials:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePayment = async () => {
-    // TODO: Create Stripe checkout session for $29/mo to YOUR Stripe
-    // This will be handled by front-auth-api
-    // After payment, JWT metadata will be updated with subscribed: true
-    alert('Payment flow coming soon! Will redirect to Stripe checkout for $29/mo');
+    try {
+      setLoading(true);
+      const token = await getToken();
+      const response = await fetch(`${FRONT_AUTH_API}/create-checkout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        window.location.href = data.checkoutUrl;
+      } else {
+        alert('Failed to create checkout session');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Payment error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleConnectStripe = () => {
-    // Redirect to oauth-api Stripe OAuth
     const oauthUrl = `${import.meta.env.VITE_OAUTH_API_URL}/oauth/stripe/authorize?userId=${user?.id}`;
     window.location.href = oauthUrl;
   };
@@ -100,9 +173,10 @@ export default function Dashboard() {
               </p>
               <button
                 onClick={handlePayment}
-                className="px-6 py-3 bg-blue-600 rounded font-bold hover:bg-blue-700"
+                disabled={loading}
+                className="px-6 py-3 bg-blue-600 rounded font-bold hover:bg-blue-700 disabled:opacity-50"
               >
-                Subscribe Now
+                {loading ? 'Processing...' : 'Subscribe Now'}
               </button>
             </div>
           )}

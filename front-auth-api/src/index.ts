@@ -1,17 +1,21 @@
 /**
  * ============================================================================
- * CONFIG API - Clerk JWT Verification Only
+ * FRONT-AUTH-API - Platform Authentication & Payment
  * ============================================================================
  *
  * PURPOSE:
- * Verify Clerk JWT from configurator and return userId.
- * Frontend then uses userId with auth-api for everything else.
+ * Handle YOUR platform's authentication, payment, and credential generation.
+ * Customers sign up, pay YOU $29/mo, get platformId + API key.
  *
  * ENDPOINTS:
- * POST /verify-auth  - Verify JWT, return userId
+ * POST /verify-auth           - Verify JWT, return userId
+ * POST /create-checkout       - Create Stripe checkout ($29/mo)
+ * POST /webhook/stripe        - Handle payment webhooks (update JWT)
+ * POST /generate-credentials  - Generate platformId + API key
+ * GET  /get-credentials       - Get existing credentials
  *
  * AUTH:
- * Clerk JWT verification (configurator Clerk app)
+ * Clerk JWT verification (YOUR Clerk app for platform)
  *
  * ============================================================================
  */
@@ -19,12 +23,197 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { createClerkClient } from '@clerk/backend';
+import { handleStripeWebhook } from './webhook';
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
 
 interface Env {
   CLERK_SECRET_KEY: string;
   CLERK_PUBLISHABLE_KEY: string;
   FRONTEND_URL: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_PRICE_ID: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  TOKENS_KV: KVNamespace;
+  USAGE_KV: KVNamespace;
 }
+
+/**
+ * Usage data structure stored in KV
+ * Key format: `usage:{userId}`
+ * For YOUR platform developers (not their end-users)
+ */
+interface UsageData {
+  usageCount: number;        // Number of API calls made in current period
+  plan: 'free' | 'paid';     // Developer's current plan
+  lastUpdated: string;       // ISO timestamp of last update
+  periodStart?: string;      // Billing period start (YYYY-MM-DD)
+  periodEnd?: string;        // Billing period end (YYYY-MM-DD)
+}
+
+/**
+ * Platform tier configuration
+ * Defines limits and pricing for YOUR developers
+ */
+const PLATFORM_TIERS: Record<string, { limit: number; price: number; name: string }> = {
+  free: {
+    name: 'Free',
+    price: 0,
+    limit: 5  // 5 API calls per month
+  },
+  paid: {
+    name: 'Paid',
+    price: 29,  // $29/month
+    limit: 500  // 500 API calls per month
+  }
+};
+
+const RATE_LIMIT_PER_MINUTE = 100;
+
+// ============================================================================
+// USAGE TRACKING UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Get current billing period (calendar month)
+ * Returns first day and last day of current month in UTC
+ */
+function getCurrentPeriod(): { start: string; end: string } {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+
+  return {
+    start: start.toISOString().split('T')[0],  // "2025-11-01"
+    end: end.toISOString().split('T')[0]        // "2025-11-30"
+  };
+}
+
+/**
+ * Check if usage data needs reset for new billing period
+ */
+function shouldResetUsage(usageData: UsageData): boolean {
+  const currentPeriod = getCurrentPeriod();
+
+  // No period data = first time, reset
+  if (!usageData.periodStart || !usageData.periodEnd) {
+    return true;
+  }
+
+  // Different month = new period, reset
+  return currentPeriod.start !== usageData.periodStart;
+}
+
+/**
+ * Rate limiting check using KV storage
+ * 100 requests per minute per developer
+ */
+async function checkRateLimit(
+  userId: string,
+  env: Env
+): Promise<{ allowed: boolean; remaining: number }> {
+  const now = Date.now();
+  const minute = Math.floor(now / 60000);
+  const rateLimitKey = `ratelimit:${userId}:${minute}`;
+
+  const currentCount = await env.USAGE_KV.get(rateLimitKey);
+  const count = currentCount ? parseInt(currentCount) : 0;
+
+  if (count >= RATE_LIMIT_PER_MINUTE) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  // Increment and set TTL of 2 minutes (auto-cleanup)
+  await env.USAGE_KV.put(
+    rateLimitKey,
+    (count + 1).toString(),
+    { expirationTtl: 120 }
+  );
+
+  return {
+    allowed: true,
+    remaining: RATE_LIMIT_PER_MINUTE - count - 1
+  };
+}
+
+/**
+ * Main usage tracking handler
+ * Call this on EVERY API endpoint that should count toward limits
+ */
+async function trackUsage(
+  userId: string,
+  plan: 'free' | 'paid',
+  env: Env
+): Promise<{ success: boolean; usage?: any; error?: string }> {
+  // Load usage data from KV
+  const usageKey = `usage:${userId}`;
+  const usageDataRaw = await env.USAGE_KV.get(usageKey);
+  const currentPeriod = getCurrentPeriod();
+
+  let usageData: UsageData = usageDataRaw
+    ? JSON.parse(usageDataRaw)
+    : {
+        usageCount: 0,
+        plan,
+        lastUpdated: new Date().toISOString(),
+        periodStart: currentPeriod.start,
+        periodEnd: currentPeriod.end,
+      };
+
+  const tierLimit = PLATFORM_TIERS[plan]?.limit || 0;
+
+  // Reset usage if new billing period
+  if (shouldResetUsage(usageData)) {
+    usageData.usageCount = 0;
+    usageData.periodStart = currentPeriod.start;
+    usageData.periodEnd = currentPeriod.end;
+  }
+
+  // Update plan (in case it changed in JWT)
+  usageData.plan = plan;
+
+  // Check if tier limit exceeded
+  if (usageData.usageCount >= tierLimit) {
+    return {
+      success: false,
+      error: 'Tier limit reached',
+      usage: {
+        count: usageData.usageCount,
+        limit: tierLimit,
+        plan,
+        periodStart: usageData.periodStart,
+        periodEnd: usageData.periodEnd,
+        message: 'Please upgrade to unlock more requests'
+      }
+    };
+  }
+
+  // Increment usage count
+  usageData.usageCount++;
+  usageData.lastUpdated = new Date().toISOString();
+  await env.USAGE_KV.put(usageKey, JSON.stringify(usageData));
+
+  return {
+    success: true,
+    usage: {
+      count: usageData.usageCount,
+      limit: tierLimit,
+      plan,
+      periodStart: usageData.periodStart,
+      periodEnd: usageData.periodEnd,
+      remaining: tierLimit - usageData.usageCount
+    }
+  };
+}
+
+// ============================================================================
+// CORS & AUTH HELPERS
+// ============================================================================
 
 /**
  * CORS headers for configurator frontend
@@ -100,13 +289,227 @@ export default {
       // Verify JWT and return userId
       if (url.pathname === '/verify-auth' && request.method === 'POST') {
         const userId = await verifyAuth(request, env);
-
         console.log(`[Config] Verified auth for user: ${userId}`);
 
+        // Get user plan from Clerk metadata
+        const clerkClient = createClerkClient({
+          secretKey: env.CLERK_SECRET_KEY,
+          publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        });
+        const user = await clerkClient.users.getUser(userId);
+        const plan = (user.publicMetadata.plan as 'free' | 'paid') || 'free';
+
+        // Check rate limit
+        const rateLimit = await checkRateLimit(userId, env);
+        if (!rateLimit.allowed) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Track usage
+        const usageResult = await trackUsage(userId, plan, env);
+        if (!usageResult.success) {
+          return new Response(
+            JSON.stringify({ error: usageResult.error, ...usageResult.usage }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         return new Response(
-          JSON.stringify({ success: true, userId }),
+          JSON.stringify({
+            success: true,
+            userId,
+            usage: usageResult.usage
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      // Create Stripe checkout session for $29/mo subscription
+      if (url.pathname === '/create-checkout' && request.method === 'POST') {
+        const userId = await verifyAuth(request, env);
+
+        // Get user plan
+        const clerkClient = createClerkClient({
+          secretKey: env.CLERK_SECRET_KEY,
+          publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        });
+        const user = await clerkClient.users.getUser(userId);
+        const plan = (user.publicMetadata.plan as 'free' | 'paid') || 'free';
+
+        // Check rate limit
+        const rateLimit = await checkRateLimit(userId, env);
+        if (!rateLimit.allowed) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Track usage
+        const usageResult = await trackUsage(userId, plan, env);
+        if (!usageResult.success) {
+          return new Response(
+            JSON.stringify({ error: usageResult.error, ...usageResult.usage }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-11-17.clover' });
+
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: [{
+            price: env.STRIPE_PRICE_ID,
+            quantity: 1,
+          }],
+          mode: 'subscription',
+          success_url: `${env.FRONTEND_URL}/dashboard?payment=success`,
+          cancel_url: `${env.FRONTEND_URL}/dashboard?payment=cancelled`,
+          client_reference_id: userId,
+          metadata: { userId, tier: 'paid' },  // Add tier to metadata for webhook
+        });
+
+        console.log(`[Payment] Created checkout session for user: ${userId}`);
+
+        return new Response(
+          JSON.stringify({
+            checkoutUrl: session.url,
+            usage: usageResult.usage
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Generate platformId and API key (after payment confirmed)
+      if (url.pathname === '/generate-credentials' && request.method === 'POST') {
+        const userId = await verifyAuth(request, env);
+
+        // Get user plan
+        const clerkClient = createClerkClient({
+          secretKey: env.CLERK_SECRET_KEY,
+          publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        });
+        const user = await clerkClient.users.getUser(userId);
+        const plan = (user.publicMetadata.plan as 'free' | 'paid') || 'free';
+
+        // Check rate limit
+        const rateLimit = await checkRateLimit(userId, env);
+        if (!rateLimit.allowed) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Track usage
+        const usageResult = await trackUsage(userId, plan, env);
+        if (!usageResult.success) {
+          return new Response(
+            JSON.stringify({ error: usageResult.error, ...usageResult.usage }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if already generated
+        const existing = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        if (existing) {
+          const apiKey = await env.TOKENS_KV.get(`user:${userId}:apiKey`);
+          return new Response(
+            JSON.stringify({
+              platformId: existing,
+              apiKey,
+              usage: usageResult.usage
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Generate new credentials
+        const platformId = `plt_${crypto.randomUUID().replace(/-/g, '')}`;
+        const apiKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
+
+        // Hash API key for storage
+        const encoder = new TextEncoder();
+        const data = encoder.encode(apiKey);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+        // Store in KV
+        await env.TOKENS_KV.put(`apikey:${hashHex}`, platformId);
+        await env.TOKENS_KV.put(`user:${userId}:platformId`, platformId);
+        await env.TOKENS_KV.put(`user:${userId}:apiKey`, apiKey);
+        await env.TOKENS_KV.put(`platform:${platformId}:userId`, userId);
+
+        console.log(`[Credentials] Generated for user ${userId}: ${platformId}`);
+
+        return new Response(
+          JSON.stringify({
+            platformId,
+            apiKey,
+            usage: usageResult.usage
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get credentials (for dashboard display)
+      if (url.pathname === '/get-credentials' && request.method === 'GET') {
+        const userId = await verifyAuth(request, env);
+
+        // Get user plan
+        const clerkClient = createClerkClient({
+          secretKey: env.CLERK_SECRET_KEY,
+          publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        });
+        const user = await clerkClient.users.getUser(userId);
+        const plan = (user.publicMetadata.plan as 'free' | 'paid') || 'free';
+
+        // Check rate limit
+        const rateLimit = await checkRateLimit(userId, env);
+        if (!rateLimit.allowed) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Track usage
+        const usageResult = await trackUsage(userId, plan, env);
+        if (!usageResult.success) {
+          return new Response(
+            JSON.stringify({ error: usageResult.error, ...usageResult.usage }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const platformId = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        const apiKey = await env.TOKENS_KV.get(`user:${userId}:apiKey`);
+
+        if (!platformId) {
+          return new Response(
+            JSON.stringify({ error: 'Credentials not generated yet' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            platformId,
+            apiKey,
+            usage: usageResult.usage
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Stripe webhook - delegate to webhook handler
+      if (url.pathname === '/webhook/stripe' && request.method === 'POST') {
+        return await handleStripeWebhook(request, env);
       }
 
       // Not found

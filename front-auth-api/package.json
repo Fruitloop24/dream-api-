@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "npx wrangler dev",
+    "deploy": "npx wrangler deploy",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,7 +13,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@clerk/backend": "^2.23.0"
+    "@clerk/backend": "^2.23.0",
+    "stripe": "^20.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251119.0"

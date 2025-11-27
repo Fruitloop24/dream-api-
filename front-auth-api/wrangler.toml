@@ -2,6 +2,19 @@ name = "config-api"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
+# KV namespace bindings (front-auth-api - YOUR platform)
+[[kv_namespaces]]
+binding = "USAGE_KV"
+id = "6a3c39a8ee9b46859dc237136048df25"
+
 [[kv_namespaces]]
 binding = "TOKENS_KV"
-id = "1f71f940ccc043459b6049059fbac30b"
+id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
+
+[vars]
+# Non-secret variables
+CLERK_JWT_TEMPLATE = "dream-api"
+
+# Local development settings
+[dev]
+port = 8788

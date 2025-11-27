@@ -11,6 +11,10 @@
 !**/package-lock.json
 !**/tsconfig.json
 
+# Docs with sensitive keys (public repo safety)
+STARTUP_GUIDE.md
+KV_SETUP.md
+
 # Dependencies
 node_modules/
 .pnp

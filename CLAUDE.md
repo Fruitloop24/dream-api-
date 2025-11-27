@@ -1,5 +1,32 @@
 # dream-api - Claude Development Guide
 
+## 🚀 Quick Start (Pick Up Where We Left Off)
+
+**Last session:** 2025-11-26 - Usage tracking fully implemented in front-auth-api
+
+**What's working:**
+- ✅ Backend API with usage tracking (5 calls free, 500 calls paid)
+- ✅ Auth flow (Clerk signup → free plan → subscribe button)
+- ✅ Local dev environment tested
+
+**Next task:** Dashboard UI improvements
+1. Display usage stats in dashboard (3/5 calls)
+2. Add progress bar + upgrade CTA
+3. Generate & display preview link
+4. Fix off-center CSS layout
+
+**To resume:**
+```bash
+# Start services
+cd front-auth-api && npm run dev  # Port 8788
+cd frontend && npm run dev         # Port 5173
+
+# Test at http://localhost:5173
+# API docs: See TOMORROW.md for UI mockups
+```
+
+---
+
 ## Project Overview
 
 **dream-api** is an API-as-a-Service platform that provides auth, billing, and usage tracking in 5 lines of code.
@@ -26,13 +53,57 @@ This project evolved through 4 iterations:
 
 ---
 
+## Adding from plug-saas Pattern
+
+We're implementing the **exact pattern** from plug-saas for usage tracking and billing. This pattern has been tested and works perfectly.
+
+### What We're Implementing:
+
+#### 1. **JWT-Based Usage Tracking**
+- **Plan stored in JWT**: `{ "plan": "free" | "paid" }`
+- **Usage counter in KV**: `usage:{userId} → { usageCount, plan, periodStart }`
+- **Tier limits in config** (NOT in JWT): `TIER_CONFIG = { free: 5, paid: 500 }`
+
+**Why this works:**
+- JWT is public → Only store plan tier (safe to expose)
+- KV is private → Store actual usage count (sensitive data)
+- Config is hardcoded → Easy to change limits without migrations
+
+#### 2. **Monthly Billing Period Reset**
+- `getCurrentPeriod()` - Calculates current month start/end (UTC)
+- `shouldResetUsage()` - Checks if new billing period started
+- Resets counter automatically on first request of new month
+- Only applies to limited tiers (free/paid), not unlimited developer tier
+
+#### 3. **Stripe Webhook Updates JWT**
+- Webhook receives `checkout.session.completed`
+- Updates Clerk `publicMetadata.plan = "paid"`
+- JWT refreshes with new plan on next request
+- No manual database updates needed
+
+#### 4. **Rate Limiting** (100 req/min per user)
+- Per-minute buckets: `ratelimit:{userId}:{minute}`
+- TTL of 2 minutes for auto-cleanup
+- Prevents abuse even within tier limits
+
+---
+
 ## Current Status
 
-### ✅ What Works (Copied from previous iteration)
+### ✅ What Works (Updated 2025-11-26)
 
-These files work but need **adaptation** for API-first model:
+**front-auth-api/**: Platform authentication & payment (YOUR Stripe)
+- ✅ Clerk JWT verification
+- ✅ **Usage tracking IMPLEMENTED** (free: 5 calls/month, paid: 500 calls/month)
+- ✅ **Monthly billing period resets** (auto-reset on 1st of month)
+- ✅ **Rate limiting** (100 req/min per user)
+- ✅ Stripe checkout ($29/mo subscription)
+- ✅ **Webhook handler** (updates JWT plan field + idempotency)
+- ✅ Credential generation (platformId + API key)
+- ✅ **All endpoints wrapped** with usage tracking
+- ✅ Usage stats returned in every API response
 
-**api-multi/**: Multi-tenant API worker
+**api-multi/**: Multi-tenant API worker (customers' end-users)
 - ✅ Clerk JWT authentication (one Clerk app for all)
 - ✅ Multi-tenant via `X-Platform-User-Id` header
 - ✅ Config loading from KV per platform (`user:{platformId}:tierConfig`)
@@ -41,45 +112,67 @@ These files work but need **adaptation** for API-first model:
 - ✅ Rate limiting (100 req/min per user)
 - ✅ CORS handling
 - ✅ Monthly billing period resets
+- ⚠️ **NEEDS**: Same plug-saas pattern (already has most of it)
 
-**frontend/**: React app (currently builder UI)
-- ✅ Component structure
-- ✅ Routing
-- ⚠️ Shows old "builder" UI (needs to become signup/dashboard)
+**frontend/**: React app (Vite + Clerk + Tailwind)
+- ✅ Landing page (LandingNew.tsx)
+- ✅ Dashboard (DashboardNew.tsx)
+- ✅ Routing with Clerk authentication
+- ✅ **WIRED TO**: front-auth-api (uses JWT tokens)
+- ✅ **Local dev working** (http://localhost:5173)
+- ⚠️ **NEEDS**: Usage stats display in dashboard
+- ⚠️ **NEEDS**: Tier config UI
+- ⚠️ **NEEDS**: Preview link generation
 
-**front-auth-api/**: Clerk JWT verification for frontend
-- ✅ Works as-is (validates dashboard logins)
+**oauth-api/**: Stripe OAuth handler
+- ✅ OAuth flow skeleton
+- ⚠️ Needs full Stripe Connect implementation (Phase 2)
 
-**oauth-api/**: OAuth flow handler
-- ✅ GitHub/Stripe/Cloudflare OAuth flows
-- ⚠️ Built for auto-deploy (evaluate if needed for API product)
+### 🔨 What Needs Work (Priority Order)
 
-### 🔨 What Needs Work
+**Phase 1: Dashboard UI (Next Session)**
+1. **Display Usage Stats**
+   - Show: "3/5 calls this month"
+   - Progress bar visualization
+   - Plan badge (FREE/PAID)
+   - Upgrade CTA when near limit
 
-**Critical (API-first pivot):**
-1. **API Key Authentication**
-   - Current: Only accepts Clerk JWT
-   - Need: Accept API keys too (dual mode)
-   - Why: Devs shouldn't need Clerk in their app, just an API key
+2. **Preview Link Generation**
+   - Generate: `https://preview.dream-api.com/{platformId}`
+   - Display in dashboard
+   - Copy button
+   - "Try Demo" link
 
-2. **Developer Registration**
-   - Need: `POST /api/developer/register`
-   - Generates: platformId + API key
-   - Stores: `platform:{id}:apiKey` (hashed)
+3. **Tier Configuration UI**
+   - Let developers customize tier names
+   - Set pricing
+   - Set limits
+   - Preview before saving
 
-3. **Product Creation Helper**
-   - Need: `POST /api/developer/create-products`
-   - Creates Stripe products/prices
-   - Stores: `platform:{id}:config` with stripePriceIds
+**Phase 2: Preview Mode (api-multi)**
+1. **Preview vs Production Mode**
+   - Preview: Uses YOUR Stripe keys
+   - Production: Uses THEIR Stripe keys (OAuth)
+   - Watermark responses in preview mode
+   - Limit preview to 100 end-users
 
-4. **Developer Dashboard**
-   - Show: API key, usage stats, revenue
-   - Current frontend is builder UI (needs rebuild)
+2. **Stripe OAuth Integration**
+   - oauth-api flow
+   - Store customer Stripe keys in KV
+   - Switch from preview → production mode
 
-5. **Code Comments Cleanup**
-   - Remove references to "PLUG SAAS" / "FACT-SaaS"
-   - Add TODO markers for what needs fixing
-   - Update architecture docs
+**Phase 3: Polish**
+1. **Code Cleanup**
+   - Remove "PLUG SAAS" references
+   - Remove "FACT-SaaS" references
+   - Update all comments
+   - Add JSDoc documentation
+
+2. **Testing & Deploy**
+   - End-to-end tests
+   - Load testing
+   - Deploy to production
+   - Set up monitoring
 
 ### ❌ Not Built Yet
 
@@ -192,6 +285,292 @@ api-multi
 ```
 
 **Key Difference:** API key auth instead of requiring Clerk in customer's app.
+
+---
+
+## Implementation Details from plug-saas
+
+This section contains the **exact code patterns** to implement in front-auth-api. Copy this pattern precisely.
+
+### Data Structures
+
+#### UsageData Interface
+```typescript
+interface UsageData {
+    usageCount: number;
+    plan: 'free' | 'paid';
+    lastUpdated: string;
+    periodStart?: string;
+    periodEnd?: string;
+}
+```
+
+#### Platform Tier Configuration (front-auth-api)
+```typescript
+const PLATFORM_TIERS: Record<string, { limit: number; price: number; name: string }> = {
+    free: {
+        name: 'Free',
+        price: 0,
+        limit: 5  // 5 API calls per month
+    },
+    paid: {
+        name: 'Paid',
+        price: 29,  // $29/month
+        limit: 500  // 500 API calls per month
+    }
+};
+```
+
+### Core Functions
+
+#### 1. Get Current Billing Period
+```typescript
+/**
+ * Calculate current month boundaries (UTC)
+ * Used for monthly billing period reset
+ */
+function getCurrentPeriod(): { start: string; end: string } {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+
+    const start = new Date(Date.UTC(year, month, 1));
+    const end = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+
+    return {
+        start: start.toISOString().split('T')[0],  // "2025-11-01"
+        end: end.toISOString().split('T')[0]        // "2025-11-30"
+    };
+}
+```
+
+#### 2. Check if Usage Should Reset
+```typescript
+/**
+ * Determine if usage counter should be reset
+ * Resets on first request of new billing period
+ */
+function shouldResetUsage(usageData: UsageData): boolean {
+    const currentPeriod = getCurrentPeriod();
+
+    // No period data = first time, reset
+    if (!usageData.periodStart || !usageData.periodEnd) {
+        return true;
+    }
+
+    // Different month = new period, reset
+    return currentPeriod.start !== usageData.periodStart;
+}
+```
+
+#### 3. Rate Limiting
+```typescript
+const RATE_LIMIT_PER_MINUTE = 100;
+
+/**
+ * Check and update rate limit counter
+ * Uses per-minute KV buckets with auto-expiring TTL
+ */
+async function checkRateLimit(
+    userId: string,
+    env: Env
+): Promise<{ allowed: boolean; remaining: number }> {
+    const now = Date.now();
+    const minute = Math.floor(now / 60000);  // Current minute
+    const rateLimitKey = `ratelimit:${userId}:${minute}`;
+
+    const currentCount = await env.USAGE_KV.get(rateLimitKey);
+    const count = currentCount ? parseInt(currentCount) : 0;
+
+    if (count >= RATE_LIMIT_PER_MINUTE) {
+        return { allowed: false, remaining: 0 };
+    }
+
+    // Increment and set TTL of 2 minutes (auto-cleanup)
+    await env.USAGE_KV.put(
+        rateLimitKey,
+        (count + 1).toString(),
+        { expirationTtl: 120 }
+    );
+
+    return {
+        allowed: true,
+        remaining: RATE_LIMIT_PER_MINUTE - count - 1
+    };
+}
+```
+
+#### 4. Handle Data Request (Usage Tracking)
+```typescript
+/**
+ * Main usage tracking handler
+ * Call this on EVERY API endpoint that should count toward limits
+ */
+async function handleDataRequest(
+    userId: string,
+    plan: 'free' | 'paid',
+    env: Env,
+    corsHeaders: Record<string, string>
+): Promise<Response> {
+    // Load usage data from KV
+    const usageKey = `usage:${userId}`;
+    const usageDataRaw = await env.USAGE_KV.get(usageKey);
+    const currentPeriod = getCurrentPeriod();
+
+    let usageData: UsageData = usageDataRaw
+        ? JSON.parse(usageDataRaw)
+        : {
+            usageCount: 0,
+            plan,
+            lastUpdated: new Date().toISOString(),
+            periodStart: currentPeriod.start,
+            periodEnd: currentPeriod.end,
+        };
+
+    const tierLimit = PLATFORM_TIERS[plan]?.limit || 0;
+
+    // Reset usage if new billing period
+    if (shouldResetUsage(usageData)) {
+        usageData.usageCount = 0;
+        usageData.periodStart = currentPeriod.start;
+        usageData.periodEnd = currentPeriod.end;
+    }
+
+    // Update plan (in case it changed in JWT)
+    usageData.plan = plan;
+
+    // Check if tier limit exceeded
+    if (usageData.usageCount >= tierLimit) {
+        return new Response(
+            JSON.stringify({
+                error: 'Tier limit reached',
+                usageCount: usageData.usageCount,
+                limit: tierLimit,
+                message: 'Please upgrade to unlock more requests',
+            }),
+            {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+        );
+    }
+
+    // Increment usage count
+    usageData.usageCount++;
+    usageData.lastUpdated = new Date().toISOString();
+    await env.USAGE_KV.put(usageKey, JSON.stringify(usageData));
+
+    return new Response(
+        JSON.stringify({
+            success: true,
+            usage: {
+                count: usageData.usageCount,
+                limit: tierLimit,
+                plan,
+                periodStart: usageData.periodStart,
+                periodEnd: usageData.periodEnd,
+            },
+        }),
+        {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+    );
+}
+```
+
+### Webhook Handler (Stripe)
+
+```typescript
+/**
+ * Handle Stripe checkout.session.completed webhook
+ * Updates JWT metadata to unlock paid tier
+ */
+if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as any;
+    const userId = session.metadata?.userId || session.client_reference_id;
+
+    if (userId) {
+        // Update Clerk user metadata
+        const clerkClient = createClerkClient({
+            secretKey: env.CLERK_SECRET_KEY,
+            publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        });
+
+        await clerkClient.users.updateUser(userId, {
+            publicMetadata: {
+                plan: 'paid',  // Upgrade from 'free' to 'paid'
+                subscribed: true,
+                subscriptionId: session.subscription,
+            },
+        });
+
+        console.log(`[Webhook] Upgraded user ${userId} to paid plan`);
+    }
+}
+```
+
+### Integration with Existing Endpoints
+
+**Add to front-auth-api/src/index.ts:**
+
+1. **Add USAGE_KV binding** to wrangler.toml:
+```toml
+[[kv_namespaces]]
+binding = "USAGE_KV"
+id = "your_kv_namespace_id"
+```
+
+2. **Add to Env interface:**
+```typescript
+interface Env {
+  CLERK_SECRET_KEY: string;
+  CLERK_PUBLISHABLE_KEY: string;
+  FRONTEND_URL: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_PRICE_ID: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  TOKENS_KV: KVNamespace;
+  USAGE_KV: KVNamespace;  // ADD THIS
+}
+```
+
+3. **Wrap protected endpoints:**
+```typescript
+// Example: /generate-credentials endpoint
+if (url.pathname === '/generate-credentials' && request.method === 'POST') {
+    const userId = await verifyAuth(request, env);
+
+    // Extract plan from JWT
+    const clerkClient = createClerkClient({
+        secretKey: env.CLERK_SECRET_KEY,
+        publishableKey: env.CLERK_PUBLISHABLE_KEY,
+    });
+    const user = await clerkClient.users.getUser(userId);
+    const plan = user.publicMetadata.plan as 'free' | 'paid' || 'free';
+
+    // Check rate limit first
+    const rateLimit = await checkRateLimit(userId, env);
+    if (!rateLimit.allowed) {
+        return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    // Track usage
+    const usageResponse = await handleDataRequest(userId, plan, env, corsHeaders);
+    const usageResult = await usageResponse.json();
+
+    if (!usageResult.success) {
+        // Usage limit exceeded
+        return usageResponse;
+    }
+
+    // Continue with credential generation...
+    // (existing code)
+}
+```
 
 ---
 
@@ -650,52 +1029,82 @@ CLERK_PUBLISHABLE_KEY=pk_test_...
 
 ## Next Steps (Priority Order)
 
-### Phase 1: Core API (Week 1-2)
+### Phase 1: Add Usage Tracking from plug-saas (URGENT)
+
+**front-auth-api needs these additions:**
 
 1. ✅ **Update docs** (README.md, CLAUDE.md) - DONE
-2. **Add API key authentication**
-   - Create `middleware/apiKey.ts`
-   - Update `index.ts` for dual auth
-   - Test API key verification
-3. **Fix platformId security**
-   - Remove `X-Platform-User-Id` header
-   - Derive from API key or JWT metadata
-4. **Add developer registration**
-   - Create `routes/developer.ts`
-   - Add `/api/developer/register` endpoint
-   - Test registration flow
-5. **Add product creation**
-   - Add `/api/developer/create-products` endpoint
-   - Integrate Stripe API
-   - Test product creation
+2. **Add USAGE_KV binding**
+   - Update `wrangler.toml` with USAGE_KV namespace
+   - Add to Env interface in index.ts
+3. **Add usage tracking functions**
+   - Add `UsageData` interface
+   - Add `PLATFORM_TIERS` config (free: 5, paid: 500)
+   - Add `getCurrentPeriod()` function
+   - Add `shouldResetUsage()` function
+   - Add `checkRateLimit()` function
+   - Add `handleDataRequest()` function
+4. **Update webhook handler**
+   - Modify `/webhook/stripe` to update `plan` in JWT metadata
+   - Ensure `subscribed: true` is set
+5. **Wrap protected endpoints**
+   - Add usage tracking to `/generate-credentials`
+   - Add usage tracking to any other metered endpoints
+   - Test free tier limit (5 calls)
+   - Test paid tier limit (500 calls)
+6. **Test full flow**
+   - Sign up → Free tier (5 calls)
+   - Make 5 API calls → Should succeed
+   - Make 6th call → Should return 403
+   - Pay $29/mo → Webhook updates JWT
+   - Make API call → Should succeed with paid tier (500 limit)
 
-### Phase 2: Dashboard (Week 3)
+**api-multi verification:**
+- Verify it already has this pattern implemented
+- Test multi-tenant usage tracking
+- Ensure monthly resets work
 
-1. **Rebuild frontend**
-   - Landing page (API pitch)
-   - Signup flow (developer registration)
-   - Dashboard (show API key, stats)
-2. **Dashboard API endpoints**
-   - GET `/api/developer/dashboard` (stats)
-   - POST `/api/developer/regenerate-key` (rotate key)
-3. **Stats aggregation**
-   - Update stats on each API call
-   - Update stats on Stripe webhooks
-   - Show in dashboard
+### Phase 2: Wire Frontend to API (Week 2)
 
-### Phase 3: Polish (Week 4)
+1. ✅ **Frontend pages** - DONE (LandingNew.tsx, DashboardNew.tsx)
+2. **Test frontend integration**
+   - Test signup flow
+   - Test payment flow
+   - Test credential display
+   - Test Stripe OAuth button
+3. **Add usage display in dashboard**
+   - Show current usage count
+   - Show tier limit
+   - Show billing period
+   - Add upgrade prompt when limit reached
 
-1. **npm package**
-   - Create `@dream-api/client`
-   - Publish to npm
-2. **Documentation**
+### Phase 3: Developer Experience (Week 3)
+
+1. **Add developer endpoints**
+   - GET `/api/developer/usage` (check usage/limits)
+   - POST `/api/developer/regenerate-key` (rotate API key)
+2. **Dashboard enhancements**
+   - Usage graph over time
+   - Revenue analytics
+   - API call logs
+3. **Documentation**
    - API reference
    - Quickstart guide
    - Integration examples
-3. **Testing**
+
+### Phase 4: Advanced Features (Week 4)
+
+1. **npm package** (optional)
+   - Create `@dream-api/client`
+   - Publish to npm
+2. **Testing & Security**
    - End-to-end tests
    - Load testing
    - Security audit
+3. **Production deployment**
+   - Deploy all services
+   - Set up monitoring
+   - Launch!
 
 ---
 
@@ -742,6 +1151,54 @@ curl http://localhost:8787/api/developer/register \
 
 ---
 
+## Quick Reference: What to Implement Next
+
+### Immediate Task: Add Usage Tracking to front-auth-api
+
+**Files to modify:**
+1. `front-auth-api/wrangler.toml` - Add USAGE_KV binding
+2. `front-auth-api/src/index.ts` - Add all functions from "Implementation Details" section above
+
+**Copy these functions exactly from plug-saas:**
+- `UsageData` interface
+- `PLATFORM_TIERS` config (free: 5, paid: 500)
+- `getCurrentPeriod()` function
+- `shouldResetUsage()` function
+- `checkRateLimit()` function
+- `handleDataRequest()` function
+
+**Update webhook handler:**
+- Set `plan: 'paid'` in JWT metadata after payment
+- Set `subscribed: true` to unlock dashboard
+
+**Test:**
+- Free tier: 5 API calls/month
+- Paid tier: 500 API calls/month
+- Monthly reset on 1st of month
+- Rate limit: 100 req/min
+
+---
+
+## Summary of Two Systems
+
+### YOUR Platform (front-auth-api)
+- **Customers**: Developers who pay YOU $29/mo
+- **Auth**: Clerk App #1 (YOUR Clerk account)
+- **Payment**: YOUR Stripe account (you're the merchant)
+- **Tiers**: free (5 calls), paid (500 calls)
+- **What it does**: Authentication, payment, credential generation
+- **Status**: ⚠️ Needs usage tracking from plug-saas pattern
+
+### Customers' End-Users (api-multi)
+- **Customers**: Your customers' end-users
+- **Auth**: Clerk App #2 (shared Clerk app OR customer's own)
+- **Payment**: Customer's Stripe account (via OAuth)
+- **Tiers**: Configured per customer (free, pro, etc.)
+- **What it does**: Multi-tenant API usage tracking
+- **Status**: ✅ Already has plug-saas pattern implemented
+
+---
+
 *Last Updated: 2025-11-26*
-*Status: Pivoting from auto-deploy platform → API-as-a-Service*
-*Next: Add API key authentication + developer registration*
+*Status: Documented plug-saas pattern implementation*
+*Next: Add usage tracking functions to front-auth-api*
