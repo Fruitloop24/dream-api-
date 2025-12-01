@@ -1,142 +1,144 @@
-# QUICKSTART - 30 Second Resume
+# Quick Start - Tomorrow's Session
 
 ## Where We Are
-✅ **Backend done** - Usage tracking working (5 free, 500 paid)
-⚠️ **Frontend needs** - Display usage stats in dashboard
+
+**✅ Completed Today:**
+- Created shared Clerk app for end-users (composed-blowfish-76)
+- Updated api-multi with new Clerk keys
+- Created JWT template: `end-user-api` with `platformId` + `plan` claims
+- Documented 4 KV namespace separation strategy
+- Tested local dev setup (frontend + front-auth-api working)
+
+**🎯 Tomorrow's Goal:**
+Complete the developer upgrade flow (payment → OAuth → tier config)
 
 ---
 
-## Start Services (2 terminals)
+## Start Services
 
-**Terminal 1:**
 ```bash
-cd /home/mini/Documents/dream-api/front-auth-api && npm run dev
+# Terminal 1: Frontend
+cd frontend && npm run dev  # Port 5173
+
+# Terminal 2: Platform API
+cd front-auth-api && npm run dev  # Port 8788
 ```
 
-**Terminal 2:**
-```bash
-cd /home/mini/Documents/dream-api/frontend && npm run dev
-```
-
-Open: **http://localhost:5173**
+Open: http://localhost:5173
 
 ---
 
-## What to Build Next
+## Tomorrow's Tasks
 
-### 1. Show Usage Stats (15 min)
+### 1. Wire Up oauth-api (2 hours)
 
-**File:** `frontend/src/pages/DashboardNew.tsx`
+**File:** `oauth-api/src/index.ts`
 
-**Add this after user loads:**
+**Changes needed:**
+- Strip out GitHub and Cloudflare OAuth
+- Add KV bindings (PLATFORM_KV + CUSTOMER_KV)
+- Implement Stripe Connect OAuth flow
+- Create Stripe products via API
+- Save tier config to api-multi TOKENS_KV
+
+**Test:**
+- OAuth flow redirects correctly
+- Stripe tokens saved to KV
+- Products created on developer's Stripe account
+
+---
+
+### 2. Update Webhook Handler (30 min)
+
+**File:** `front-auth-api/src/webhook.ts`
+
+**Changes needed:**
 ```typescript
-const [usage, setUsage] = useState(null);
+if (event.type === 'checkout.session.completed') {
+  const userId = session.metadata?.userId;
 
-// Fetch usage stats
-useEffect(() => {
-  const fetchUsage = async () => {
-    const token = await getToken();
-    const res = await fetch(`${FRONT_AUTH_API}/verify-auth`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setUsage(data.usage);
-  };
+  // Update plan
+  await clerkClient.users.updateUser(userId, {
+    publicMetadata: { plan: 'paid', subscribed: true }
+  });
 
-  if (hasPaid) fetchUsage();
-}, [hasPaid]);
-```
-
-**Display it:**
-```jsx
-{usage && (
-  <div className="usage-stats">
-    <h3>API Usage This Month</h3>
-    <p>{usage.count} / {usage.limit} calls</p>
-    <div className="progress-bar">
-      <div style={{width: `${(usage.count/usage.limit)*100}%`}} />
-    </div>
-    <span className="plan-badge">{usage.plan.toUpperCase()}</span>
-  </div>
-)}
-```
-
-### 2. Fix Layout (5 min)
-
-Dashboard off-center → Add CSS:
-```css
-.dashboard-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+  // Redirect to Stripe OAuth (not dashboard)
+  // Store redirect URL in KV or session
 }
 ```
 
-### 3. Upgrade CTA (10 min)
+---
 
-When near limit:
-```jsx
-{usage && usage.remaining <= 2 && usage.plan === 'free' && (
-  <div className="upgrade-prompt">
-    <p>⚠️ Only {usage.remaining} calls remaining!</p>
-    <button onClick={handleUpgrade}>
-      Upgrade to 500 calls/month →
-    </button>
-  </div>
-)}
+### 3. Add Tier Config UI (1 hour)
+
+**New file:** `frontend/src/pages/TierConfig.tsx`
+
+**Form fields:**
+- How many tiers? (number input)
+- For each tier:
+  - Name (text)
+  - Limit (number)
+  - Price (number, $0 = free)
+
+**Submit:**
+- POST to oauth-api
+- Create Stripe products
+- Save tier config
+- Display API key
+
+---
+
+### 4. Test Full Flow (30 min)
+
+1. Sign up new developer
+2. Click subscribe ($29/mo)
+3. Pay with test card
+4. Redirect to Stripe OAuth
+5. Configure tiers
+6. Get API key
+7. Make API call to api-multi
+8. Verify usage tracking works
+
+---
+
+## Four KV Namespace Reference
+
+**front-auth-api (YOUR platform):**
+- USAGE_KV: `6a3c39a8ee9b46859dc237136048df25`
+- TOKENS_KV: `d09d8bf4e63a47c495384e9ed9b4ec7e`
+
+**api-multi (THEIR platform):**
+- USAGE_KV: `10cc8b9f46f54a6e8d89448f978aaa1f`
+- TOKENS_KV: `a9f3331b0c8b48d58c32896482484208`
+
+**oauth-api needs both:**
+```toml
+[[kv_namespaces]]
+binding = "PLATFORM_KV"
+id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
+
+[[kv_namespaces]]
+binding = "CUSTOMER_KV"
+id = "a9f3331b0c8b48d58c32896482484208"
 ```
 
 ---
 
-## Testing Checklist
-
-- [ ] Sign up new user
-- [ ] See "0 / 5 calls" in dashboard
-- [ ] Make API call (use browser console)
-- [ ] See "1 / 5 calls" update
-- [ ] Make 5 calls → See limit warning
-- [ ] Click upgrade → Stripe checkout
-- [ ] Pay → See "6 / 500 calls"
-
----
-
-## Files You'll Touch
+## Files to Touch Tomorrow
 
 ```
-frontend/src/pages/DashboardNew.tsx  ← Main work here
-frontend/src/index.css               ← CSS fixes
+oauth-api/
+├── src/index.ts          # Strip GitHub/CF, add Stripe OAuth
+└── wrangler.toml         # Add KV bindings
+
+front-auth-api/
+└── src/webhook.ts        # Redirect to OAuth after payment
+
+frontend/
+└── src/pages/
+    └── TierConfig.tsx    # NEW - Tier configuration form
 ```
 
 ---
 
-## API Response Format
-
-When you call any endpoint, you get:
-```json
-{
-  "success": true,
-  "usage": {
-    "count": 3,
-    "limit": 5,
-    "plan": "free",
-    "remaining": 2,
-    "periodStart": "2025-11-01",
-    "periodEnd": "2025-11-30"
-  }
-}
-```
-
-Just parse and display it!
-
----
-
-## Docs to Reference
-
-- **STATUS.md** - Current state & progress
-- **TOMORROW.md** - Detailed plan + UI mockups
-- **CLAUDE.md** - Full dev guide (scroll to "Quick Start")
-
----
-
-*You got this! 30 minutes to a working dashboard. 🚀*
+*Get some sleep. We got this tomorrow. 🚀*

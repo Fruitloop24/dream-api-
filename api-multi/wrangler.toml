@@ -1,6 +1,6 @@
-name = "api-prev"
+name = "api-multi"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-11-01"
 
 # KV namespace bindings (api-multi - CUSTOMER end-users)
 [[kv_namespaces]]
@@ -13,7 +13,12 @@ id = "a9f3331b0c8b48d58c32896482484208"
 
 [vars]
 # Non-secret variables
-CLERK_JWT_TEMPLATE = "pan-api"
+# Clerk JWT template name (create in Clerk dashboard)
+CLERK_JWT_TEMPLATE = "end-user-api"
+
+# Local development settings
+[dev]
+port = 8787
 
 # Observability - Logging
 [observability]
