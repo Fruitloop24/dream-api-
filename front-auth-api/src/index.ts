@@ -367,7 +367,7 @@ export default {
             quantity: 1,
           }],
           mode: 'subscription',
-          success_url: `${env.FRONTEND_URL}/dashboard?payment=success`,
+          success_url: `${env.FRONTEND_URL}/configure?payment=success`,
           cancel_url: `${env.FRONTEND_URL}/dashboard?payment=cancelled`,
           client_reference_id: userId,
           metadata: { userId, tier: 'paid' },  // Add tier to metadata for webhook

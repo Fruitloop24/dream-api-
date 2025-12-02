@@ -32,6 +32,13 @@ export default function Dashboard() {
     }
   }, [isSignedIn, navigate]);
 
+  // Free users ALWAYS go to setup (no caching, no localStorage)
+  useEffect(() => {
+    if (isSignedIn && !hasPaid) {
+      navigate('/setup');
+    }
+  }, [isSignedIn, hasPaid, navigate]);
+
   // Check if user has paid (check metadata)
   useEffect(() => {
     if (user?.publicMetadata?.subscribed) {
@@ -140,6 +147,7 @@ export default function Dashboard() {
     return null;
   }
 
+  // PAID DASHBOARD (after subscription)
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}

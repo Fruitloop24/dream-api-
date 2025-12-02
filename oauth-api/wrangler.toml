@@ -1,19 +1,36 @@
-name = "auth-api"
+name = "oauth-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 [dev]
-port = 8788
+port = 8789
 
-# KV namespace for storing user tokens (encrypted)
+# ============================================================================
+# KV Namespace Bindings
+# ============================================================================
+# This worker needs access to TWO KV namespaces to bridge the platform
+# and customer data without ever mixing them.
+
+# 1. PLATFORM_TOKENS_KV: The TOKENS_KV from `front-auth-api`
+#    - Used to READ the developer's platformId.
+#    - ID: d09d8bf4e63a47c495384e9ed9b4ec7e
 [[kv_namespaces]]
-binding = "TOKENS_KV"
-id = "1f71f940ccc043459b6049059fbac30b"
+binding = "PLATFORM_TOKENS_KV"
+id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 
-# OAuth app secrets (set via wrangler secret put)
-# GITHUB_CLIENT_ID
-# GITHUB_CLIENT_SECRET
-# CLOUDFLARE_CLIENT_ID
-# CLOUDFLARE_CLIENT_SECRET
+# 2. CUSTOMER_TOKENS_KV: The TOKENS_KV from `api-multi`
+#    - Used to WRITE the developer's Stripe credentials.
+#    - ID: a9f3331b0c8b48d58c32896482484208
+[[kv_namespaces]]
+binding = "CUSTOMER_TOKENS_KV"
+id = "a9f3331b0c8b48d58c32896482484208"
+
+# ============================================================================
+# Secrets
+# ============================================================================
+# Set these using `wrangler secret put <KEY>`
+#
 # STRIPE_CLIENT_ID
 # STRIPE_CLIENT_SECRET
+# FRONTEND_URL
+#
