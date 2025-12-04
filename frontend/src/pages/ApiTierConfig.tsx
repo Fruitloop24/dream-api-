@@ -5,9 +5,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
 
-const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
+const OAUTH_API = import.meta.env.VITE_OAUTH_API_URL || 'http://localhost:8789';
 
 interface Tier {
   name: string;
@@ -20,7 +20,6 @@ interface Tier {
 
 export default function ApiTierConfig() {
   const navigate = useNavigate();
-  const { getToken } = useAuth();
   const { user } = useUser();
   const [numTiers, setNumTiers] = useState<number>(2);
   const [tiers, setTiers] = useState<Tier[]>([
@@ -73,18 +72,22 @@ export default function ApiTierConfig() {
     setLoading(true);
 
     try {
-      // TODO: Send to backend to:
-      // 1. Create Stripe products using their connected Stripe account
-      // 2. Get price IDs
-      // 3. Generate platformId + API key
-      // 4. Save to KV
+      const response = await fetch(`${OAUTH_API}/create-products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: user?.id, tiers }),
+      });
 
-      // For now, save to localStorage and go to credentials page
-      localStorage.setItem('apiTiers', JSON.stringify(tiers));
-
-      // TODO: Call backend endpoint that does all this
-      // For now, just navigate
-      navigate('/api-credentials');
+      if (response.ok) {
+        // Backend creates products, generates API key, and saves to KV
+        // Redirect to dashboard to show credentials
+        navigate('/dashboard?setup=complete');
+      } else {
+        const error = await response.text();
+        alert(`Failed to create products: ${error}`);
+      }
     } catch (error) {
       console.error('Error saving tier config:', error);
       alert('Failed to save configuration');

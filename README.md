@@ -1,208 +1,234 @@
 # dream-api
 
-API-as-a-Service platform: Auth + Billing + Usage Tracking for indie developers.
+**Stripe + Auth + Customer Management as a Service**
+
+$15/mo API that handles authentication, billing, and usage tracking for indie developers.
 
 ---
 
-## Architecture Overview
+## 🎯 What It Does
 
-### The Two Systems
+Developers integrate 3 API endpoints and get:
+- ✅ User authentication (Clerk under the hood)
+- ✅ Stripe billing (checkout, subscriptions, portal)
+- ✅ Usage tracking (tier limits, enforcement)
+- ✅ Customer dashboard (see users, revenue, usage)
+- ✅ Webhooks handled automatically
 
-**System 1: YOUR Platform** (developers pay YOU)
-- `frontend/` - Developer signup dashboard
-- `front-auth-api/` - Platform API (auth, billing, credentials)
-- `oauth-api/` - OAuth handler for Stripe Connect
-
-**System 2: Customer API** (their end-users)
-- `api-multi/` - Multi-tenant worker for customer end-users
-
----
-
-## CRITICAL: Four KV Namespace Strategy
-
-**Complete separation between YOUR developers and THEIR end-users.**
-
-### Two Clerk Apps:
-1. **dream-api** (smooth-molly-95) - YOUR developers sign up here
-2. **end-user-api** (composed-blowfish-76) - THEIR end-users sign up here
-
-### Four KV Namespaces:
-
-**front-auth-api (YOUR platform):**
-- `USAGE_KV: 6a3c39a8ee9b46859dc237136048df25`
-  - Tracks YOUR developers' API usage (5 free, 500 paid)
-  - Keys: `usage:{userId}`, `ratelimit:{userId}:{minute}`, `webhook:stripe:{eventId}`
-
-- `TOKENS_KV: d09d8bf4e63a47c495384e9ed9b4ec7e`
-  - Stores YOUR developers' credentials (platformId, API keys)
-  - Keys: `user:{userId}:platformId`, `user:{userId}:apiKey`, `apikey:{hash}`, `platform:{platformId}:userId`
-
-**api-multi (THEIR platform):**
-- `USAGE_KV: 10cc8b9f46f54a6e8d89448f978aaa1f`
-  - Tracks THEIR end-users' usage (per platformId)
-  - Keys: `usage:{platformId}:{userId}`, `ratelimit:{userId}:{minute}`
-
-- `TOKENS_KV: a9f3331b0c8b48d58c32896482484208`
-  - Stores THEIR configs (tier config, Stripe tokens)
-  - Keys: `platform:{platformId}:stripe`, `platform:{platformId}:tierConfig`, `apikey:{hash}`
-
-**oauth-api bridges both:**
-- Reads from: `front-auth-api TOKENS_KV` (get platformId for logged-in dev)
-- Writes to: `api-multi TOKENS_KV` (save tier config + Stripe tokens)
+**Works for:** SaaS, courses, digital products, API monetization, paywalls
 
 ---
 
-## The Two User Flows
+## 🏗️ Architecture
 
-### Flow 1: FREE PREVIEW (before payment)
+### **The Services:**
 
-1. Developer signs up → Clerk (free plan, dream-api app)
-2. Setup → Configure → Styling (collects branding + tier config)
-3. Preview site generated → Shows working SaaS with auth + billing
-4. Developer sees it working → Clicks "Subscribe Now"
+**frontend/** - Developer dashboard (React + Clerk)
+- Sign up, pay, connect Stripe, configure tiers
+- Get publishableKey + secretKey
+- View customer dashboard
 
-**Data stored in localStorage only (temporary)**
+**front-auth-api/** - Platform API (Cloudflare Worker)
+- YOUR devs authenticate here (Clerk dream-api app)
+- Payment processing ($15/mo to YOU)
+- Generate publishableKey + secretKey after payment
 
-### Flow 2: PAID API (after $29/mo payment)
+**oauth-api/** - Stripe Connect handler (Cloudflare Worker)
+- Securely connects developer's Stripe account
+- Auto-creates webhook endpoints
+- Stores Stripe tokens in KV
 
-1. Developer pays → Stripe webhook updates JWT to `plan: 'paid'`
-2. Redirect to `/configure?payment=success`
-3. Connect Stripe OAuth → Save access token to `api-multi TOKENS_KV`
-4. Configure REAL tiers (no branding, just tier config)
-5. Create Stripe products on THEIR account
-6. Generate platformId + API key
-7. Save everything to KV:
-   - Stripe token → `api-multi TOKENS_KV`
-   - platformId/API key → `front-auth-api TOKENS_KV`
-   - Tier config → `api-multi TOKENS_KV`
-
-**Now they have a production API**
+**api-multi/** - Multi-tenant API (Cloudflare Worker)
+- THEIR end-users authenticate here (Clerk end-user-api app)
+- Usage tracking + tier enforcement
+- Stripe checkout/portal for THEIR customers
+- Webhooks populate D1 dashboard
 
 ---
 
-## Project Structure
+## 🔑 The Key System
 
-```
-dream-api/
-├── frontend/                    # Developer dashboard (React + Clerk)
-│   ├── src/pages/
-│   │   ├── LandingNew.tsx      # Landing page
-│   │   ├── Setup.tsx           # Preview: branding setup
-│   │   ├── PreviewConfigure.tsx # Preview: tier config
-│   │   ├── PreviewStyling.tsx  # Preview: final touches
-│   │   ├── PreviewReady.tsx    # Preview: show URL + subscribe
-│   │   ├── Configure.tsx       # Paid: post-payment Stripe OAuth
-│   │   ├── ApiTierConfig.tsx   # Paid: real tier config
-│   │   └── DashboardNew.tsx    # Paid: credentials display
-│
-├── front-auth-api/              # Platform API (Cloudflare Worker)
-│   ├── src/
-│   │   ├── index.ts            # Main worker (auth, billing, credentials)
-│   │   └── webhook.ts          # Stripe webhook handler
-│   ├── wrangler.toml           # KV bindings: USAGE_KV, TOKENS_KV
-│   └── .dev.vars               # Clerk + Stripe secrets
-│
-├── oauth-api/                   # Stripe OAuth handler (Cloudflare Worker)
-│   ├── src/index.ts            # Stripe Connect OAuth flow
-│   ├── wrangler.toml           # KV bindings: PLATFORM_KV, CUSTOMER_KV
-│   └── .dev.vars               # Stripe OAuth secrets
-│
-└── api-multi/                   # Multi-tenant API (Cloudflare Worker)
-    ├── src/
-    │   ├── index.ts            # Main worker (dual auth, usage tracking)
-    │   ├── middleware/         # Auth, CORS, rate limiting
-    │   ├── routes/             # Developer, usage, checkout
-    │   └── services/           # KV helpers
-    ├── wrangler.toml           # KV bindings: USAGE_KV, TOKENS_KV
-    └── .dev.vars               # Clerk + Stripe secrets
+**publishableKey** (platformId) - `pk_live_abc123`
+- Client-safe identifier (like Stripe's pk_)
+- Used to tag end-users in metadata
+- Given after $15/mo payment
+
+**secretKey** (apiKey) - `sk_live_xyz789`
+- Server-only authentication (like Stripe's sk_)
+- Grants API access
+- SHA-256 hashed in KV
+
+---
+
+## 💾 Data Storage
+
+### **4 KV Namespaces:**
+
+**TOKENS_KV (front-auth-api)** - `d09d8bf4e63a47c495384e9ed9b4ec7e`
+- YOUR developers' credentials
+- `user:{userId}:platformId`, `user:{userId}:apiKey`
+
+**USAGE_KV (front-auth-api)** - `6a3c39a8ee9b46859dc237136048df25`
+- YOUR developers' usage tracking
+
+**CUSTOMER_TOKENS_KV (api-multi)** - `a9f3331b0c8b48d58c32896482484208`
+- THEIR tier configs, Stripe tokens, webhook secrets
+- `platform:{platformId}:stripe`, `platform:{platformId}:tierConfig`
+
+**USAGE_KV (api-multi)** - `10cc8b9f46f54a6e8d89448f978aaa1f`
+- THEIR end-users' usage tracking
+- `usage:{platformId}:{userId}`
+
+### **D1 Database:**
+
+```sql
+CREATE TABLE users (
+  platform_id TEXT,           -- Which dev
+  user_id TEXT,               -- Which end-user
+  clerk_email TEXT,           -- From Clerk webhook
+  clerk_name TEXT,
+  plan TEXT,
+  stripe_customer_id TEXT,    -- From Stripe webhook
+  subscription_status TEXT,
+  mrr REAL,
+  usage_count INTEGER,
+  last_active TIMESTAMP,
+  created_at TIMESTAMP,
+  PRIMARY KEY (platform_id, user_id)
+);
 ```
 
+**Purpose:** Dev dashboard queries (user lists, analytics, CSV export)
+
 ---
 
-## Local Development
+## 🔄 The Developer Flow
+
+```
+1. Sign up (Clerk dream-api)
+2. Pay $15/mo (Stripe)
+3. Connect Stripe (OAuth)
+4. Configure tiers (free, pro, enterprise)
+5. Get keys:
+   - publishableKey: pk_live_abc123
+   - secretKey: sk_live_xyz789
+6. Integrate SDK
+7. View dashboard (their users, usage, revenue)
+```
+
+---
+
+## 🎯 JWT Templates (Both Clerk Apps)
+
+**dream-api + end-user-api:**
+```json
+{
+  "userId": "{{user.id}}",
+  "platformId": "{{user.public_metadata.platformId}}",
+  "plan": "{{user.public_metadata.plan}}"
+}
+```
+
+**Dual auth:** YOUR devs in one Clerk app, THEIR users in another, but same JWT structure.
+
+---
+
+## 🪝 Webhook Strategy
+
+### **Clerk Webhook** → `api-multi/webhook/clerk`
+- Fires when end-user signs up
+- Caches profile in KV
+- Writes to D1 (if platformId in metadata)
+
+### **Stripe Webhook** → `api-multi/webhook/stripe`
+- Auto-created via Connect (oauth-api does this)
+- ONE URL for ALL platforms
+- Stripe sends `Stripe-Account: acct_xxx` header
+- We lookup platformId, verify signature, write to D1
+
+**Devs never configure webhooks. Fully automated.**
+
+---
+
+## 🚀 Local Development
 
 ```bash
 # Terminal 1: Platform API
-cd front-auth-api && npm run dev  # Port 8788
+cd front-auth-api && npm run dev  # :8788
 
 # Terminal 2: Frontend
-cd frontend && npm run dev         # Port 5173
+cd frontend && npm run dev         # :5173
 
-# Terminal 3: OAuth API (when needed)
-cd oauth-api && npm run dev        # Port 8789
+# Terminal 3: OAuth API
+cd oauth-api && npm run dev        # :8789
 
-# Terminal 4: Stripe webhooks (when testing payments)
-stripe listen --forward-to http://localhost:8788/webhook/stripe
+# Terminal 4: Multi-tenant API
+cd api-multi && npm run dev        # :8787
+
+# Terminal 5: Stripe CLI (optional)
+stripe listen --forward-to localhost:8788/webhook/stripe
 ```
 
 ---
 
-## Current State
+## 📋 Environment Setup
 
-### ✅ What's Working:
-- Free preview flow (setup → configure → styling → preview ready)
-- Payment flow (subscribe → Stripe checkout → webhook)
-- Stripe OAuth button (redirects to oauth-api)
-- Tier config page for real API
-
-### ⚠️ What's Next:
-1. Setup oauth-api secrets (Stripe OAuth credentials)
-2. Generate preview worker/site
-3. Create Stripe products after tier config
-4. Generate platformId + API key
-5. Save to both KV namespaces
-6. Test full production flow
-
----
-
-## Environment Variables
-
-### front-auth-api/.dev.vars
+### **front-auth-api/.dev.vars**
 ```bash
-CLERK_SECRET_KEY=sk_test_...          # dream-api Clerk app
-CLERK_PUBLISHABLE_KEY=pk_test_...     # dream-api Clerk app
-STRIPE_SECRET_KEY=sk_test_...         # YOUR Stripe account
-STRIPE_PRICE_ID=price_...             # $29/mo subscription
-STRIPE_WEBHOOK_SECRET=whsec_...       # From stripe listen
+CLERK_SECRET_KEY=sk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PRICE_ID=price_...         # $15/mo for YOUR revenue
+STRIPE_WEBHOOK_SECRET=whsec_...
 FRONTEND_URL=http://localhost:5173
 ```
 
-### oauth-api/.dev.vars
+### **oauth-api/.dev.vars**
 ```bash
-STRIPE_CLIENT_ID=...                  # Stripe Connect OAuth app
-STRIPE_CLIENT_SECRET=...              # Stripe Connect OAuth app
+STRIPE_CLIENT_ID=ca_...
+STRIPE_CLIENT_SECRET=sk_...
 FRONTEND_URL=http://localhost:5173
 ```
 
-### frontend/.env
+### **api-multi/.dev.vars**
 ```bash
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...      # dream-api Clerk app
-VITE_FRONT_AUTH_API_URL=http://localhost:8788
-VITE_OAUTH_API_URL=http://localhost:8789
+CLERK_SECRET_KEY=sk_test_...      # end-user-api Clerk app
+STRIPE_SECRET_KEY=sk_test_...     # For testing (not used in prod)
+FRONTEND_URL=http://localhost:5173
 ```
 
 ---
 
-## Deployment
+## 🎯 Current State
 
-```bash
-# Set secrets
-cd front-auth-api
-wrangler secret put CLERK_SECRET_KEY
-wrangler secret put STRIPE_SECRET_KEY
-wrangler secret put STRIPE_WEBHOOK_SECRET
+**✅ Built:**
+- Multi-tenant API (usage tracking, checkout, portal)
+- Platform auth + payment flow
+- Stripe OAuth integration
+- Tier configuration
 
-cd ../oauth-api
-wrangler secret put STRIPE_CLIENT_ID
-wrangler secret put STRIPE_CLIENT_SECRET
+**🚧 Building:**
+- D1 dashboard integration
+- Automated webhook setup
+- Dev dashboard UI (Shadcn)
+- SDK package
 
-# Deploy
-cd front-auth-api && wrangler deploy
-cd oauth-api && wrangler deploy
-cd api-multi && wrangler deploy
-cd frontend && npm run build && wrangler pages deploy dist
-```
+**📝 Next:**
+- Remove preview pages
+- Update JWT templates
+- Clerk + Stripe webhooks → D1
+- Dashboard with user list + CSV export
 
 ---
 
-See **CLAUDE.md** for development guide and current session context.
+## 📦 Tech Stack
+
+- **Frontend:** React + Vite + Clerk + Tailwind
+- **Workers:** Cloudflare Workers (TypeScript)
+- **Auth:** Clerk (2 apps: dream-api, end-user-api)
+- **Storage:** KV (4 namespaces) + D1 (dashboard)
+- **Payments:** Stripe + Stripe Connect
+- **Deployment:** Wrangler + Cloudflare Pages
+
+---
+
+See **CLAUDE.md** for detailed session notes and architecture decisions.

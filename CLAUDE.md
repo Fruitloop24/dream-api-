@@ -1,12 +1,26 @@
 # dream-api - Development Guide
 
-**Last Updated:** 2025-12-01
+**Last Updated:** 2025-12-03
+
+---
+
+## 🧠 THE BIG PICTURE - MENTAL MODEL
+
+This is an **API-as-a-Service platform**. We have TWO completely separate authentication systems and FOUR KV namespaces that keep data isolated.
+
+### The Two Flows:
+
+**FREE PREVIEW FLOW (before payment):**
+Developer signs up → Setup branding → Configure tiers → Styling → Get AI-generated preview site → See it working → Subscribe
+
+**PAID FLOW (after $29/mo payment):**
+Payment success → Connect Stripe OAuth → Configure REAL API tiers → Create Stripe products → Get platformId + API key → Use production API
 
 ---
 
 ## Current Session Status
 
-### ✅ What We Built Today:
+### ✅ What We Built Previously:
 
 **FREE PREVIEW FLOW:**
 - Landing page updated ("See Your SaaS Working in 5 Minutes")
@@ -182,20 +196,52 @@ id = "a9f3331b0c8b48d58c32896482484208"
 
 ---
 
-## The Four KV Namespaces (CRITICAL!)
+## 🔑 THE FOUR KV NAMESPACES (ULTRA CRITICAL!)
 
-**front-auth-api:**
-- `USAGE_KV: 6a3c39a8ee9b46859dc237136048df25` - YOUR devs' usage
-- `TOKENS_KV: d09d8bf4e63a47c495384e9ed9b4ec7e` - YOUR devs' credentials
-- `CUSTOMER_TOKENS_KV: a9f3331b0c8b48d58c32896482484208` - READ ONLY (for Stripe tokens)
+This is the HEART of the architecture. We have FOUR separate KV namespaces that keep YOUR developers' data completely separate from THEIR end-users' data.
 
-**oauth-api:**
-- `PLATFORM_TOKENS_KV: d09d8bf4e63a47c495384e9ed9b4ec7e` - READ (get platformId)
-- `CUSTOMER_TOKENS_KV: a9f3331b0c8b48d58c32896482484208` - WRITE (save Stripe tokens)
+### System 1: YOUR Platform (front-auth-api)
+These track YOUR developers who pay YOU $29/mo:
 
-**api-multi:**
-- `USAGE_KV: 10cc8b9f46f54a6e8d89448f978aaa1f` - THEIR users' usage
-- `TOKENS_KV: a9f3331b0c8b48d58c32896482484208` - THEIR tier configs
+**USAGE_KV: `6a3c39a8ee9b46859dc237136048df25`**
+- Tracks YOUR developers' API usage
+- Keys: `usage:{userId}`, `ratelimit:{userId}:{minute}`
+- Limits: Free = 5 calls/mo, Paid = 500 calls/mo
+
+**TOKENS_KV: `d09d8bf4e63a47c495384e9ed9b4ec7e`**
+- Stores YOUR developers' credentials
+- Keys: `user:{userId}:platformId`, `user:{userId}:apiKey`, `apikey:{hash}`, `platform:{platformId}:userId`
+- This is where platformId + API key are stored
+
+### System 2: THEIR Platform (api-multi)
+These track THEIR end-users who pay THEM:
+
+**USAGE_KV: `10cc8b9f46f54a6e8d89448f978aaa1f`**
+- Tracks THEIR end-users' API usage
+- Keys: `usage:{platformId}:{endUserId}`, `ratelimit:{endUserId}:{minute}`
+- Limits defined by tier config (they set their own limits)
+
+**TOKENS_KV: `a9f3331b0c8b48d58c32896482484208`**
+- Stores THEIR tier configs, Stripe tokens, product IDs
+- Keys: `platform:{platformId}:stripe`, `platform:{platformId}:tierConfig`, `apikey:{hash}`
+- This is the "customer tokens" namespace
+
+### The Bridge: oauth-api
+This worker bridges both systems without mixing data:
+
+**PLATFORM_TOKENS_KV: `d09d8bf4e63a47c495384e9ed9b4ec7e`** (READ)
+- Same as front-auth-api TOKENS_KV
+- Used to READ platformId for a given userId
+
+**CUSTOMER_TOKENS_KV: `a9f3331b0c8b48d58c32896482484208`** (WRITE)
+- Same as api-multi TOKENS_KV
+- Used to WRITE Stripe OAuth tokens after OAuth completes
+
+### Dual Clerk Apps
+We also have TWO separate Clerk apps for authentication:
+
+1. **dream-api** (smooth-molly-95) - YOUR developers sign up here
+2. **end-user-api** (composed-blowfish-76) - THEIR end-users sign up here (in api-multi)
 
 ---
 
@@ -244,16 +290,143 @@ id = "a9f3331b0c8b48d58c32896482484208"
 
 ---
 
-## Next Session Plan
+## 🚀 FINAL ARCHITECTURE (Dec 3, 2025)
 
-1. Get Stripe Connect OAuth credentials
-2. Test OAuth flow end-to-end
-3. Add CUSTOMER_TOKENS_KV to front-auth-api
-4. Implement /create-products endpoint
-5. Test product creation
-6. Decide on preview generation strategy
-7. Test full flow: signup → preview → pay → OAuth → tier config → credentials
+### **KEY DECISIONS:**
+
+**✅ No Preview Flow** - Removed (focus on core API product)
+**✅ Keys After Payment** - publishableKey + secretKey given AFTER $15/mo payment
+**✅ publishableKey = platformId** - Client-safe identifier (pk_live_abc123)
+**✅ secretKey = apiKey** - Server-only authentication (sk_live_xyz789)
+**✅ D1 for Dashboard** - User data queryable, exportable
+**✅ Webhooks to D1** - Clerk + Stripe webhooks write directly to D1
+**✅ Stripe Connect Webhook** - ONE webhook URL for ALL platforms (auto-created)
+**✅ KV + D1 dual-write** - Usage in KV (fast), dashboard in D1 (queryable)
+**✅ Matching JWT Templates** - Both apps: userId, platformId, plan
 
 ---
 
-*Context compressed for tomorrow. We're VERY close!*
+### **WHEN DEVS GET KEYS:**
+
+```
+1. Sign up (Clerk dream-api) → No keys yet
+2. Pay $15/mo → Stripe webhook updates metadata
+3. Connect Stripe → OAuth flow completes
+4. Configure tiers → Submit form
+5. Generate keys:
+   - publishableKey: pk_live_abc123 (platformId)
+   - secretKey: sk_live_xyz789 (apiKey)
+6. Show both in dashboard
+```
+
+---
+
+### **JWT FORMAT (Both dream-api + end-user-api):**
+
+```json
+{
+  "userId": "{{user.id}}",
+  "platformId": "{{user.public_metadata.platformId}}",
+  "plan": "{{user.public_metadata.plan}}"
+}
+```
+
+---
+
+### **D1 SCHEMA:**
+
+```sql
+CREATE TABLE users (
+  platform_id TEXT NOT NULL,       -- From publishableKey
+  user_id TEXT NOT NULL,           -- From Clerk
+  clerk_email TEXT,                -- From Clerk webhook
+  clerk_name TEXT,                 -- From Clerk webhook
+  plan TEXT,                       -- From tier config
+  stripe_customer_id TEXT,         -- From Stripe webhook
+  subscription_status TEXT,        -- From Stripe webhook
+  mrr REAL,                        -- From Stripe webhook
+  usage_count INTEGER DEFAULT 0,  -- From API calls
+  last_active TIMESTAMP,           -- From API calls
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (platform_id, user_id)
+);
+
+CREATE INDEX idx_platform ON users(platform_id);
+CREATE INDEX idx_plan ON users(plan);
+CREATE INDEX idx_last_active ON users(last_active);
+```
+
+---
+
+### **STRIPE CONNECT WEBHOOK SOLUTION:**
+
+**Auto-create webhook via Connect (oauth-api callback):**
+- Creates endpoint on THEIR Stripe account
+- Points to: `https://api-multi.workers.dev/webhook/stripe`
+- One URL for all platforms
+- Stripe sends `Stripe-Account: acct_xxx` header
+- We lookup: `stripeaccount:{acct_xxx} → platformId`
+- Verify with: `platform:{platformId}:webhookSecret`
+
+**No manual webhook setup. Fully automated.**
+
+---
+
+### **DUAL-WRITE STRATEGY:**
+
+**API calls write to BOTH:**
+- KV: Fast usage tracking (edge-replicated)
+- D1: Dashboard queries (SQL, exportable)
+
+**Webhooks write to:**
+- D1 only (payment/user data doesn't need KV speed)
+
+**Dashboard queries:**
+- D1 only (SELECT * FROM users WHERE platform_id = ?)
+
+---
+
+### **KV NAMESPACE MAPPINGS:**
+
+**TOKENS_KV (front-auth-api):**
+```
+user:{userId}:platformId → pk_live_abc123
+user:{userId}:apiKey → sk_live_xyz789
+apikey:{hash} → pk_live_abc123
+platform:{platformId}:userId → {userId}
+```
+
+**CUSTOMER_TOKENS_KV (api-multi):**
+```
+platform:{platformId}:stripe → { accessToken, stripeUserId }
+platform:{platformId}:tierConfig → { tiers: [...] }
+platform:{platformId}:webhookSecret → whsec_...
+stripeaccount:{acct_xxx} → pk_live_abc123
+clerkuser:{userId}:profile → { email, name }
+```
+
+**USAGE_KV (api-multi):**
+```
+usage:{platformId}:{userId} → { usageCount, plan, ... }
+```
+
+---
+
+## 📋 BUILD CHECKLIST:
+
+- [ ] Remove preview pages from frontend
+- [ ] Update both JWT templates (dream-api + end-user-api)
+- [ ] Create D1 database: `wrangler d1 create dream-dashboard`
+- [ ] Add D1 binding to api-multi wrangler.toml
+- [ ] Run schema: `wrangler d1 execute dream-dashboard --file=schema.sql`
+- [ ] Add Clerk webhook handler: `/webhook/clerk`
+- [ ] Auto-create Stripe webhook in oauth-api callback
+- [ ] Update Stripe webhook handler: write to D1
+- [ ] Add dashboard endpoint: `/dashboard/users` in front-auth-api
+- [ ] Build dashboard UI: Shadcn DataTable + export CSV
+- [ ] Update README.md: Remove preview references
+- [ ] Test full flow: signup → pay → OAuth → tiers → keys → dashboard
+
+---
+
+*Architecture finalized. Ready to build.*

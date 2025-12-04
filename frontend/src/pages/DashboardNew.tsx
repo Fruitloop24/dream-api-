@@ -32,19 +32,17 @@ export default function Dashboard() {
     }
   }, [isSignedIn, navigate]);
 
-  // Free users ALWAYS go to setup (no caching, no localStorage)
+  // Free users IMMEDIATELY redirected to Stripe checkout
+  // NO UI shown until they've paid
   useEffect(() => {
-    if (isSignedIn && !hasPaid) {
-      navigate('/setup');
-    }
-  }, [isSignedIn, hasPaid, navigate]);
-
-  // Check if user has paid (check metadata)
-  useEffect(() => {
-    if (user?.publicMetadata?.subscribed) {
+    if (user?.publicMetadata?.plan === 'paid') {
       setHasPaid(true);
+    } else if (user && !loading) {
+      // Immediately trigger payment - don't show any UI
+      setLoading(true);
+      handlePayment();
     }
-  }, [user]);
+  }, [user, loading]);
 
   // Load credentials if user has paid
   useEffect(() => {
@@ -59,9 +57,10 @@ export default function Dashboard() {
     if (params.get('stripe') === 'connected') {
       setStripeConnected(true);
     }
-    // Check if payment was successful
+    // Check if payment was successful - redirect to OAuth
     if (params.get('payment') === 'success') {
-      generateCredentials();
+      // After payment, user needs to connect Stripe first
+      // Don't generate credentials yet
     }
   }, []);
 
@@ -84,28 +83,6 @@ export default function Dashboard() {
     }
   };
 
-  const generateCredentials = async () => {
-    try {
-      setLoading(true);
-      const token = await getToken();
-      const response = await fetch(`${FRONT_AUTH_API}/generate-credentials`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPlatformId(data.platformId);
-        setApiKey(data.apiKey);
-      }
-    } catch (error) {
-      console.error('Failed to generate credentials:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePayment = async () => {
     try {
@@ -133,7 +110,7 @@ export default function Dashboard() {
   };
 
   const handleConnectStripe = () => {
-    const oauthUrl = `${import.meta.env.VITE_OAUTH_API_URL}/oauth/stripe/authorize?userId=${user?.id}`;
+    const oauthUrl = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
     window.location.href = oauthUrl;
   };
 
@@ -145,6 +122,19 @@ export default function Dashboard() {
 
   if (!isSignedIn) {
     return null;
+  }
+
+  // If not paid, show ONLY a loading spinner while redirecting to Stripe
+  if (!hasPaid) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <h3 className="text-xl font-bold mb-2">Redirecting to checkout...</h3>
+          <p className="text-gray-400">Please wait</p>
+        </div>
+      </div>
+    );
   }
 
   // PAID DASHBOARD (after subscription)
@@ -172,91 +162,87 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* Payment Required */}
+          {/* If not paid, show loading (they're being redirected to Stripe) */}
           {!hasPaid && (
-            <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-6 mb-8">
-              <h3 className="text-xl font-bold mb-2">Subscribe to Get Started</h3>
-              <p className="text-gray-300 mb-4">
-                $29/mo - Auth + Billing API for your SaaS
-              </p>
-              <button
-                onClick={handlePayment}
-                disabled={loading}
-                className="px-6 py-3 bg-blue-600 rounded font-bold hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Processing...' : 'Subscribe Now'}
-              </button>
+            <div className="bg-gray-800 rounded-lg p-8 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+              <h3 className="text-xl font-bold mb-2">Redirecting to checkout...</h3>
+              <p className="text-gray-400">Please wait while we redirect you to Stripe</p>
             </div>
           )}
 
           {/* API Configuration (after payment) */}
           {hasPaid && (
             <>
-              {/* API Credentials */}
-              <div className="bg-gray-800 rounded-lg p-6 mb-6">
-                <h3 className="text-xl font-bold mb-4">Your API Credentials</h3>
-
-                {/* Platform ID */}
-                <div className="mb-4">
-                  <label className="block text-sm text-gray-400 mb-2">Platform ID</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                      {platformId}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(platformId)}
-                      className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                    >
-                      {copied ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* API Key */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">API Key</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                      {apiKey}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(apiKey)}
-                      className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                    >
-                      {copied ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    ⚠️ Keep this secret! Don't commit to git.
+              {/* ONLY show "Connect Stripe" if no credentials yet */}
+              {!platformId && !apiKey && (
+                <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-6 mb-6">
+                  <h3 className="text-xl font-bold mb-4">Next Step: Connect Your Stripe</h3>
+                  <p className="text-gray-300 mb-4">
+                    Connect your Stripe account so we can create billing products for your users.
                   </p>
+                  <button
+                    onClick={handleConnectStripe}
+                    className="px-6 py-3 bg-purple-600 rounded font-bold hover:bg-purple-700"
+                  >
+                    Connect Stripe Account
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Stripe Connection */}
-              <div className="bg-gray-800 rounded-lg p-6 mb-6">
-                <h3 className="text-xl font-bold mb-4">Connect Your Stripe</h3>
-                {stripeConnected ? (
-                  <div className="flex items-center gap-2 text-green-400">
-                    <span className="text-2xl">✓</span>
-                    <span>Stripe Connected</span>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-gray-400 mb-4">
-                      Connect your Stripe account to enable billing for your users.
+              {/* Show credentials ONLY if they exist (after products created) */}
+              {platformId && apiKey && (
+                <>
+                  <div className="bg-green-900/30 border border-green-700 rounded-lg p-6 mb-6">
+                    <h3 className="text-2xl font-bold mb-2">🎉 Your API is Ready!</h3>
+                    <p className="text-gray-300">
+                      Here are your credentials. Keep the secret key safe!
                     </p>
-                    <button
-                      onClick={handleConnectStripe}
-                      className="px-6 py-3 bg-purple-600 rounded font-bold hover:bg-purple-700"
-                    >
-                      Connect Stripe Account
-                    </button>
-                  </>
-                )}
-              </div>
+                  </div>
 
-              {/* Tier Configuration (after Stripe connected) */}
-              {stripeConnected && (
+                  <div className="bg-gray-800 rounded-lg p-6 mb-6">
+                    <h3 className="text-xl font-bold mb-4">Your API Credentials</h3>
+
+                    {/* Platform ID */}
+                    <div className="mb-4">
+                      <label className="block text-sm text-gray-400 mb-2">Platform ID (publishableKey)</label>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
+                          {platformId}
+                        </code>
+                        <button
+                          onClick={() => copyToClipboard(platformId)}
+                          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
+                        >
+                          {copied ? '✓' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* API Key */}
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-2">Secret Key</label>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
+                          {apiKey}
+                        </code>
+                        <button
+                          onClick={() => copyToClipboard(apiKey)}
+                          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
+                        >
+                          {copied ? '✓' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        ⚠️ Keep this secret! Don't commit to git.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Remove the old tier configuration UI from dashboard */}
+              {false && stripeConnected && (
                 <>
                   <div className="bg-gray-800 rounded-lg p-6 mb-6">
                     <h3 className="text-xl font-bold mb-4">Configure Your Tiers</h3>

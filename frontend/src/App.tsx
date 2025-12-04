@@ -6,11 +6,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { SignedIn, SignedOut, RedirectToSignIn, SignIn, SignUp } from '@clerk/clerk-react';
 import Landing from './pages/LandingNew';
 import Dashboard from './pages/DashboardNew';
-import Configure from './pages/Configure';
-import Setup from './pages/Setup';
-import PreviewConfigure from './pages/PreviewConfigure';
-import PreviewStyling from './pages/PreviewStyling';
-import PreviewReady from './pages/PreviewReady';
 import ApiTierConfig from './pages/ApiTierConfig';
 
 function App() {
@@ -28,71 +23,6 @@ function App() {
             <>
               <SignedIn>
                 <Dashboard />
-              </SignedIn>
-              <SignedOut>
-                <RedirectToSignIn />
-              </SignedOut>
-            </>
-          }
-        />
-        <Route
-          path="/configure"
-          element={
-            <>
-              <SignedIn>
-                <Configure />
-              </SignedIn>
-              <SignedOut>
-                <RedirectToSignIn />
-              </SignedOut>
-            </>
-          }
-        />
-        <Route
-          path="/setup"
-          element={
-            <>
-              <SignedIn>
-                <Setup />
-              </SignedIn>
-              <SignedOut>
-                <RedirectToSignIn />
-              </SignedOut>
-            </>
-          }
-        />
-        <Route
-          path="/preview-configure"
-          element={
-            <>
-              <SignedIn>
-                <PreviewConfigure />
-              </SignedIn>
-              <SignedOut>
-                <RedirectToSignIn />
-              </SignedOut>
-            </>
-          }
-        />
-        <Route
-          path="/preview-styling"
-          element={
-            <>
-              <SignedIn>
-                <PreviewStyling />
-              </SignedIn>
-              <SignedOut>
-                <RedirectToSignIn />
-              </SignedOut>
-            </>
-          }
-        />
-        <Route
-          path="/preview-ready"
-          element={
-            <>
-              <SignedIn>
-                <PreviewReady />
               </SignedIn>
               <SignedOut>
                 <RedirectToSignIn />
