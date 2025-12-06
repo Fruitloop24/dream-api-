@@ -32,6 +32,7 @@ import { handleStripeWebhook } from './webhook';
 interface Env {
   CLERK_SECRET_KEY: string;
   CLERK_PUBLISHABLE_KEY: string;
+  CLERK_WEBHOOK_SECRET: string;
   FRONTEND_URL: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_PRICE_ID: string;
@@ -384,128 +385,99 @@ export default {
         );
       }
 
-      // Generate platformId and API key (after payment confirmed)
-      if (url.pathname === '/generate-credentials' && request.method === 'POST') {
+      // Generate platformId (IMMEDIATELY after successful login)
+      // This is called BEFORE payment, BEFORE OAuth
+      // platformId is stable internal ID that NEVER changes
+      if (url.pathname === '/generate-platform-id' && request.method === 'POST') {
         const userId = await verifyAuth(request, env);
 
-        // Get user plan
-        const clerkClient = createClerkClient({
-          secretKey: env.CLERK_SECRET_KEY,
-          publishableKey: env.CLERK_PUBLISHABLE_KEY,
-        });
-        const user = await clerkClient.users.getUser(userId);
-        const plan = (user.publicMetadata.plan as 'free' | 'paid') || 'free';
-
-        // Check rate limit
-        const rateLimit = await checkRateLimit(userId, env);
-        if (!rateLimit.allowed) {
-          return new Response(
-            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
-            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Track usage
-        const usageResult = await trackUsage(userId, plan, env);
-        if (!usageResult.success) {
-          return new Response(
-            JSON.stringify({ error: usageResult.error, ...usageResult.usage }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Check if already generated
+        // Check if already generated (idempotent)
         const existing = await env.TOKENS_KV.get(`user:${userId}:platformId`);
         if (existing) {
-          const apiKey = await env.TOKENS_KV.get(`user:${userId}:apiKey`);
+          console.log(`[PlatformID] Already exists for user ${userId}: ${existing}`);
           return new Response(
-            JSON.stringify({
-              platformId: existing,
-              apiKey,
-              usage: usageResult.usage
-            }),
+            JSON.stringify({ platformId: existing }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        // Generate new credentials
+        // Generate new platformId (plt_xxx format)
         const platformId = `plt_${crypto.randomUUID().replace(/-/g, '')}`;
-        const apiKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
 
-        // Hash API key for storage
-        const encoder = new TextEncoder();
-        const data = encoder.encode(apiKey);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-
-        // Store in KV
-        await env.TOKENS_KV.put(`apikey:${hashHex}`, platformId);
+        // Store bidirectional mapping in KV
         await env.TOKENS_KV.put(`user:${userId}:platformId`, platformId);
-        await env.TOKENS_KV.put(`user:${userId}:apiKey`, apiKey);
         await env.TOKENS_KV.put(`platform:${platformId}:userId`, userId);
 
-        console.log(`[Credentials] Generated for user ${userId}: ${platformId}`);
+        console.log(`[PlatformID] Generated for user ${userId}: ${platformId}`);
 
         return new Response(
-          JSON.stringify({
-            platformId,
-            apiKey,
-            usage: usageResult.usage
-          }),
+          JSON.stringify({ platformId }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Get credentials (for dashboard display)
-      if (url.pathname === '/get-credentials' && request.method === 'GET') {
+      // Get platformId (for dashboard display)
+      if (url.pathname === '/get-platform-id' && request.method === 'GET') {
         const userId = await verifyAuth(request, env);
 
-        // Get user plan
-        const clerkClient = createClerkClient({
-          secretKey: env.CLERK_SECRET_KEY,
-          publishableKey: env.CLERK_PUBLISHABLE_KEY,
-        });
-        const user = await clerkClient.users.getUser(userId);
-        const plan = (user.publicMetadata.plan as 'free' | 'paid') || 'free';
-
-        // Check rate limit
-        const rateLimit = await checkRateLimit(userId, env);
-        if (!rateLimit.allowed) {
-          return new Response(
-            JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
-            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Track usage
-        const usageResult = await trackUsage(userId, plan, env);
-        if (!usageResult.success) {
-          return new Response(
-            JSON.stringify({ error: usageResult.error, ...usageResult.usage }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
         const platformId = await env.TOKENS_KV.get(`user:${userId}:platformId`);
-        const apiKey = await env.TOKENS_KV.get(`user:${userId}:apiKey`);
-
         if (!platformId) {
           return new Response(
-            JSON.stringify({ error: 'Credentials not generated yet' }),
+            JSON.stringify({ error: 'Platform ID not generated yet' }),
             { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
         return new Response(
+          JSON.stringify({ platformId }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get credentials (publishableKey + secretKey)
+      // Everything read from front-auth-api TOKENS_KV (YOUR dev's data)
+      if (url.pathname === '/get-credentials' && request.method === 'GET') {
+        const userId = await verifyAuth(request, env);
+
+        // Get platformId (generated at login)
+        const platformId = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        if (!platformId) {
+          return new Response(
+            JSON.stringify({ error: 'Platform ID not found. Please log in first.' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get publishableKey and secretKey (created by oauth-api after tier config)
+        // oauth-api writes these as user:{userId}:publishableKey and user:{userId}:secretKey
+        const publishableKey = await env.TOKENS_KV.get(`user:${userId}:publishableKey`);
+        const secretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey`);
+        const productsJson = await env.TOKENS_KV.get(`user:${userId}:products`);
+
+        if (!publishableKey || !secretKey) {
+          return new Response(
+            JSON.stringify({
+              error: 'API keys not generated yet. Please configure tiers first.',
+              platformId
+            }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const products = productsJson ? JSON.parse(productsJson) : [];
+
+        return new Response(
           JSON.stringify({
             platformId,
-            apiKey,
-            usage: usageResult.usage
+            publishableKey,
+            secretKey,
+            products
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      // TODO: Clerk webhook for later - not needed for payment flow
 
       // Stripe webhook - delegate to webhook handler
       if (url.pathname === '/webhook/stripe' && request.method === 'POST') {

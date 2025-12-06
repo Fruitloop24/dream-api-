@@ -21,9 +21,11 @@ export default function Dashboard() {
   const [hasPaid, setHasPaid] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [platformId, setPlatformId] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [publishableKey, setPublishableKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [platformIdGenerated, setPlatformIdGenerated] = useState(false);
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -32,24 +34,31 @@ export default function Dashboard() {
     }
   }, [isSignedIn, navigate]);
 
-  // Free users IMMEDIATELY redirected to Stripe checkout
+  // STEP 1: Generate platformId IMMEDIATELY after login (before payment)
+  useEffect(() => {
+    if (user && !platformIdGenerated) {
+      generatePlatformId();
+    }
+  }, [user, platformIdGenerated]);
+
+  // STEP 2: Free users IMMEDIATELY redirected to Stripe checkout
   // NO UI shown until they've paid
   useEffect(() => {
     if (user?.publicMetadata?.plan === 'paid') {
       setHasPaid(true);
-    } else if (user && !loading) {
+    } else if (user && platformIdGenerated && !loading) {
       // Immediately trigger payment - don't show any UI
       setLoading(true);
       handlePayment();
     }
-  }, [user, loading]);
+  }, [user, platformIdGenerated, loading]);
 
   // Load credentials if user has paid
   useEffect(() => {
-    if (hasPaid && !platformId) {
+    if (hasPaid && !publishableKey) {
       loadCredentials();
     }
-  }, [hasPaid, platformId]);
+  }, [hasPaid, publishableKey]);
 
   // Check if Stripe is connected (check URL params after OAuth)
   useEffect(() => {
@@ -64,9 +73,34 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Generate platformId (called IMMEDIATELY after login)
+  const generatePlatformId = async () => {
+    try {
+      const token = await getToken({ template: 'dream-api' });
+      const response = await fetch(`${FRONT_AUTH_API}/generate-platform-id`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[Dashboard] Platform ID generated:', data.platformId);
+        setPlatformId(data.platformId);
+        setPlatformIdGenerated(true);
+      } else {
+        console.error('[Dashboard] Failed to generate platform ID');
+      }
+    } catch (error) {
+      console.error('[Dashboard] Error generating platform ID:', error);
+    }
+  };
+
+  // Load credentials (publishableKey + secretKey after tier config)
   const loadCredentials = async () => {
     try {
-      const token = await getToken();
+      const token = await getToken({ template: 'dream-api' });
       const response = await fetch(`${FRONT_AUTH_API}/get-credentials`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -76,10 +110,14 @@ export default function Dashboard() {
       if (response.ok) {
         const data = await response.json();
         setPlatformId(data.platformId);
-        setApiKey(data.apiKey);
+        setPublishableKey(data.publishableKey);
+        setSecretKey(data.secretKey);
+      } else {
+        // Keys not generated yet (need to configure tiers first)
+        console.log('[Dashboard] Credentials not ready yet');
       }
     } catch (error) {
-      console.error('Failed to load credentials:', error);
+      console.error('[Dashboard] Failed to load credentials:', error);
     }
   };
 
@@ -87,7 +125,7 @@ export default function Dashboard() {
   const handlePayment = async () => {
     try {
       setLoading(true);
-      const token = await getToken();
+      const token = await getToken({ template: 'dream-api' });
       const response = await fetch(`${FRONT_AUTH_API}/create-checkout`, {
         method: 'POST',
         headers: {
@@ -175,7 +213,7 @@ export default function Dashboard() {
           {hasPaid && (
             <>
               {/* ONLY show "Connect Stripe" if no credentials yet */}
-              {!platformId && !apiKey && (
+              {!publishableKey && !secretKey && (
                 <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-6 mb-6">
                   <h3 className="text-xl font-bold mb-4">Next Step: Connect Your Stripe</h3>
                   <p className="text-gray-300 mb-4">
@@ -191,7 +229,7 @@ export default function Dashboard() {
               )}
 
               {/* Show credentials ONLY if they exist (after products created) */}
-              {platformId && apiKey && (
+              {publishableKey && secretKey && (
                 <>
                   <div className="bg-green-900/30 border border-green-700 rounded-lg p-6 mb-6">
                     <h3 className="text-2xl font-bold mb-2">🎉 Your API is Ready!</h3>
@@ -203,38 +241,41 @@ export default function Dashboard() {
                   <div className="bg-gray-800 rounded-lg p-6 mb-6">
                     <h3 className="text-xl font-bold mb-4">Your API Credentials</h3>
 
-                    {/* Platform ID */}
+                    {/* Publishable Key */}
                     <div className="mb-4">
-                      <label className="block text-sm text-gray-400 mb-2">Platform ID (publishableKey)</label>
+                      <label className="block text-sm text-gray-400 mb-2">Publishable Key (safe to expose)</label>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                          {platformId}
+                          {publishableKey}
                         </code>
                         <button
-                          onClick={() => copyToClipboard(platformId)}
-                          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                        >
-                          {copied ? '✓' : 'Copy'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* API Key */}
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-2">Secret Key</label>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                          {apiKey}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(apiKey)}
+                          onClick={() => copyToClipboard(publishableKey)}
                           className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
                         >
                           {copied ? '✓' : 'Copy'}
                         </button>
                       </div>
                       <p className="text-xs text-gray-500 mt-2">
-                        ⚠️ Keep this secret! Don't commit to git.
+                        This goes in your end-users' JWT metadata
+                      </p>
+                    </div>
+
+                    {/* Secret Key */}
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-2">Secret Key (server-only!)</label>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
+                          {secretKey}
+                        </code>
+                        <button
+                          onClick={() => copyToClipboard(secretKey)}
+                          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
+                        >
+                          {copied ? '✓' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        ⚠️ Keep this secret! Use for API authentication (Authorization: Bearer sk_live_...)
                       </p>
                     </div>
                   </div>
@@ -307,20 +348,26 @@ export default function Dashboard() {
               )}
 
               {/* Quick Start */}
-              <div className="bg-gray-800 rounded-lg p-6 mt-6">
-                <h3 className="text-xl font-bold mb-4">Quick Start</h3>
-                <pre className="bg-gray-900 p-4 rounded text-sm overflow-x-auto text-green-400">
-{`// Track usage
-fetch('https://api.dream-api.com/api/data', {
+              {publishableKey && secretKey && (
+                <div className="bg-gray-800 rounded-lg p-6 mt-6">
+                  <h3 className="text-xl font-bold mb-4">Quick Start</h3>
+                  <pre className="bg-gray-900 p-4 rounded text-sm overflow-x-auto text-green-400">
+{`// Create a customer
+fetch('https://api.dream-api.com/customers', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ${apiKey}',
-    'X-User-Id': 'user_123',
-    'X-User-Plan': 'free'
-  }
+    'Authorization': 'Bearer ${secretKey}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'customer@example.com',
+    name: 'John Doe',
+    plan: 'free'
+  })
 })`}
-                </pre>
-              </div>
+                  </pre>
+                </div>
+              )}
             </>
           )}
         </div>

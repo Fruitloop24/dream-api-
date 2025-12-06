@@ -6,24 +6,41 @@ compatibility_date = "2024-01-01"
 port = 8789
 
 # ============================================================================
-# KV Namespace Bindings
+# KV NAMESPACE BINDINGS - OAUTH BRIDGE WORKER
 # ============================================================================
-# This worker needs access to TWO KV namespaces to bridge the platform
-# and customer data without ever mixing them.
+# This worker bridges TWO separate systems without mixing data:
+# 1. YOUR platform (front-auth-api) - stores dev credentials
+# 2. THEIR end-users (api-multi) - stores tier configs for lookups
+#
+# WHAT THIS WORKER DOES:
+# - OAuth callback: Generate platformId (plt_xxx), save Stripe token
+# - Product creation: Generate publishableKey + secretKey, create Stripe products
+# - Save to front-auth-api TOKENS_KV (MAIN namespace)
+# - Copy tier configs to api-multi TOKENS_KV (for fast tier lookups)
 
-# 1. PLATFORM_TOKENS_KV: The TOKENS_KV from `front-auth-api`
-#    - Used to READ the developer's platformId.
-#    - ID: d09d8bf4e63a47c495384e9ed9b4ec7e
+# PLATFORM_TOKENS_KV: Front-auth-api TOKENS_KV (MAIN dev namespace)
+# This is where we WRITE all dev data:
+# - user:{userId}:platformId → plt_abc123
+# - user:{userId}:stripeToken → {accessToken, stripeUserId}
+# - user:{userId}:publishableKey → pk_live_xyz789
+# - user:{userId}:secretKey → sk_live_abc123
+# - user:{userId}:products → [{tier, priceId, productId}]
+# Cloudflare name: front-auth-api-TOKENS_KV
 [[kv_namespaces]]
 binding = "PLATFORM_TOKENS_KV"
 id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
+preview_id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 
-# 2. CUSTOMER_TOKENS_KV: The TOKENS_KV from `api-multi`
-#    - Used to WRITE the developer's Stripe credentials.
-#    - ID: a9f3331b0c8b48d58c32896482484208
+# CUSTOMER_TOKENS_KV: Api-multi TOKENS_KV (tier config copy)
+# We COPY tier configs here so api-multi can lookup limits fast:
+# - platform:{platformId}:tierConfig → {tiers: [...]}
+# - publishablekey:{pk_live_xyz}:platformId → plt_abc123
+# - secretkey:{hash}:publishableKey → pk_live_xyz789
+# Cloudflare name: api-multi-TOKENS_KV
 [[kv_namespaces]]
 binding = "CUSTOMER_TOKENS_KV"
 id = "a9f3331b0c8b48d58c32896482484208"
+preview_id = "a9f3331b0c8b48d58c32896482484208"
 
 # ============================================================================
 # Secrets

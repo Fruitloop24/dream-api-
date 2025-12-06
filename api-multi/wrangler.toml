@@ -2,14 +2,31 @@ name = "api-multi"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# KV namespace bindings (api-multi - CUSTOMER end-users)
+# ============================================================================
+# KV NAMESPACES - THEIR END-USERS (who pay YOUR devs)
+# ============================================================================
+# This namespace stores tier configs + tracks end-user usage.
+# Data is COPIED here by oauth-api after product creation.
+# Webhooks (Clerk + Stripe) write to D1 for dashboard queries.
+
+# USAGE_KV: Tracks THEIR end-users' API usage
+# - usage:{publishableKey}:{userId} → {usageCount, plan, lastUpdated}
+# - ratelimit:{userId}:{minute} → count
+# Cloudflare name: api-multi-USAGE_KV
 [[kv_namespaces]]
 binding = "USAGE_KV"
 id = "10cc8b9f46f54a6e8d89448f978aaa1f"
+preview_id = "10cc8b9f46f54a6e8d89448f978aaa1f"
 
+# TOKENS_KV: Stores tier configs for fast limit lookups
+# - platform:{platformId}:tierConfig → {tiers: [...]} (COPIED from front-auth-api)
+# - publishablekey:{pk_live_xyz}:platformId → plt_abc123 (reverse lookup)
+# - secretkey:{hash}:publishableKey → pk_live_xyz789 (API auth)
+# Cloudflare name: api-multi-TOKENS_KV
 [[kv_namespaces]]
 binding = "TOKENS_KV"
 id = "a9f3331b0c8b48d58c32896482484208"
+preview_id = "a9f3331b0c8b48d58c32896482484208"
 
 [vars]
 # Non-secret variables

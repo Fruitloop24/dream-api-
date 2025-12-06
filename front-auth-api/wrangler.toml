@@ -2,14 +2,35 @@ name = "config-api"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# KV namespace bindings (front-auth-api - YOUR platform)
+# ============================================================================
+# KV NAMESPACES - YOUR DEVELOPERS (who pay YOU $15/mo)
+# ============================================================================
+# This is the MAIN namespace that stores EVERYTHING about your devs.
+# We use the SAME namespace for local dev (preview_id = id) so data persists.
+
+# USAGE_KV: Tracks YOUR developers' API usage
+# - usage:{userId} → {usageCount, plan, lastUpdated}
+# - ratelimit:{userId}:{minute} → count
+# Cloudflare name: front-auth-api-USAGE_KV
 [[kv_namespaces]]
 binding = "USAGE_KV"
 id = "6a3c39a8ee9b46859dc237136048df25"
+preview_id = "6a3c39a8ee9b46859dc237136048df25"
 
+# TOKENS_KV: Stores EVERYTHING about the developer
+# - user:{userId}:platformId → plt_abc123 (internal, never exposed)
+# - user:{userId}:stripeToken → {accessToken, stripeUserId}
+# - user:{userId}:publishableKey → pk_live_xyz789 (goes in JWT)
+# - user:{userId}:secretKey → sk_live_abc123 (API auth)
+# - user:{userId}:products → [{tier, priceId, productId}]
+# - platform:{platformId}:userId → userId (reverse lookup)
+# - publishablekey:{pk_live_xyz}:platformId → plt_abc123
+# - secretkey:{hash}:publishableKey → pk_live_xyz789
+# Cloudflare name: front-auth-api-TOKENS_KV
 [[kv_namespaces]]
 binding = "TOKENS_KV"
 id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
+preview_id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 
 [vars]
 # Non-secret variables

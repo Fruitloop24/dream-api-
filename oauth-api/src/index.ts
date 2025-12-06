@@ -31,6 +31,8 @@
 
 /// <reference types="@cloudflare/workers-types" />
 
+import { createClerkClient } from '@clerk/backend';
+
 interface Env {
   // KV Bindings (must be configured in wrangler.toml)
   PLATFORM_TOKENS_KV: KVNamespace;
@@ -39,6 +41,10 @@ interface Env {
   // Stripe Connect OAuth App credentials
   STRIPE_CLIENT_ID: string;
   STRIPE_CLIENT_SECRET: string;
+
+  // Clerk credentials (for updating user metadata)
+  CLERK_SECRET_KEY: string;
+  CLERK_PUBLISHABLE_KEY: string;
 
   // URL to redirect back to after success/failure
   FRONTEND_URL: string;
@@ -98,11 +104,14 @@ export default {
       // Delete the state key now that it has been used
       await env.PLATFORM_TOKENS_KV.delete(`oauth:state:${state}`);
 
-      // Generate platformId (publishableKey pattern: pk_live_xxx)
-      const platformId = `pk_live_${crypto.randomUUID().replace(/-/g, '')}`;
+      // READ platformId (should already exist - created IMMEDIATELY after login)
+      const platformId = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`);
+      if (!platformId) {
+        console.error(`[OAuth] No platformId found for user ${userId} - this should have been created at login!`);
+        return new Response('Platform ID not found. Please log out and back in.', { status: 500 });
+      }
 
-      // Store platformId in PLATFORM_TOKENS_KV
-      await env.PLATFORM_TOKENS_KV.put(`user:${userId}:platformId`, platformId);
+      console.log(`[OAuth] Found platformId for user ${userId}: ${platformId}`);
 
       // Exchange the authorization code for a Stripe access token
       try {
@@ -128,16 +137,24 @@ export default {
           return Response.redirect(`${env.FRONTEND_URL}/dashboard?stripe=error`, 302);
         }
 
-        // Store the Stripe credentials in the CUSTOMER_TOKENS_KV,
-        // associated with the developer's platformId.
+        // Store Stripe credentials in PLATFORM_TOKENS_KV (front-auth-api namespace)
+        // This is the MAIN namespace for dev data
         const stripeCredentials = {
           accessToken: tokenData.access_token,
           stripeUserId: tokenData.stripe_user_id,
         };
-        await env.CUSTOMER_TOKENS_KV.put(
-          `platform:${platformId}:stripe`,
+
+        // Save under BOTH userId and platformId for easy lookup
+        await env.PLATFORM_TOKENS_KV.put(
+          `user:${userId}:stripeToken`,
           JSON.stringify(stripeCredentials)
         );
+        await env.PLATFORM_TOKENS_KV.put(
+          `platform:${platformId}:stripeToken`,
+          JSON.stringify(stripeCredentials)
+        );
+
+        console.log(`[OAuth] Saved Stripe token for platformId: ${platformId}`);
 
         // Redirect back to the frontend tier config page after successful OAuth
         return Response.redirect(`${env.FRONTEND_URL}/api-tier-config?stripe=connected`, 302);
@@ -174,10 +191,10 @@ export default {
         return new Response('Platform ID not found. Please connect Stripe first.', { status: 404 });
       }
 
-      // Get Stripe credentials from CUSTOMER_TOKENS_KV
-      const stripeDataJson = await env.CUSTOMER_TOKENS_KV.get(`platform:${platformId}:stripe`);
+      // Get Stripe credentials from PLATFORM_TOKENS_KV (front-auth-api namespace)
+      const stripeDataJson = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`);
       if (!stripeDataJson) {
-        return new Response('Stripe credentials not found.', { status: 404 });
+        return new Response('Stripe credentials not found. Please connect Stripe first.', { status: 404 });
       }
 
       const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
@@ -199,6 +216,7 @@ export default {
               description: tier.features,
               'metadata[platformId]': platformId,
               'metadata[tierName]': tier.name,
+              'metadata[limit]': tier.limit.toString(),
             }),
           });
 
@@ -223,6 +241,7 @@ export default {
               'recurring[interval]': 'month',
               'metadata[platformId]': platformId,
               'metadata[tierName]': tier.name,
+              'metadata[limit]': tier.limit.toString(),
             }),
           });
 
@@ -240,35 +259,67 @@ export default {
           });
         }
 
-        // Generate secretKey (API key for developer)
+        // ===================================================================
+        // GENERATE KEYS (publishableKey + secretKey)
+        // ===================================================================
+        const publishableKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}`;
         const secretKey = `sk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
 
-        // Hash secretKey for storage
+        // Hash secretKey for secure storage
         const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secretKey));
         const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-        // Store secretKey (bidirectional lookup)
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:apiKey`, secretKey);
-        await env.PLATFORM_TOKENS_KV.put(`apikey:${hashHex}`, platformId);
-
-        // Store tier config in CUSTOMER_TOKENS_KV
+        // Build tier config with product IDs
         const tierConfig = tiers.map((tier, i) => ({
           ...tier,
           priceId: priceIds[i].priceId,
           productId: priceIds[i].productId,
         }));
 
+        // ===================================================================
+        // SAVE TO PLATFORM_TOKENS_KV (front-auth-api namespace)
+        // This is the MAIN namespace - stores EVERYTHING about the dev
+        // ===================================================================
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey`, publishableKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:products`, JSON.stringify(priceIds));
+
+        // Reverse lookups
+        await env.PLATFORM_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
+        await env.PLATFORM_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
+
+        // ===================================================================
+        // COPY TO CUSTOMER_TOKENS_KV (api-multi namespace)
+        // Only copy what api-multi needs for fast tier limit lookups
+        // ===================================================================
         await env.CUSTOMER_TOKENS_KV.put(
           `platform:${platformId}:tierConfig`,
           JSON.stringify({ tiers: tierConfig })
         );
+        await env.CUSTOMER_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
+        await env.CUSTOMER_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
 
         console.log(`[Products] Created ${priceIds.length} products for platform ${platformId}`);
+        console.log(`[Keys] Generated publishableKey: ${publishableKey}`);
+
+        // ===================================================================
+        // UPDATE CLERK METADATA (add publishableKey to JWT)
+        // ===================================================================
+        const clerkClient = createClerkClient({
+          secretKey: env.CLERK_SECRET_KEY,
+          publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        });
+
+        await clerkClient.users.updateUserMetadata(userId, {
+          publicMetadata: { publishableKey }
+        });
+
+        console.log(`[Clerk] Updated user ${userId} with publishableKey in metadata`);
 
         return new Response(
           JSON.stringify({
             success: true,
-            platformId,
+            publishableKey,
             secretKey,
             products: priceIds,
           }),

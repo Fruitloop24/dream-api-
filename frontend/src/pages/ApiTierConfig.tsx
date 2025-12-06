@@ -81,9 +81,9 @@ export default function ApiTierConfig() {
       });
 
       if (response.ok) {
-        // Backend creates products, generates API key, and saves to KV
-        // Redirect to dashboard to show credentials
-        navigate('/dashboard?setup=complete');
+        // Backend creates products, generates publishableKey + secretKey
+        // Redirect to /credentials page to display them
+        navigate('/credentials?success=true');
       } else {
         const error = await response.text();
         alert(`Failed to create products: ${error}`);

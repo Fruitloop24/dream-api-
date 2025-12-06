@@ -7,6 +7,7 @@ import { SignedIn, SignedOut, RedirectToSignIn, SignIn, SignUp } from '@clerk/cl
 import Landing from './pages/LandingNew';
 import Dashboard from './pages/DashboardNew';
 import ApiTierConfig from './pages/ApiTierConfig';
+import Credentials from './pages/Credentials';
 
 function App() {
   return (
@@ -36,6 +37,19 @@ function App() {
             <>
               <SignedIn>
                 <ApiTierConfig />
+              </SignedIn>
+              <SignedOut>
+                <RedirectToSignIn />
+              </SignedOut>
+            </>
+          }
+        />
+        <Route
+          path="/credentials"
+          element={
+            <>
+              <SignedIn>
+                <Credentials />
               </SignedIn>
               <SignedOut>
                 <RedirectToSignIn />
