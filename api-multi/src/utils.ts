@@ -24,18 +24,26 @@ import { Env } from './types';
  * 3. Set via: wrangler secret put NEW_VAR_NAME
  */
 export function validateEnv(env: Env): { valid: boolean; missing: string[] } {
+	// Only require what api-multi actually needs:
+	// - Clerk (end-user-api) for creating customers
+	// - CLERK_JWT_TEMPLATE for JWT verification
+	//
+	// NOTE: We do NOT require STRIPE_SECRET_KEY!
+	// Checkouts use DEV's Stripe token from KV (platform:{platformId}:stripeToken)
 	const required = [
 		'CLERK_SECRET_KEY',
 		'CLERK_PUBLISHABLE_KEY',
-		'STRIPE_SECRET_KEY',
 		'CLERK_JWT_TEMPLATE',
 	];
 
 	const missing = required.filter((key) => !env[key as keyof Env]);
 
-	// Check KV binding (set in wrangler.toml, not via secrets)
+	// Check KV bindings (set in wrangler.toml, not via secrets)
 	if (!env.USAGE_KV) {
 		missing.push('USAGE_KV');
+	}
+	if (!env.TOKENS_KV) {
+		missing.push('TOKENS_KV');
 	}
 
 	return { valid: missing.length === 0, missing };

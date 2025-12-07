@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 
 export default function Landing() {
-  const { isSignedIn, user } = useUser();
+  const { isSignedIn, user: _user } = useUser();
   const navigate = useNavigate();
 
   // Redirect to dashboard if already signed in

@@ -20,7 +20,7 @@ export default function Dashboard() {
 
   const [hasPaid, setHasPaid] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
-  const [platformId, setPlatformId] = useState('');
+  const [_platformId, setPlatformId] = useState('');
   const [publishableKey, setPublishableKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [copied, setCopied] = useState(false);

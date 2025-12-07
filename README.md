@@ -1,408 +1,417 @@
 # dream-api
 
-**Stripe + Auth + Customer Management as a Service**
+**Status:** Working MVP - Core API functional, ready for full flow test
 
-$15/mo API that handles authentication, billing, and usage tracking for indie developers.
-
----
-
-## 🎯 What It Does
-
-**The Simplest Pitch:**
-You pay us $15/mo. We give you publishableKey + secretKey. You get Clerk auth + Stripe billing + usage tracking for YOUR customers. All in one API.
-
-Developers integrate your API and get:
-- ✅ User authentication (shared Clerk app, isolated by publishableKey)
-- ✅ Stripe billing (checkout on THEIR Stripe account via Connect)
-- ✅ Usage tracking (tier limits, rate limiting, enforcement)
-- ✅ Customer dashboard (see users, revenue, MRR, churn)
-- ✅ Webhooks handled automatically (Clerk + Stripe → D1 database)
-
-**Works for:** SaaS, courses, digital products, API monetization, paywalls, indie hackers
-
-**What makes this special:**
-- Devs don't need their own Clerk account - use YOUR shared end-user-api
-- Devs don't handle webhooks - you do
-- Devs don't write auth/billing code - just call your API
-- You provide infrastructure, they handle money (Stripe Connect)
+**Last Updated:** Dec 7, 2025
 
 ---
 
-## 🏗️ Architecture
+## What This Is
 
-### **The Services:**
+A **$15/mo API** that gives indie devs auth + billing + usage tracking for their SaaS.
 
-**frontend/** - Developer dashboard (React + Clerk)
-- Sign up, pay, connect Stripe, configure tiers
-- Get publishableKey + secretKey
-- View customer dashboard
+**You built:**
+- API key authentication ✅
+- Multi-tenant usage tracking ✅
+- Stripe checkout (on dev's account) ✅
+- Tier limit enforcement ✅
+- Customer creation (shared Clerk app) ✅
 
-**front-auth-api/** - Platform API (Cloudflare Worker)
-- YOUR devs authenticate here (Clerk dream-api app)
-- Payment processing ($15/mo to YOU)
-- Generates credentials after product creation
-
-**oauth-api/** - Stripe Connect handler (Cloudflare Worker)
-- Securely connects developer's Stripe account
-- Creates products on THEIR Stripe
-- Generates publishableKey + secretKey
-- Auto-creates webhook endpoints
-
-**api-multi/** - Multi-tenant API (Cloudflare Worker)
-- THEIR end-users authenticate here (Clerk end-user-api app)
-- Usage tracking + tier enforcement
-- Stripe checkout/portal for THEIR customers
-- Webhooks populate D1 dashboard
-
----
-
-## 🔑 The Key System (Critical Architecture)
-
-### **platformId** (plt_xxx) - Internal, Stable, Never Changes
-- Generated at first login (POST /generate-platform-id)
-- Lives in KV only (NEVER in JWT, NEVER exposed)
-- Stable internal ID - survives key rotation
-- One dev can have MULTIPLE publishableKey/secretKey pairs
-- All keys link back to same platformId
-- Used for: KV storage, D1 queries, dashboard routing
-
-### **publishableKey** (pk_live_xxx) - Public, Goes in JWT
-- Generated AFTER tier configuration (oauth-api/create-products)
-- Lives in end-user-api JWT (NOT dream-api JWT)
-- Safe to expose (like Stripe's pk_live_)
-- Used to isolate end-user data between different developers
-- Dev can have multiple keys (prod, staging, test)
-
-### **secretKey** (sk_live_xxx) - Private, Server-Only
-- Generated with publishableKey
-- NEVER exposed to client
-- Used for API authentication (Authorization: Bearer sk_live_...)
-- SHA-256 hashed before storing in KV
-
-### **Why This Architecture?**
-```
-platformId: plt_abc123 (stable, internal)
-    ↓
-    ├── pk_live_prod → sk_live_prod_secret
-    ├── pk_live_staging → sk_live_staging_secret
-    └── pk_live_test → sk_live_test_secret
-```
-
-This allows you to:
-- Rotate keys without losing customer data
-- Have separate keys for prod/staging/test
-- Revoke individual keys without affecting others
-- Query ALL customers by platformId (regardless of which key was used)
-
----
-
-## 💾 Data Storage
-
-### **4 KV Namespaces:**
-
-**TOKENS_KV (front-auth-api)** - `d09d8bf4e63a47c495384e9ed9b4ec7e`
-```
-user:{userId}:platformId → plt_abc123 (internal)
-user:{userId}:publishableKey → pk_live_xyz789
-user:{userId}:secretKey → sk_live_abc123def456
-platform:{platformId}:userId → userId
-```
-
-**USAGE_KV (front-auth-api)** - `6a3c39a8ee9b46859dc237136048df25`
-```
-usage:{userId} → YOUR developers' usage
-ratelimit:{userId}:{minute} → rate limit counters
-```
-
-**CUSTOMER_TOKENS_KV (api-multi)** - `a9f3331b0c8b48d58c32896482484208`
-```
-platform:{platformId}:stripe → {accessToken, stripeUserId}
-platform:{platformId}:publishableKey → pk_live_xyz789
-platform:{platformId}:tierConfig → {tiers: [...]}
-publishablekey:{pk_live_xyz789} → platformId (reverse lookup)
-secretkey:{hash} → publishableKey (API auth)
-```
-
-**USAGE_KV (api-multi)** - `10cc8b9f46f54a6e8d89448f978aaa1f`
-```
-usage:{publishableKey}:{userId} → THEIR end-users' usage
-ratelimit:{userId}:{minute} → rate limit counters
-```
-
-### **D1 Database:**
-
-```sql
-CREATE TABLE users (
-  publishable_key TEXT NOT NULL,  -- Which dev (pk_live_xxx)
-  user_id TEXT NOT NULL,          -- Which end-user
-  clerk_email TEXT,               -- From Clerk webhook
-  clerk_name TEXT,
-  plan TEXT,                      -- Tier (free, pro, etc)
-  stripe_customer_id TEXT,        -- From Stripe webhook
-  subscription_status TEXT,
-  mrr REAL,
-  usage_count INTEGER DEFAULT 0,
-  last_active TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (publishable_key, user_id)
-);
-
-CREATE INDEX idx_publishable_key ON users(publishable_key);
-CREATE INDEX idx_plan ON users(plan);
-CREATE INDEX idx_last_active ON users(last_active);
-```
-
-**Purpose:** Dashboard queries (user lists, analytics, CSV export)
-
----
-
-## 🔄 The Complete Developer Flow
-
-### **Phase 1: Setup (Getting Credentials)**
-```
-1. Sign up (Clerk dream-api)
-   → Frontend calls: POST /generate-platform-id
-   → Backend generates: platformId = plt_abc123
-   → Saved to front-auth-api TOKENS_KV
-   ↓
-2. Pay $15/mo (Stripe)
-   → Stripe webhook updates dream-api JWT: plan = 'paid'
-   ↓
-3. Connect Stripe (OAuth)
-   → Reads platformId from KV
-   → OAuth to Stripe Connect
-   → Stripe token saved: platform:{platformId}:stripeToken
-   ↓
-4. Configure tiers (ApiTierConfig page)
-   → Free: $0, 100 requests
-   → Pro: $29, 10k requests
-   → Enterprise: $99, unlimited
-   → Submit to: POST /create-products
-   ↓
-5. Products created → Keys generated:
-   → Creates Stripe products on THEIR Stripe account
-   → Generates publishableKey: pk_live_xyz789
-   → Generates secretKey: sk_live_abc123def456
-   → Saves to KV (front-auth-api + api-multi)
-   → Returns credentials to frontend
-   ↓
-6. Copy credentials from dashboard
-   → publishableKey (safe to expose)
-   → secretKey (keep secret!)
-```
-
-### **Phase 2: Integration (Using the API)**
-```
-1. Dev builds their app
-   → Uses api-multi endpoints with secretKey
-
-2. Create customer:
-   POST /customers
-   Authorization: Bearer sk_live_abc123
-   Body: { email, name, plan: "free" }
-
-   → api-multi creates user in end-user-api Clerk
-   → Sets: publicMetadata.publishableKey = pk_live_xyz789
-   → Clerk webhook writes to D1
-
-3. Create checkout (upgrade):
-   POST /checkout
-   Authorization: Bearer sk_live_abc123
-   Body: { userId, tier: "pro" }
-
-   → Creates Stripe checkout on dev's Stripe account
-   → User pays on dev's Stripe
-   → Stripe webhook updates D1
-```
-
-### **Phase 3: Dashboard (Viewing Customers)**
-```
-1. Dev logs into YOUR dashboard
-   → Reads platformId from KV
-
-2. Dashboard queries D1:
-   SELECT * FROM customers WHERE platform_id = 'plt_abc123'
-
-3. Shows:
-   → Customer list (email, plan, status)
-   → MRR, active users, churn
-   → "View in Stripe" link
-
-4. Dev handles refunds in THEIR Stripe dashboard
-   → You don't touch money, just infrastructure
+**What devs get:**
+```javascript
+// That's it. Auth + billing handled.
+const customer = await dream.customers.create({ email, plan: 'free' });
+await dream.track(customer.id); // Enforces limits
+const checkout = await dream.checkout(customer.id, 'pro'); // Their Stripe
 ```
 
 ---
 
-## 🎯 JWT Templates (Both Clerk Apps)
+## Current Status
 
-### **dream-api (YOUR developers who pay YOU):**
-```json
+### ✅ What Works (Tested Dec 7, 2025)
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| API key auth | ✅ Working | Curl test passed with `sk_live_da1...` |
+| Usage tracking | ✅ Working | Count increments, limit enforced at 3 |
+| Customer creation | ✅ Working | Created `user_36Wkl...` with `publishableKey` |
+| Tier limits | ✅ Working | Blocked after 3 requests with "Please upgrade" |
+| Checkout endpoint | ⚠️ Needs tierConfig | Uses dev's Stripe token from KV |
+| Webhook | ⚠️ Configured | `whsec_sdxn...` set, not tested yet |
+
+### 🔧 Known Issues
+
+1. **Price IDs not displaying** - Frontend credentials page not showing products (they exist in KV at `user:{userId}:products`)
+2. **Tier config missing from api-multi KV** - Need to re-run flow after oauth-api redeployment
+3. **Free tier** - Should create $0 Stripe product for consistency
+
+### 📋 Next Actions (In Order)
+
+1. Clean up KV (you're doing this)
+2. Test full flow: signup → pay → OAuth → tiers → keys
+3. Verify price IDs appear in KV
+4. Test checkout with real tier config
+5. Build dashboard (D1 + webhooks)
+
+---
+
+## Architecture
+
+### The Three Keys
+
+```
+platformId: plt_xxx
+  ↓ Internal stable ID (never changes)
+  ↓ Used for KV lookups, tier configs
+  ↓
+publishableKey: pk_live_xxx
+  ↓ Public identifier (in end-user JWT)
+  ↓ Isolates customers between devs
+  ↓
+secretKey: sk_live_xxx
+  ↓ API authentication (SHA-256 hashed)
+  ↓ Dev uses this to call your API
+```
+
+**Why three?** Key rotation. Dev can generate new `pk`/`sk` pairs without losing customer data (still linked to same `platformId`).
+
+### Two Clerk Apps
+
+| App | Purpose | JWT |
+|-----|---------|-----|
+| `dream-api` | YOUR devs who pay you | `{ plan: "paid" }` |
+| `end-user-api` | THEIR customers (SHARED) | `{ publishableKey: "pk_live_xxx" }` |
+
+**The magic:** All devs share ONE Clerk app for their customers. `publishableKey` in JWT keeps them isolated.
+
+### Four Workers
+
+| Worker | Port | Deployed | Purpose |
+|--------|------|----------|---------|
+| frontend | 5173 | ❌ | React dashboard |
+| front-auth-api | 8788 | ✅ | Dev signup/payment |
+| oauth-api | 8789 | ✅ | Stripe Connect |
+| api-multi | 8787 | ✅ | Customer API |
+
+### Four KV Namespaces
+
+| Namespace | ID (last 4) | Used For |
+|-----------|-------------|----------|
+| front-auth-api TOKENS | `...ec7e` | Dev credentials, keys |
+| front-auth-api USAGE | `...8df25` | Dev API usage |
+| api-multi TOKENS | `...84208` | Tier configs (copied) |
+| api-multi USAGE | `...aaa1f` | Customer usage |
+
+---
+
+## The Complete Flow
+
+### 1. Developer Onboarding
+
+```
+Signup (Clerk) → platformId generated → Pay $15 → Stripe webhook
+  → plan = "paid" → Connect Stripe → OAuth callback → Save token
+  → Configure tiers → POST /create-products → Generate keys
+  → Display credentials
+```
+
+**Keys written to:**
+- front-auth-api: `user:{userId}:publishableKey`, `user:{userId}:secretKey`
+- api-multi: `secretkey:{hash}:publishableKey`, `platform:{platformId}:tierConfig`
+
+### 2. Developer Integration
+
+```javascript
+// Create customer
+POST /api/customers
+Authorization: Bearer sk_live_xxx
+Body: { email, firstName, lastName, plan: "free", password }
+
+// Response
 {
-  "plan": "{{user.public_metadata.plan}}"
+  "customer": {
+    "id": "user_xxx",
+    "email": "customer@example.com",
+    "publishableKey": "pk_live_xxx"
+  }
 }
 ```
-- Only contains their plan status ("free" or "paid")
-- Updated by Stripe webhook after payment
-- No publishableKey needed (devs don't call their own API)
 
-### **end-user-api (THEIR customers - SHARED Clerk app):**
-```json
+**What happened:**
+- User created in `end-user-api` Clerk
+- `publicMetadata.publishableKey` set
+- Customer JWT will have `{ publishableKey: "pk_live_xxx" }`
+
+### 3. Usage Tracking
+
+```javascript
+// Track usage (enforces tier limits)
+POST /api/data
+Authorization: Bearer sk_live_xxx
+X-User-Id: user_xxx
+X-User-Plan: free
+
+// Success response
 {
-  "publishableKey": "{{user.public_metadata.publishableKey}}"
+  "success": true,
+  "usage": { "count": 1, "limit": 100, "plan": "free" }
+}
+
+// At limit
+{
+  "error": "Tier limit reached",
+  "message": "Please upgrade to unlock more requests"
 }
 ```
-- Contains which developer owns this user
-- Set when api-multi creates user via POST /customers
-- THIS is how you isolate data between different developers
-- All end-users from ALL developers share ONE Clerk app
-- publishableKey keeps them separated
 
-**CRITICAL INSIGHT:**
-- You have TWO Clerk apps, but end-user-api is SHARED by ALL developers
-- It's like a multi-tenant SaaS where publishableKey is the tenant ID
-- One dev's customers can't see another dev's customers
-- Dashboard queries: `WHERE publishable_key = 'pk_live_xyz789'`
+### 4. Upgrade Flow
 
----
+```javascript
+// Create checkout session
+POST /api/create-checkout
+Authorization: Bearer sk_live_xxx
+X-User-Id: user_xxx
+Body: { tier: "pro" }
 
-## 🪝 Webhook Strategy
+// Response
+{ "url": "https://checkout.stripe.com/..." }
 
-### **Clerk Webhook** → `front-auth-api/webhook/clerk`
-- Fires when dev signs up
-- Generates internal platformId
-- Saves to KV, updates Clerk metadata
-
-### **Stripe Webhook (Platform)** → `front-auth-api/webhook/stripe`
-- Fires when dev pays $15/mo
-- Updates plan to 'paid' in Clerk metadata
-
-### **Clerk Webhook** → `api-multi/webhook/clerk`
-- Fires when end-user signs up
-- Caches profile in KV
-- Writes to D1 (if publishableKey in metadata)
-
-### **Stripe Webhook (Customers)** → `api-multi/webhook/stripe`
-- Auto-created via Connect (oauth-api does this)
-- ONE URL for ALL platforms
-- Stripe sends `Stripe-Account: acct_xxx` header
-- We lookup publishableKey, verify signature, write to D1
-
-**Devs never configure webhooks. Fully automated.**
-
----
-
-## 🚀 Local Development
-
-```bash
-# Terminal 1: Platform API
-cd front-auth-api && npm run dev  # :8788
-
-# Terminal 2: Frontend
-cd frontend && npm run dev         # :5173
-
-# Terminal 3: OAuth API
-cd oauth-api && npm run dev        # :8789
-
-# Terminal 4: Multi-tenant API
-cd api-multi && npm run dev        # :8787
+// Redirect customer → they pay on dev's Stripe → webhook updates plan
 ```
 
 ---
 
-## 📋 Environment Setup
+## API Endpoints (api-multi)
 
-### **front-auth-api/.dev.vars**
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/health` | GET | None | Health check |
+| `/api/tiers` | GET | None | List pricing tiers |
+| `/api/customers` | POST | API key | Create customer in Clerk |
+| `/api/customers/:id` | GET | API key | Get customer |
+| `/api/customers/:id` | PATCH | API key | Update customer plan |
+| `/api/data` | POST | API key | Track usage, enforce limits |
+| `/api/usage` | GET | API key | Check current usage |
+| `/api/create-checkout` | POST | API key | Stripe checkout (upgrade) |
+| `/api/customer-portal` | POST | API key | Stripe billing portal |
+| `/webhook/stripe` | POST | Signature | Connect webhook |
+
+**Base URL:** `https://api-multi.k-c-sheffield012376.workers.dev`
+
+---
+
+## Environment Variables
+
+### front-auth-api
 ```bash
-CLERK_SECRET_KEY=sk_test_...
+CLERK_SECRET_KEY=sk_test_...        # dream-api Clerk app
 CLERK_PUBLISHABLE_KEY=pk_test_...
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PRICE_ID=price_...         # $15/mo for YOUR revenue
+STRIPE_SECRET_KEY=sk_test_...       # YOUR Stripe ($15 payment)
+STRIPE_PRICE_ID=price_...           # $15/mo product
 STRIPE_WEBHOOK_SECRET=whsec_...
 FRONTEND_URL=http://localhost:5173
 ```
 
-### **oauth-api/.dev.vars**
+### oauth-api
 ```bash
-STRIPE_CLIENT_ID=ca_...
-STRIPE_CLIENT_SECRET=sk_...       # Full secret key (NOT rk_...)
-FRONTEND_URL=http://localhost:5173
-CLERK_SECRET_KEY=sk_test_...      # For updating metadata
-CLERK_PUBLISHABLE_KEY=pk_test_...
-```
-
-### **api-multi/.dev.vars**
-```bash
-CLERK_SECRET_KEY=sk_test_...      # end-user-api Clerk app
+STRIPE_CLIENT_ID=ca_...             # Stripe Connect app
+STRIPE_CLIENT_SECRET=sk_test_...    # YOUR Stripe key
+CLERK_SECRET_KEY=sk_test_...        # dream-api Clerk
 CLERK_PUBLISHABLE_KEY=pk_test_...
 FRONTEND_URL=http://localhost:5173
 ```
 
----
+### api-multi
+```bash
+CLERK_SECRET_KEY=sk_test_...        # end-user-api Clerk
+CLERK_PUBLISHABLE_KEY=pk_test_...
+FRONTEND_URL=http://localhost:5173
 
-## 🎯 Current State (Dec 5, 2025)
-
-**✅ COMPLETED:**
-- ✅ Platform auth + payment flow ($15/mo Stripe checkout)
-- ✅ Stripe OAuth integration (Stripe Connect)
-- ✅ Tier configuration UI (ApiTierConfig page)
-- ✅ Product creation endpoint (creates products on dev's Stripe)
-- ✅ Platform ID generation (immediately after login)
-- ✅ Credential generation (publishableKey + secretKey)
-- ✅ Credentials page (displays keys + price IDs)
-- ✅ Tier limits saved to Stripe metadata
-- ✅ Tier config copied to api-multi KV namespace
-- ✅ KV data structure finalized
-
-**🎯 READY TO TEST:**
-- Full signup flow: signup → pay → OAuth → tier config → credentials
-- Tier limits enforcement (saved to KV + Stripe metadata)
-
-**📝 TODO NEXT:**
-- Test complete flow with fresh account
-- Verify tier limits in KV after tier config
-- Build api-multi endpoints (POST /customers, POST /checkout)
-- Setup D1 database (customers table)
-- Clerk webhook (end-user-api → D1)
-- Stripe webhook (write to D1)
-- Dashboard UI (customer list, analytics, CSV export)
-- Automated webhook setup via Connect API
+# NOTE: NO STRIPE_SECRET_KEY!
+# Checkout uses dev's token from KV: platform:{platformId}:stripeToken
+```
 
 ---
 
-## 📦 Tech Stack
+## Testing Guide
 
-- **Frontend:** React + Vite + Clerk + Tailwind
-- **Workers:** Cloudflare Workers (TypeScript)
-- **Auth:** Clerk (2 apps: dream-api, end-user-api)
-- **Storage:** KV (4 namespaces) + D1 (dashboard)
-- **Payments:** Stripe + Stripe Connect
-- **Deployment:** Wrangler + Cloudflare Pages
+### Test 1: API Key Auth + Usage Tracking
+
+```bash
+# Track usage
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "X-User-Id: test_user_1" \
+  -H "X-User-Plan: free"
+
+# Expected: {"success":true,"usage":{"count":1,"limit":3}}
+
+# Repeat until limit
+# Expected: {"error":"Tier limit reached"}
+```
+
+### Test 2: Create Customer
+
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customers \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "firstName": "Test",
+    "lastName": "User",
+    "plan": "free",
+    "password": "UniquePassword123xyz"
+  }'
+
+# Expected: {"success":true,"customer":{...,"publishableKey":"pk_live_xxx"}}
+```
+
+### Test 3: Verify in Clerk
+
+Go to end-user-api Clerk dashboard → Users → Check metadata:
+```json
+{
+  "publishableKey": "pk_live_xxx",
+  "plan": "free"
+}
+```
 
 ---
 
-## 🔥 Key Architecture Insights
+## KV Structure (Complete Reference)
 
-### **Why separate platformId and publishableKey?**
-- **platformId** = internal bridge between KV namespaces (never exposed)
-- **publishableKey** = public identifier in JWT (safe to expose)
-- Allows regenerating publishableKey without breaking internal mappings
+### front-auth-api TOKENS_KV
+```
+user:{userId}:platformId → plt_abc123
+user:{userId}:publishableKey → pk_live_xyz
+user:{userId}:secretKey → sk_live_abc (plaintext, one-time show)
+user:{userId}:products → [{tier, priceId, productId}]
+user:{userId}:stripeToken → {accessToken, stripeUserId}
 
-### **Why only publishableKey in JWT?**
-- Simplicity - one identifier does everything
-- Security - can't reverse lookup sensitive data from JWT alone
-- Flexibility - can add more claims later without breaking tokens
+platform:{platformId}:userId → userId
+platform:{platformId}:stripeToken → {accessToken, stripeUserId}
 
-### **Why two Clerk apps?**
-- Complete data isolation (YOUR devs vs THEIR customers)
-- Different pricing tiers, limits, features per app
-- Cleaner billing (you bill devs, they bill customers)
+publishablekey:{pk_live_xyz}:platformId → plt_abc123
+secretkey:{sha256hash}:publishableKey → pk_live_xyz
+```
 
-### **Why D1 for dashboard?**
-- KV is fast but not queryable
-- D1 enables: filtering, sorting, aggregations, CSV exports
-- Dual-write strategy: KV for speed, D1 for analytics
+### api-multi TOKENS_KV
+```
+platform:{platformId}:tierConfig → {tiers: [{name, limit, price, priceId, productId}]}
+platform:{platformId}:stripeToken → {accessToken, stripeUserId}
+
+publishablekey:{pk_live_xyz}:platformId → plt_abc123
+secretkey:{sha256hash}:publishableKey → pk_live_xyz
+```
+
+### api-multi USAGE_KV
+```
+usage:{platformId}:{userId} → {usageCount, plan, periodStart, periodEnd}
+ratelimit:{userId}:{minute} → count
+```
 
 ---
 
-See **CLAUDE.md** for detailed session notes and implementation flow.
+## Common Issues & Fixes
+
+### "Invalid API key"
+**Cause:** `secretkey:{hash}:publishableKey` not in api-multi TOKENS_KV
+**Fix:** oauth-api now writes to both namespaces (redeployed), re-generate keys
+
+### "No price ID configured for tier: pro"
+**Cause:** `platform:{platformId}:tierConfig` missing from api-multi TOKENS_KV
+**Fix:** Re-run tier config flow (oauth-api now copies to api-multi)
+
+### Price IDs not showing on credentials page
+**Cause:** Frontend not reading `user:{userId}:products` from KV
+**Fix:** Update Credentials.tsx to fetch and display products
+
+### Clerk "Password has been found in an online data breach"
+**Cause:** Clerk checks HaveIBeenPwned database
+**Fix:** Use unique passwords: `xK9mNp2qRs5vWz8a` or similar
+
+---
+
+## What Makes This Special
+
+**For devs:**
+- No Clerk account (use YOUR shared app)
+- No Stripe platform fees (Connect Standard)
+- No server (API handles everything)
+- $15/mo flat (no per-user costs)
+
+**For you:**
+- 200 customers = $3,000 MRR
+- Cloudflare = ~$5/mo at this scale
+- No support burden (devs own Stripe)
+- Scalable (one Clerk app, millions of users)
+
+**The innovation:**
+- Multi-tenancy via JWT claims (`publishableKey`)
+- Three-key system for rotation without data loss
+- Stripe Connect lets devs keep 100% of revenue
+- Shared Clerk app = zero per-user costs
+
+---
+
+## Roadmap
+
+### MVP (This Week)
+- [x] API key auth
+- [x] Usage tracking
+- [x] Customer creation
+- [x] Tier enforcement
+- [ ] Fix price ID display
+- [ ] Test full flow
+
+### Phase 2: Dashboard
+- [ ] D1 schema
+- [ ] Clerk webhook → D1
+- [ ] Stripe webhook → D1
+- [ ] Dashboard UI (customers, MRR)
+
+### Phase 3: Developer Experience
+- [ ] SDK (`npm install dream-api`)
+- [ ] Better errors
+- [ ] Usage webhooks
+
+### Phase 4: Scale
+- [ ] Key rotation
+- [ ] Multiple keys (prod/staging)
+- [ ] Custom domains
+- [ ] SSO
+
+---
+
+## Files to Understand
+
+| File | What It Does |
+|------|--------------|
+| `CLAUDE.md` | Detailed session notes, architecture decisions |
+| `api-multi/src/middleware/apiKey.ts` | API key verification (returns platformId + publishableKey) |
+| `api-multi/src/routes/customers.ts` | Customer creation in end-user-api Clerk |
+| `api-multi/src/routes/usage.ts` | Usage tracking, tier enforcement |
+| `api-multi/src/routes/checkout.ts` | Stripe checkout (uses dev's token from KV) |
+| `oauth-api/src/index.ts` | Product creation, key generation, KV writes |
+| `frontend/src/pages/Credentials.tsx` | Displays keys (needs fix for price IDs) |
+
+---
+
+## Success Criteria
+
+You'll know it works when:
+1. ✅ Signup → credentials page shows `pk_live_xxx` and `sk_live_xxx`
+2. ✅ Curl with `sk_live_xxx` → usage tracked
+3. ✅ Hit limit → blocked with "Please upgrade"
+4. ✅ Create customer → appears in end-user-api Clerk with `publishableKey`
+5. ⏳ Checkout → redirects to dev's Stripe, webhook updates plan
+
+**Current score:** 4/5 ✅
+
+---
+
+## License
+
+MIT

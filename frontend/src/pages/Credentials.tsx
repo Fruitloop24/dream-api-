@@ -14,7 +14,7 @@ const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localh
 export default function Credentials() {
   const { getToken } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [_searchParams] = useSearchParams();
 
   const [publishableKey, setPublishableKey] = useState('');
   const [secretKey, setSecretKey] = useState('');

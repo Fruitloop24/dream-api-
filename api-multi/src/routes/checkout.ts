@@ -9,23 +9,32 @@
  *
  * PURPOSE:
  * Let end-users upgrade to paid tiers and manage their subscriptions.
- * Stripe handles payment processing, we just create sessions and handle webhooks.
- *
- * CURRENT LIMITATION:
- * These endpoints require Clerk JWT (to get user email).
- * TODO: Support API key mode (get email from request body or X-User-Email header)
+ * Uses the DEV's Stripe access token from KV (not your platform's key).
  *
  * MULTI-TENANT:
- * - Gets tier config from user:{platformId}:tierConfig
- * - Gets Stripe price IDs per developer
- * - Each developer can have custom pricing
+ * - Gets tier config from platform:{platformId}:tierConfig
+ * - Gets DEV's Stripe token from platform:{platformId}:stripeToken
+ * - Each developer's customers pay THEM, not you
  *
  * ============================================================================
  */
 
 import { Env } from '../types';
 import { getPriceIdMap } from '../config/configLoader';
-import type { ClerkClient } from '@clerk/backend'; // Import ClerkClient type
+import type { ClerkClient } from '@clerk/backend';
+
+/**
+ * Get dev's Stripe access token from KV
+ */
+async function getDevStripeToken(platformId: string, env: Env): Promise<string | null> {
+	const stripeDataJson = await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+	if (!stripeDataJson) {
+		console.error(`[Checkout] No Stripe token found for platform: ${platformId}`);
+		return null;
+	}
+	const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+	return stripeData.accessToken;
+}
 
 /**
  * Handle /api/create-checkout - Create Stripe Checkout session
@@ -95,14 +104,20 @@ export async function handleCreateCheckout(
 			throw new Error(`No price ID configured for tier: ${targetTier}`);
 		}
 
+		// Get DEV's Stripe token from KV (they connected via OAuth)
+		const devStripeToken = await getDevStripeToken(platformId, env);
+		if (!devStripeToken) {
+			throw new Error('Developer has not connected their Stripe account');
+		}
+
 		// Use origin from request for success/cancel URLs (handles changing hash URLs)
 		const frontendUrl = origin || 'https://app.panacea-tech.net';
 
-		// Create Stripe checkout session
+		// Create Stripe checkout session on DEV's Stripe account
 		const checkoutSession = await fetch('https://api.stripe.com/v1/checkout/sessions', {
 			method: 'POST',
 			headers: {
-				'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+				'Authorization': `Bearer ${devStripeToken}`,
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
 			body: new URLSearchParams({
@@ -190,16 +205,49 @@ export async function handleCustomerPortal(
 			'return_url': `${frontendUrl}/dashboard`,
 		};
 
-		// Add portal configuration ID if provided in env
-		if (env.STRIPE_PORTAL_CONFIG_ID) {
-			portalParams['configuration'] = env.STRIPE_PORTAL_CONFIG_ID;
+		// Get DEV's Stripe token from KV
+		// NOTE: We need platformId here - currently not passed to this function
+		// For now, we'll need to look it up from the user's publishableKey
+		const publishableKey = user.publicMetadata?.publishableKey as string;
+		if (!publishableKey) {
+			return new Response(
+				JSON.stringify({ error: 'Customer not associated with a platform' }),
+				{
+					status: 400,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				}
+			);
 		}
 
-		// Create Stripe billing portal session
+		// Get platformId from publishableKey
+		const platformId = await env.TOKENS_KV.get(`publishablekey:${publishableKey}:platformId`);
+		if (!platformId) {
+			return new Response(
+				JSON.stringify({ error: 'Platform not found' }),
+				{
+					status: 400,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				}
+			);
+		}
+
+		// Get DEV's Stripe token
+		const devStripeToken = await getDevStripeToken(platformId, env);
+		if (!devStripeToken) {
+			return new Response(
+				JSON.stringify({ error: 'Developer has not connected their Stripe account' }),
+				{
+					status: 400,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				}
+			);
+		}
+
+		// Create Stripe billing portal session on DEV's Stripe account
 		const portalSession = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
 			method: 'POST',
 			headers: {
-				'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+				'Authorization': `Bearer ${devStripeToken}`,
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
 			body: new URLSearchParams(portalParams).toString(),

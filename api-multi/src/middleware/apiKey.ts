@@ -22,9 +22,21 @@
 import { Env } from '../types';
 
 /**
- * Verify API key and return platformId
+ * Result of API key verification
  */
-export async function verifyApiKey(apiKey: string, env: Env): Promise<string | null> {
+export interface ApiKeyVerifyResult {
+	platformId: string;
+	publishableKey: string;
+}
+
+/**
+ * Verify API key and return platformId + publishableKey
+ *
+ * Returns both because:
+ * - platformId: for tier config lookups, usage tracking
+ * - publishableKey: for setting on new customers (their JWT will have it)
+ */
+export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVerifyResult | null> {
 	try {
 		// Hash the API key
 		const encoder = new TextEncoder();
@@ -33,16 +45,24 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<string | n
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-		// Look up platformId
-		const platformId = await env.TOKENS_KV.get(`apikey:${hashHex}`);
+		// Look up publishableKey from secretKey hash
+		const publishableKey = await env.TOKENS_KV.get(`secretkey:${hashHex}:publishableKey`);
 
-		if (!platformId) {
+		if (!publishableKey) {
 			console.warn(`[API Key] Invalid key: ${apiKey.substring(0, 12)}...`);
 			return null;
 		}
 
-		console.log(`[API Key] ✅ Valid - Platform: ${platformId}`);
-		return platformId;
+		// Look up platformId from publishableKey
+		const platformId = await env.TOKENS_KV.get(`publishablekey:${publishableKey}:platformId`);
+
+		if (!platformId) {
+			console.error(`[API Key] No platformId for publishableKey: ${publishableKey}`);
+			return null;
+		}
+
+		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${publishableKey}`);
+		return { platformId, publishableKey };
 	} catch (error) {
 		console.error('[API Key] Verification error:', error);
 		return null;

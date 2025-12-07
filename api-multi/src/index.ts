@@ -53,6 +53,7 @@ import { verifyApiKey } from './middleware/apiKey';
 // Routes
 import { handleDataRequest, handleUsageCheck } from './routes/usage';
 import { handleCreateCheckout, handleCustomerPortal } from './routes/checkout';
+import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer } from './routes/customers';
 
 // Utilities
 import { validateEnv } from './utils';
@@ -179,11 +180,11 @@ export default {
 		const apiKey = authHeader.replace('Bearer ', '');
 
 		try {
-			// Verify API key → get platformId
+			// Verify API key → get platformId + publishableKey
 			console.log('[Auth] Verifying API key...');
-			const platformId = await verifyApiKey(apiKey, env);
+			const authResult = await verifyApiKey(apiKey, env);
 
-			if (!platformId) {
+			if (!authResult) {
 				return new Response(
 					JSON.stringify({
 						error: 'Invalid API key',
@@ -195,6 +196,8 @@ export default {
 					}
 				);
 			}
+
+			const { platformId, publishableKey } = authResult;
 
 			// Get userId from header (customer identifies their end-user)
 			const userId = request.headers.get('X-User-Id') || 'anonymous';
@@ -266,6 +269,27 @@ export default {
 			if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
 				return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin);
+			}
+
+			// ====================================================================
+			// CUSTOMER MANAGEMENT ENDPOINTS
+			// ====================================================================
+
+			// Create a new customer in end-user-api Clerk
+			if (url.pathname === '/api/customers' && request.method === 'POST') {
+				return await handleCreateCustomer(platformId, publishableKey, clerkClient, env, corsHeaders, request);
+			}
+
+			// Get a customer by ID
+			if (url.pathname.startsWith('/api/customers/') && request.method === 'GET') {
+				const customerId = url.pathname.replace('/api/customers/', '');
+				return await handleGetCustomer(customerId, platformId, publishableKey, clerkClient, corsHeaders);
+			}
+
+			// Update a customer's plan
+			if (url.pathname.startsWith('/api/customers/') && request.method === 'PATCH') {
+				const customerId = url.pathname.replace('/api/customers/', '');
+				return await handleUpdateCustomer(customerId, platformId, publishableKey, clerkClient, corsHeaders, request);
 			}
 
 			// 404 - Route not found

@@ -98,16 +98,17 @@ interface ConfigModule {
   config: Config;
 }
 
-async function loadConfig(env: Env, userId?: string): Promise<Config> {
+async function loadConfig(env: Env, platformId?: string): Promise<Config> {
   try {
-    // MULTI-TENANT MODE: Read tier config from TOKENS_KV (GitHub workflow stores it there)
-    if (userId && env?.TOKENS_KV) {
-      console.log(`[ConfigLoader] MULTI-TENANT: Loading config for user ${userId}`);
+    // MULTI-TENANT MODE: Read tier config from TOKENS_KV
+    // oauth-api stores it at platform:{platformId}:tierConfig after product creation
+    if (platformId && env?.TOKENS_KV) {
+      console.log(`[ConfigLoader] MULTI-TENANT: Loading config for platform ${platformId}`);
 
-      // Read tier config directly from TOKENS_KV (workflow stores it at user:{userId}:tierConfig)
-      const tierConfigJson = await env.TOKENS_KV.get(`user:${userId}:tierConfig`);
+      // Read tier config from TOKENS_KV (oauth-api stores it at platform:{platformId}:tierConfig)
+      const tierConfigJson = await env.TOKENS_KV.get(`platform:${platformId}:tierConfig`);
       if (!tierConfigJson) {
-        throw new Error(`No tier config found for user: ${userId} in TOKENS_KV`);
+        throw new Error(`No tier config found for platform: ${platformId} in TOKENS_KV`);
       }
 
       const tierData: TierConfigData = JSON.parse(tierConfigJson);
@@ -152,16 +153,16 @@ function transformTiers(tiers: ConfigTier[]): Record<string, TierConfig> {
 /**
  * Get tier configuration (multi-tenant)
  */
-export async function getTierConfig(env: Env, userId?: string): Promise<Record<string, TierConfig>> {
-  const config = await loadConfig(env, userId);
+export async function getTierConfig(env: Env, platformId?: string): Promise<Record<string, TierConfig>> {
+  const config = await loadConfig(env, platformId);
   return transformTiers(config.tiers);
 }
 
 /**
  * Get Stripe Price ID map (multi-tenant)
  */
-export async function getPriceIdMap(env: Env, userId?: string): Promise<Record<string, string>> {
-  const config = await loadConfig(env, userId);
+export async function getPriceIdMap(env: Env, platformId?: string): Promise<Record<string, string>> {
+  const config = await loadConfig(env, platformId);
   const priceIdMap: Record<string, string> = {};
 
   for (const tier of config.tiers) {
@@ -176,8 +177,8 @@ export async function getPriceIdMap(env: Env, userId?: string): Promise<Record<s
 /**
  * Get all tiers (multi-tenant)
  */
-export async function getAllTiers(env: Env, userId?: string): Promise<ConfigTier[]> {
-  const config = await loadConfig(env, userId);
+export async function getAllTiers(env: Env, platformId?: string): Promise<ConfigTier[]> {
+  const config = await loadConfig(env, platformId);
   return config.tiers;
 }
 

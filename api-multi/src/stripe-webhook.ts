@@ -1,12 +1,28 @@
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
+import { Env } from './types';
 
-interface Env {
-	CLERK_SECRET_KEY: string;
-	STRIPE_SECRET_KEY: string;
-	STRIPE_WEBHOOK_SECRET?: string;
-	USAGE_KV: KVNamespace;  // For webhook idempotency tracking
-}
+/**
+ * ============================================================================
+ * STRIPE CONNECT WEBHOOK - Handles events from ALL connected accounts
+ * ============================================================================
+ *
+ * This webhook receives events from your DEVs' Stripe accounts (via Connect).
+ * One endpoint, one signing secret, all connected accounts.
+ *
+ * The event.account field tells us which connected account the event is from.
+ * We can use this to look up the platformId and update the right customer.
+ *
+ * Events we care about:
+ * - checkout.session.completed → Customer paid, update plan
+ * - customer.subscription.updated → Plan changed
+ * - customer.subscription.deleted → Downgrade to free
+ *
+ * Future dashboard events:
+ * - invoice.paid → Track MRR
+ * - invoice.payment_failed → Alert dev
+ * ============================================================================
+ */
 
 export async function handleStripeWebhook(
 	request: Request,
@@ -20,7 +36,10 @@ export async function handleStripeWebhook(
 	}
 
 	// Verify webhook signature
-	const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+	// NOTE: We use a placeholder key here because constructEventAsync only needs
+	// the webhook signing secret (not the API key) for signature verification.
+	// The Stripe client is just used for its crypto utilities.
+	const stripe = new Stripe('sk_placeholder_for_webhook_verification', {
 		apiVersion: '2025-09-30.clover',
 	});
 

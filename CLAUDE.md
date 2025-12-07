@@ -1,6 +1,6 @@
 # dream-api - Development Guide
 
-**Last Updated:** 2025-12-05 (Evening Session Complete)
+**Last Updated:** 2025-12-06 (Testing Phase - API Key Verification)
 
 ---
 
@@ -685,26 +685,85 @@ stripe.checkout.sessions.create({
 
 ---
 
-## 🎓 HOW TO PICK UP TOMORROW
+---
 
-1. **Read this file from top to bottom** (especially "Difficult Concepts" section)
-2. **Check KV is clean:** `npx wrangler kv key list --namespace-id=d09d8bf4e63a47c495384e9ed9b4ec7e`
-3. **Test fresh signup:**
-   - Sign up → generate platformId
-   - Pay $15/mo → plan updated
-   - Connect Stripe → token saved
-   - Configure tiers → products created
-   - See credentials page with publishableKey, secretKey, price IDs
-4. **Verify tier limits saved:**
-   ```bash
-   # Get your platformId from KV
-   npx wrangler kv key list --namespace-id=d09d8bf4e63a47c495384e9ed9b4ec7e | grep platformId
+## 🚧 CURRENT STATUS (Dec 6, 2025 - Late Night Session)
 
-   # Check tier config in api-multi namespace
-   npx wrangler kv key get "platform:plt_XXX:tierConfig" --namespace-id=a9f3331b0c8b48d58c32896482484208
+### ✅ COMPLETED:
+1. **Full signup → credentials flow WORKS**
+   - Signup → payment → Stripe Connect OAuth → tier config
+   - Products created on dev's Stripe account
+   - publishableKey + secretKey generated
+   - Keys saved to KV (verified in Cloudflare dashboard)
+   - Credentials page displays keys correctly
+
+2. **Test credentials generated:**
    ```
-5. **Ask questions** - if anything is confusing, we'll clarify and update this doc
+   publishableKey: pk_live_[REDACTED]
+   secretKey: sk_live_[REDACTED]
+   platformId: plt_[REDACTED]
+   ```
+
+3. **KV structure verified:**
+   - front-auth-api TOKENS_KV has all user keys ✅
+   - api-multi TOKENS_KV should have copies (NOT VERIFIED YET)
+
+### ❌ BLOCKING ISSUE:
+**API call fails with "Invalid API key"**
+
+**Problem:** oauth-api saves keys to TWO namespaces:
+- PLATFORM_TOKENS_KV (front-auth-api) - CONFIRMED working
+- CUSTOMER_TOKENS_KV (api-multi) - NOT VERIFIED
+
+**Test curl that's failing:**
+```bash
+curl -X POST http://localhost:8787/api/data \
+  -H 'Authorization: Bearer YOUR_SECRET_KEY' \
+  -H 'X-User-Id: test_user_123' \
+  -H 'X-User-Plan: free' \
+  -H 'Content-Type: application/json'
+```
+
+**Error:** `{"error":"Invalid API key","message":"API key not found or expired"}`
+
+**Root cause:** api-multi looks up `secretkey:{hash}:publishableKey` in its TOKENS_KV namespace, but the key might not exist there.
+
+### 🔍 NEXT STEPS (Tomorrow):
+
+1. **Verify api-multi KV namespace** (`a9f3331b0c8b48d58c32896482484208`)
+   - Check if `secretkey:e92f843d2b35ef9d63b7be19a3529a2b615c07f045ae404a4616db629163ca3e:publishableKey` exists
+   - Check if `publishablekey:pk_live_0a989c5299c14ba9af0a33a42ea39c81:platformId` exists
+   - Check if `platform:plt_d221455be7e14342a380e35e1c00d40d:tierConfig` exists
+
+2. **If keys missing:** oauth-api didn't write to CUSTOMER_TOKENS_KV
+   - Check oauth-api logs during product creation
+   - Verify CUSTOMER_TOKENS_KV binding in oauth-api wrangler.toml
+   - Re-run product creation and watch for writes
+
+3. **If keys exist:** api-multi can't read them
+   - Check TOKENS_KV binding in api-multi wrangler.toml
+   - Verify namespace IDs match
+   - Add debug logging to api-multi/src/middleware/apiKey.ts
+
+4. **Once API call works:**
+   - Build Clerk webhook (end-user-api → D1)
+   - Build Stripe webhook (subscription updates → D1)
+   - Create D1 schema
+   - Build dashboard API (GET /customers)
+   - Test full end-to-end flow
+
+### 📝 KEY FILES MODIFIED TODAY:
+- `frontend/src/main.tsx` - Removed hardcoded Clerk key
+- `api-multi/src/middleware/apiKey.ts` - Updated to use secretkey/publishablekey lookups
+
+### 🎯 WHAT THIS PROVES:
+The core architecture works. We can:
+- Generate credentials via oauth-api ✅
+- Save to KV namespaces ✅
+- Display to developers ✅
+
+Just need to fix the KV namespace bridge between oauth-api and api-multi.
 
 ---
 
-*Last updated: Dec 5, 2025 - Evening session complete. Ready to test full flow tomorrow.*
+*Last updated: Dec 6, 2025 - API testing in progress. Keys generated, verifying KV replication next.*

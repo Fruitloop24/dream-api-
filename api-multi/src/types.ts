@@ -9,21 +9,24 @@
 /**
  * Environment variables required for the worker
  * Set via: wrangler secret put <KEY>
+ *
+ * NOTE: api-multi uses DEV's Stripe token from KV for checkouts,
+ * NOT a platform STRIPE_SECRET_KEY. The token is stored at:
+ *   platform:{platformId}:stripeToken → { accessToken, stripeUserId }
  */
 export interface Env {
+	// Clerk (end-user-api - shared app for ALL devs' customers)
 	CLERK_SECRET_KEY: string;           // Clerk secret key (sk_test_...)
 	CLERK_PUBLISHABLE_KEY: string;      // Clerk publishable key (pk_test_...)
-	STRIPE_SECRET_KEY: string;          // Stripe secret key (sk_test_...)
-	STRIPE_WEBHOOK_SECRET?: string;     // Stripe webhook signing secret (whsec_...)
-	STRIPE_PRICE_ID_PRO?: string;       // Stripe price ID for Pro tier
-	STRIPE_PRICE_ID_DEVELOPER?: string; // Stripe price ID for Developer tier
-	STRIPE_PORTAL_CONFIG_ID?: string;   // OPTIONAL: Stripe portal configuration ID (bpc_...)
-	ALLOWED_ORIGINS?: string;           // OPTIONAL: Comma-separated list of allowed origins
-	                                     // Example: "https://app.example.com,https://staging.example.com"
-	                                     // If not set, falls back to defaults (see CORS middleware)
-	USAGE_KV: KVNamespace;              // KV namespace binding (set in wrangler.toml)
-	TOKENS_KV: KVNamespace;             // KV namespace for user tier configs (multi-tenant)
-	CLERK_JWT_TEMPLATE: string;         // JWT template name (e.g., "pan-api")
+	CLERK_JWT_TEMPLATE: string;         // JWT template name ("end-user-api")
+
+	// KV namespace bindings (set in wrangler.toml)
+	USAGE_KV: KVNamespace;              // Usage tracking: usage:{platformId}:{userId}
+	TOKENS_KV: KVNamespace;             // Tier configs + API key lookups
+
+	// Optional
+	ALLOWED_ORIGINS?: string;           // Comma-separated allowed CORS origins
+	STRIPE_WEBHOOK_SECRET?: string;     // For Connect webhook verification (per-platform)
 }
 
 /**
