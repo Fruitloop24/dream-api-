@@ -166,8 +166,9 @@ export async function getPriceIdMap(env: Env, platformId?: string): Promise<Reco
   const priceIdMap: Record<string, string> = {};
 
   for (const tier of config.tiers) {
-    if (tier.stripePriceId) {
-      priceIdMap[tier.name || tier.id] = tier.stripePriceId;
+    const priceId = tier.stripePriceId || tier.priceId; // Support both field names
+    if (priceId) {
+      priceIdMap[tier.name || tier.id] = priceId;
     }
   }
 

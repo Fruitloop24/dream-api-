@@ -298,6 +298,8 @@ export default {
         );
         await env.CUSTOMER_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
         await env.CUSTOMER_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
+        // Copy Stripe token (needed for checkout/portal)
+        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
 
         console.log(`[Products] Created ${priceIds.length} products for platform ${platformId}`);
         console.log(`[Keys] Generated publishableKey: ${publishableKey}`);
