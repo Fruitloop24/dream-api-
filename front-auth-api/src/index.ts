@@ -226,9 +226,10 @@ function getCorsHeaders(origin: string, env: Env): Record<string, string> {
     'http://localhost:5174',
   ];
 
-  // Allow CF Pages hash URLs (e.g., https://8c888735.fact-saas-v2.pages.dev)
-  const isHashUrl = /^https:\/\/[a-z0-9]+\.fact-saas-v2\.pages\.dev$/.test(origin);
-  const isAllowed = allowedOrigins.includes(origin) || isHashUrl;
+  // Allow CF Pages hash URLs (e.g., https://8c888735.dream-frontend-dyn.pages.dev)
+  const isHashUrl = /^https:\/\/[a-z0-9]+\.dream-frontend-dyn\.pages\.dev$/.test(origin);
+  const isMainPages = origin === 'https://dream-frontend-dyn.pages.dev';
+  const isAllowed = allowedOrigins.includes(origin) || isHashUrl || isMainPages;
 
   console.log(`[CORS] Origin: ${origin}, isHashUrl: ${isHashUrl}, isAllowed: ${isAllowed}`);
 

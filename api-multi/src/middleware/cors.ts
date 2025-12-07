@@ -80,9 +80,8 @@ export function getCorsHeaders(request: Request, env: Env): Record<string, strin
 	// Check if origin is allowed (exact match OR regex pattern)
 	const isAllowedOrigin =
 		allowedOrigins.includes(origin) ||
-		/^https:\/\/[a-z0-9-]+\.fs-template\.pages\.dev$/.test(origin) ||
-		/^https:\/\/([a-z0-9-]+\.)?frontendv2-5j1\.pages\.dev$/.test(origin) ||
-		/^https:\/\/([a-z0-9-]+\.)?preview-[a-z0-9-]+-frontend\.pages\.dev$/.test(origin);
+		/^https:\/\/[a-z0-9-]+\.dream-frontend-dyn\.pages\.dev$/.test(origin) ||
+		origin === 'https://dream-frontend-dyn.pages.dev';
 	console.log(`[CORS Debug] isAllowedOrigin: ${isAllowedOrigin}`);
 
 	// Debug logging (only in dev - remove for production if needed)
