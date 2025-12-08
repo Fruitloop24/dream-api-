@@ -305,6 +305,65 @@ export default {
         console.log(`[Keys] Generated publishableKey: ${publishableKey}`);
 
         // ===================================================================
+        // CONFIGURE STRIPE CUSTOMER PORTAL (CRITICAL FOR CHECKOUT + SUBSCRIPTIONS)
+        // ===================================================================
+        // WHY THIS IS NEEDED:
+        // - Stripe REQUIRES Customer Portal to be configured before checkout works properly
+        // - Even if you never use /api/customer-portal endpoint, this config must exist
+        // - Without this, checkout sessions may fail with "missing API key" errors
+        // - This is a ONE-TIME setup per connected Stripe account
+        //
+        // WHAT THIS DOES:
+        // - Creates default portal configuration on the connected account
+        // - Allows customers to update email/address
+        // - Allows customers to cancel subscriptions
+        // - Enables invoice history viewing
+        //
+        // STRIPE CONNECT PATTERN:
+        // - Uses OAuth access token (not platform secret key)
+        // - Uses Stripe-Account header to target connected account
+        // - Portal lives on THEIR Stripe account, not yours
+        console.log(`[Portal] Configuring Customer Portal for connected account ${stripeData.stripeUserId}`);
+
+        // Build portal config params (need to append array values separately)
+        const portalParams = new URLSearchParams({
+          // Business branding
+          'business_profile[headline]': 'Manage your subscription',
+          // Allow customers to update their info
+          'features[customer_update][enabled]': 'true',
+          // Allow customers to view invoice history
+          'features[invoice_history][enabled]': 'true',
+          // Allow customers to cancel subscriptions
+          'features[subscription_cancel][enabled]': 'true',
+          'features[subscription_cancel][mode]': 'at_period_end',
+          // Disable pause (optional - can enable later)
+          'features[subscription_pause][enabled]': 'false',
+        });
+        // Append array values for allowed updates (can't use object syntax for duplicate keys)
+        portalParams.append('features[customer_update][allowed_updates][]', 'email');
+        portalParams.append('features[customer_update][allowed_updates][]', 'address');
+
+        const portalConfig = await fetch('https://api.stripe.com/v1/billing_portal/configurations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${stripeData.accessToken}`,
+            'Stripe-Account': stripeData.stripeUserId,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: portalParams.toString(),
+        });
+
+        const portalResult = await portalConfig.json() as { id?: string; error?: { message: string } };
+
+        if (!portalConfig.ok) {
+          // Portal config failed - log but don't block (might already exist)
+          console.error(`[Portal] Failed to configure portal: ${portalResult.error?.message}`);
+          console.error('[Portal] This may cause checkout issues - developer needs to manually configure portal in Stripe dashboard');
+        } else {
+          console.log(`[Portal] ✅ Customer Portal configured successfully (ID: ${portalResult.id})`);
+        }
+
+        // ===================================================================
         // UPDATE CLERK METADATA (add publishableKey to JWT)
         // ===================================================================
         const clerkClient = createClerkClient({
