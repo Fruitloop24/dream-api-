@@ -26,14 +26,14 @@ import type { ClerkClient } from '@clerk/backend';
 /**
  * Get dev's Stripe access token from KV
  */
-async function getDevStripeToken(platformId: string, env: Env): Promise<string | null> {
+async function getDevStripeToken(platformId: string, env: Env): Promise<{ accessToken: string; stripeUserId: string } | null> {
 	const stripeDataJson = await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`);
 	if (!stripeDataJson) {
 		console.error(`[Checkout] No Stripe token found for platform: ${platformId}`);
 		return null;
 	}
 	const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
-	return stripeData.accessToken;
+	return stripeData;
 }
 
 /**
@@ -105,8 +105,8 @@ export async function handleCreateCheckout(
 		}
 
 		// Get DEV's Stripe token from KV (they connected via OAuth)
-		const devStripeToken = await getDevStripeToken(platformId, env);
-		if (!devStripeToken) {
+		const devStripeData = await getDevStripeToken(platformId, env);
+		if (!devStripeData) {
 			throw new Error('Developer has not connected their Stripe account');
 		}
 
@@ -114,10 +114,12 @@ export async function handleCreateCheckout(
 		const frontendUrl = origin || 'https://app.panacea-tech.net';
 
 		// Create Stripe checkout session on DEV's Stripe account
+		// CRITICAL: Must include Stripe-Account header for Connect!
 		const checkoutSession = await fetch('https://api.stripe.com/v1/checkout/sessions', {
 			method: 'POST',
 			headers: {
-				'Authorization': `Bearer ${devStripeToken}`,
+				'Authorization': `Bearer ${devStripeData.accessToken}`,
+				'Stripe-Account': devStripeData.stripeUserId,
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
 			body: new URLSearchParams({
@@ -232,8 +234,8 @@ export async function handleCustomerPortal(
 		}
 
 		// Get DEV's Stripe token
-		const devStripeToken = await getDevStripeToken(platformId, env);
-		if (!devStripeToken) {
+		const devStripeData = await getDevStripeToken(platformId, env);
+		if (!devStripeData) {
 			return new Response(
 				JSON.stringify({ error: 'Developer has not connected their Stripe account' }),
 				{
@@ -244,10 +246,12 @@ export async function handleCustomerPortal(
 		}
 
 		// Create Stripe billing portal session on DEV's Stripe account
+		// CRITICAL: Must include Stripe-Account header for Connect!
 		const portalSession = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
 			method: 'POST',
 			headers: {
-				'Authorization': `Bearer ${devStripeToken}`,
+				'Authorization': `Bearer ${devStripeData.accessToken}`,
+				'Stripe-Account': devStripeData.stripeUserId,
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
 			body: new URLSearchParams(portalParams).toString(),
