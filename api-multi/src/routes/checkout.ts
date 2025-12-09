@@ -114,11 +114,12 @@ export async function handleCreateCheckout(
 		const frontendUrl = origin || 'https://app.panacea-tech.net';
 
 		// Create Stripe checkout session on DEV's Stripe account
-		// CRITICAL: Must include Stripe-Account header for Connect!
+		// CRITICAL: Use YOUR platform's Stripe key + their account ID in header
+		// OAuth token alone doesn't have permission to create checkout sessions
 		const checkoutSession = await fetch('https://api.stripe.com/v1/checkout/sessions', {
 			method: 'POST',
 			headers: {
-				'Authorization': `Bearer ${devStripeData.accessToken}`,
+				'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
 				'Stripe-Account': devStripeData.stripeUserId,
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
@@ -246,11 +247,11 @@ export async function handleCustomerPortal(
 		}
 
 		// Create Stripe billing portal session on DEV's Stripe account
-		// CRITICAL: Must include Stripe-Account header for Connect!
+		// CRITICAL: Use YOUR platform's Stripe key + their account ID in header
 		const portalSession = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
 			method: 'POST',
 			headers: {
-				'Authorization': `Bearer ${devStripeData.accessToken}`,
+				'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
 				'Stripe-Account': devStripeData.stripeUserId,
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
