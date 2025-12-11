@@ -122,10 +122,18 @@ export async function handleStripeWebhook(
 
 			// Update Clerk user metadata with purchased tier
 			try {
-				await clerkClient.users.updateUser(userId, {
+				// Fetch existing metadata to preserve publishableKey
+				const existingUser = await clerkClient.users.getUser(userId);
+				const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
+				const pkFromSession = session.metadata?.publishableKey as string | undefined;
+				const publishableKey = existingPk || pkFromSession;
+
+				await clerkClient.users.updateUserMetadata(userId, {
 					publicMetadata: {
+						...existingUser.publicMetadata,
 						plan: tier,
 						stripeCustomerId: session.customer as string,
+						...(publishableKey ? { publishableKey } : {}),
 					},
 				});
 				console.log(`✅ Updated user ${userId} to ${tier} plan after checkout`);
@@ -162,11 +170,18 @@ export async function handleStripeWebhook(
 
 			// Update Clerk user metadata with subscription tier
 			try {
-				await clerkClient.users.updateUser(subUserId, {
+				const existingUser = await clerkClient.users.getUser(subUserId);
+				const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
+				const pkFromSub = subscription.metadata?.publishableKey as string | undefined;
+				const publishableKey = existingPk || pkFromSub;
+
+				await clerkClient.users.updateUserMetadata(subUserId, {
 					publicMetadata: {
+						...existingUser.publicMetadata,
 						plan: subTier,
 						stripeCustomerId: subscription.customer as string,
 						subscriptionId: subscription.id,
+						...(publishableKey ? { publishableKey } : {}),
 					},
 				});
 				console.log(`✅ Updated user ${subUserId} to ${subTier} plan`);

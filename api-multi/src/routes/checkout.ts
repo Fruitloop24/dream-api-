@@ -37,6 +37,35 @@ async function getDevStripeToken(platformId: string, env: Env): Promise<{ access
 }
 
 /**
+ * Build Stripe auth headers for Standard Connect:
+ * - Prefer connected account OAuth access token (no Stripe-Account header)
+ * - Fallback to platform secret + Stripe-Account when access token missing
+ */
+function buildStripeHeaders(devStripeData: { accessToken: string; stripeUserId: string }, env: Env): Record<string, string> {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/x-www-form-urlencoded',
+	};
+
+	if (devStripeData?.accessToken) {
+		console.log(`[Stripe] Using connected account access token for ${devStripeData.stripeUserId}`);
+		headers['Authorization'] = `Bearer ${devStripeData.accessToken}`;
+		return headers;
+	}
+
+	if (!env.STRIPE_SECRET_KEY) {
+		throw new Error('Stripe not configured: missing platform STRIPE_SECRET_KEY and no connected account access token');
+	}
+
+	console.log(`[Stripe] Using platform secret with Stripe-Account header for ${devStripeData?.stripeUserId}`);
+	headers['Authorization'] = `Bearer ${env.STRIPE_SECRET_KEY}`;
+	if (devStripeData?.stripeUserId) {
+		headers['Stripe-Account'] = devStripeData.stripeUserId;
+	}
+
+	return headers;
+}
+
+/**
  * Handle /api/create-checkout - Create Stripe Checkout session
  *
  * FLOW:
@@ -61,10 +90,12 @@ async function getDevStripeToken(platformId: string, env: Env): Promise<{ access
  * @param corsHeaders - CORS headers
  * @param origin - Request origin (for success/cancel URLs)
  * @param request - Full request (for body parsing)
+ * @param publishableKey - Dev's publishable key (to carry into metadata for webhook safety)
  */
 export async function handleCreateCheckout(
 	userId: string,
 	platformId: string,
+	publishableKey: string,
 	clerkClient: ClerkClient,
 	env: Env,
 	corsHeaders: Record<string, string>,
@@ -114,15 +145,11 @@ export async function handleCreateCheckout(
 		const frontendUrl = origin || 'https://app.panacea-tech.net';
 
 		// Create Stripe checkout session on DEV's Stripe account
-		// CRITICAL: Use YOUR platform's Stripe key + their account ID in header
-		// OAuth token alone doesn't have permission to create checkout sessions
+		// CRITICAL: Prefer dev's OAuth access token for Standard Connect; fallback to platform key + Stripe-Account
+		const stripeHeaders = buildStripeHeaders(devStripeData, env);
 		const checkoutSession = await fetch('https://api.stripe.com/v1/checkout/sessions', {
 			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-				'Stripe-Account': devStripeData.stripeUserId,
-				'Content-Type': 'application/x-www-form-urlencoded',
-			},
+			headers: stripeHeaders,
 			body: new URLSearchParams({
 				'success_url': `${frontendUrl}/dashboard?success=true`,
 				'cancel_url': `${frontendUrl}/dashboard?canceled=true`,
@@ -133,14 +160,17 @@ export async function handleCreateCheckout(
 				'line_items[0][quantity]': '1',
 				'metadata[userId]': userId,
 				'metadata[tier]': targetTier,
+				'metadata[publishableKey]': publishableKey,
 				'subscription_data[metadata][userId]': userId,
 				'subscription_data[metadata][tier]': targetTier,
+				'subscription_data[metadata][publishableKey]': publishableKey,
 			}).toString(),
 		});
 
 		const session = await checkoutSession.json() as { url?: string; error?: { message: string } };
 
 		if (!checkoutSession.ok) {
+			console.error('[Checkout] Stripe error response:', session);
 			throw new Error(session.error?.message || 'Failed to create checkout session');
 		}
 
@@ -247,20 +277,18 @@ export async function handleCustomerPortal(
 		}
 
 		// Create Stripe billing portal session on DEV's Stripe account
-		// CRITICAL: Use YOUR platform's Stripe key + their account ID in header
+		// CRITICAL: Prefer dev's OAuth access token for Standard Connect; fallback to platform key + Stripe-Account
+		const stripeHeaders = buildStripeHeaders(devStripeData, env);
 		const portalSession = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
 			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-				'Stripe-Account': devStripeData.stripeUserId,
-				'Content-Type': 'application/x-www-form-urlencoded',
-			},
+			headers: stripeHeaders,
 			body: new URLSearchParams(portalParams).toString(),
 		});
 
 		const session = await portalSession.json() as { url?: string; error?: { message: string } };
 
 		if (!portalSession.ok) {
+			console.error('[Portal] Stripe error response:', session);
 			throw new Error(session.error?.message || 'Failed to create portal session');
 		}
 

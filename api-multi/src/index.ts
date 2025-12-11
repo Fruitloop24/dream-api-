@@ -262,7 +262,7 @@ export default {
 			// Create Stripe Checkout session (upgrade flow)
 			if (url.pathname === '/api/create-checkout' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
-				return await handleCreateCheckout(userId, platformId, clerkClient, env, corsHeaders, origin, request);
+				return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request);
 			}
 
 			// Create Stripe Customer Portal session (manage subscription)

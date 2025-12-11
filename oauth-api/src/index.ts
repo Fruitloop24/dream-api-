@@ -346,7 +346,7 @@ export default {
         const portalConfig = await fetch('https://api.stripe.com/v1/billing_portal/configurations', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${stripeData.accessToken}`,
+            'Authorization': `Bearer ${env.STRIPE_CLIENT_SECRET}`,
             'Stripe-Account': stripeData.stripeUserId,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
