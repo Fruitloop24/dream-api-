@@ -42,12 +42,8 @@ publishablekey:{pk}:platformId    → plt_abc123
 secretkey:{sha256}:publishableKey → pk_live_xyz
 ```
 
-### api-multi USAGE_KV (`10cc8b9f46f54a6e8d89448f978aaa1f`)
-```
-usage:{platformId}:{userId}      → {usageCount, plan, periodStart, periodEnd}
-ratelimit:{userId}:{minute}      → count
-webhook:stripe:{eventId}         → timestamp (idempotency, 30-day TTL)
-```
+### api-multi usage (D1-only)
+- Counters live in D1 (`usage_counts`). KV is no longer in the usage hot path. Rate limiter no-ops if USAGE_KV is missing.
 
 ---
 
@@ -72,7 +68,7 @@ webhook:stripe:{eventId}         → timestamp (idempotency, 30-day TTL)
 | `api-multi/src/index.ts` | Main router, auth flow |
 | `api-multi/src/middleware/apiKey.ts` | SK verification → platformId + publishableKey |
 | `api-multi/src/routes/customers.ts` | Create/get/update customers in end-user-api |
-| `api-multi/src/routes/usage.ts` | Track usage, enforce tier limits |
+| `api-multi/src/routes/usage.ts` | Track usage (D1) and enforce tier limits |
 | `api-multi/src/routes/checkout.ts` | Stripe checkout on dev's account |
 | `api-multi/src/stripe-webhook.ts` | Handle Connect webhooks, update Clerk plan |
 | `oauth-api/src/index.ts` | Stripe Connect OAuth, product creation, key gen |
@@ -141,6 +137,21 @@ STRIPE_PRICE_ID=price_...         # $15/mo product
 STRIPE_WEBHOOK_SECRET=whsec_...
 FRONTEND_URL=http://localhost:5173
 ```
+
+---
+
+## Data Model (D1)
+
+- `platforms(platformId, clerkUserId, createdAt)`
+- `api_keys(platformId, publishableKey, secretKeyHash, status, createdAt)`
+- `stripe_tokens(platformId, stripeUserId, accessToken, refreshToken, scope, createdAt)`
+- `tiers(platformId, name, displayName, price, limit, priceId, productId, features, popular, createdAt)`
+- `end_users(platformId, publishableKey, clerkUserId, email, status, createdAt, updatedAt)`
+- `usage_counts(platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)` ← usage gating
+- `subscriptions(platformId, userId, publishableKey, plan, priceId, productId, amount, currency, status, currentPeriodEnd, canceledAt, cancelReason, updatedAt)`
+- `events(platformId, source, type, eventId UNIQUE, payload_json, createdAt)`
+
+**Usage model:** D1-only for counters; tiers still loaded from TOKENS_KV (hydrate from D1 if KV missing).
 
 ---
 

@@ -61,7 +61,7 @@ const checkout = await fetch('/api/create-checkout', {
 ├─────────────────────────────────────────────────────────────────┤
 │  platformId (plt_xxx)     → Internal ID, never changes         │
 │  publishableKey (pk_live) → In end-user JWT, isolates data     │
-│  secretKey (sk_live)      → API auth, SHA-256 hashed in KV     │
+│  secretKey (sk_live)      → API auth, SHA-256 hashed           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -132,6 +132,7 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checko
 | Checkout redirect URL | Needs fix | Falls back to old `app.panacea-tech.net` domain; allow override via body |
 | Graceful cancel | TODO | Keep access until period end; currently downgrades when Stripe sends `customer.subscription.deleted` |
 | successUrl/cancelUrl | TODO | Let devs pass their own redirect URLs |
+| Tier config priceIds | Ensure KV hydrated | Checkout needs priceIds in tierConfig; D1 holds canonical tiers, hydrate KV as cache |
 
 ---
 
@@ -160,8 +161,8 @@ cd api-multi && npm run dev       # :8787
 ## Next Steps
 
 1. **Fix checkout redirect** - Update fallback URL or let devs pass `successUrl`
-2. **Debug webhook** - Stripe Connect webhook not updating Clerk plan
-3. **Dashboard** - D1 database for analytics (customers, usage, MRR)
+2. **Hydrate tier config** - Ensure KV has priceIds (or read tiers from D1)
+3. **Dashboard** - Build off D1 tables (`end_users`, `usage_counts`, `subscriptions`, `events`)
 4. **SDK** - `npm install dream-api` for easy integration
 5. **AI Integration Helper** - Generate framework-specific code
 
