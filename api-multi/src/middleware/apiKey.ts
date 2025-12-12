@@ -76,6 +76,7 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		}
 
 		if (!pk || !platformId) {
+			console.error(`[API Key] Missing pk/platform for hash ${hashHex}, pk: ${pk}, platformId: ${platformId}`);
 			console.error(`[API Key] No platformId/pk for key hash: ${hashHex}`);
 			return null;
 		}
