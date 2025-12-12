@@ -90,8 +90,12 @@ type TierInput = {
   displayName: string;
   price: number;
   limit: number | 'unlimited';
-  features: string;
-  popular: boolean;
+  billingMode?: 'subscription' | 'one_off';
+  description?: string;
+  imageUrl?: string;
+  inventory?: number | null;
+  features?: string;
+  popular?: boolean;
   priceId: string;
   productId: string;
 };
@@ -101,6 +105,12 @@ async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
     'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   for (const tier of tiers) {
+    const featuresStr =
+      tier.description ||
+      tier.features ||
+      '';
+    const popularFlag = tier.popular ? 1 : 0;
+
     await stmt
       .bind(
         platformId,
@@ -108,8 +118,8 @@ async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
         tier.displayName,
         tier.price,
         tier.limit === 'unlimited' ? null : tier.limit,
-        tier.features,
-        tier.popular ? 1 : 0,
+        featuresStr,
+        popularFlag,
         tier.priceId,
         tier.productId
       )
@@ -245,17 +255,19 @@ export default {
 
     // Create Stripe products on developer's connected account
     if (url.pathname === '/create-products' && request.method === 'POST') {
-      const body = await request.json() as {
-        userId: string;
-        tiers: Array<{
-          name: string;
-          displayName: string;
-          price: number;
-          limit: number | 'unlimited';
-          features: string;
-          popular: boolean;
-        }>;
-      };
+    const body = await request.json() as {
+      userId: string;
+      tiers: Array<{
+        name: string;
+        displayName: string;
+        price: number;
+        limit: number | 'unlimited';
+        billingMode?: 'subscription' | 'one_off';
+        description?: string;
+        imageUrl?: string;
+        inventory?: number | null;
+      }>;
+    };
 
       const { userId, tiers } = body;
 
@@ -282,6 +294,8 @@ export default {
 
       try {
         for (const tier of tiers) {
+          const billingMode = tier.billingMode || 'subscription';
+
           // Create product
           const productResponse = await fetch('https://api.stripe.com/v1/products', {
             method: 'POST',
@@ -291,10 +305,11 @@ export default {
             },
             body: new URLSearchParams({
               name: tier.displayName,
-              description: tier.features,
+              description: tier.description || '',
               'metadata[platformId]': platformId,
               'metadata[tierName]': tier.name,
               'metadata[limit]': tier.limit.toString(),
+              ...(tier.imageUrl ? { images: tier.imageUrl } : {}),
             }),
           });
 
@@ -305,22 +320,26 @@ export default {
 
           const product = await productResponse.json() as { id: string };
 
-          // Create price (recurring monthly)
+          const params = new URLSearchParams({
+            product: product.id,
+            unit_amount: (tier.price * 100).toString(),
+            currency: 'usd',
+            'metadata[platformId]': platformId,
+            'metadata[tierName]': tier.name,
+            'metadata[limit]': tier.limit.toString(),
+          });
+
+          if (billingMode === 'subscription') {
+            params.set('recurring[interval]', 'month');
+          }
+
           const priceResponse = await fetch('https://api.stripe.com/v1/prices', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${stripeData.accessToken}`,
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
-              product: product.id,
-              unit_amount: (tier.price * 100).toString(),
-              currency: 'usd',
-              'recurring[interval]': 'month',
-              'metadata[platformId]': platformId,
-              'metadata[tierName]': tier.name,
-              'metadata[limit]': tier.limit.toString(),
-            }),
+            body: params,
           });
 
           if (!priceResponse.ok) {

@@ -14,17 +14,18 @@ interface Tier {
   displayName: string;
   price: number;
   limit: number | 'unlimited';
-  features: string;
-  popular: boolean;
+  billingMode: 'subscription' | 'one_off';
+  description?: string;
+  imageUrl?: string;
+  inventory?: number | null;
 }
 
 export default function ApiTierConfig() {
   const navigate = useNavigate();
   const { user } = useUser();
-  const [numTiers, setNumTiers] = useState<number>(2);
   const [tiers, setTiers] = useState<Tier[]>([
-    { name: 'free', displayName: 'Free', price: 0, limit: 100, features: 'Basic features,Community support', popular: false },
-    { name: 'pro', displayName: 'Pro', price: 29, limit: 'unlimited', features: 'All features,Priority support,API access', popular: true },
+    { name: 'free', displayName: 'Free', price: 0, limit: 100, billingMode: 'subscription', description: 'Free plan', inventory: null },
+    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, billingMode: 'subscription', description: 'Pro plan', inventory: null },
   ]);
   const [loading, setLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
@@ -37,24 +38,6 @@ export default function ApiTierConfig() {
     }
   }, []);
 
-  const handleNumTiersChange = (num: number) => {
-    setNumTiers(num);
-    const newTiers: Tier[] = [];
-    for (let i = 0; i < num; i++) {
-      newTiers.push(
-        tiers[i] || {
-          name: '',
-          displayName: '',
-          price: 0,
-          limit: 0,
-          features: '',
-          popular: false,
-        }
-      );
-    }
-    setTiers(newTiers);
-  };
-
   const updateTier = (index: number, field: keyof Tier, value: any) => {
     const updated = [...tiers];
     updated[index] = { ...updated[index], [field]: value };
@@ -63,7 +46,7 @@ export default function ApiTierConfig() {
 
   const handleSubmit = async () => {
     // Validate
-    const incomplete = tiers.some(t => !t.name || !t.displayName);
+    const incomplete = tiers.some(t => !t.name || !t.displayName || !t.billingMode);
     if (incomplete) {
       alert('Please fill in all tier fields');
       return;
@@ -101,8 +84,8 @@ export default function ApiTierConfig() {
       <div className="max-w-4xl mx-auto px-8 py-16">
         {/* Header */}
         <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold text-slate-900 mb-3">Configure Your API Tiers</h1>
-          <p className="text-xl text-slate-600">Set up pricing for your production API</p>
+          <h1 className="text-4xl font-bold text-slate-900 mb-3">Configure Your Products</h1>
+          <p className="text-xl text-slate-600">Subscription tiers or one-off products for your customers</p>
         </div>
 
         {/* Stripe Connected Banner */}
@@ -120,50 +103,37 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Number of Tiers */}
-        <div className="bg-white p-8 rounded-xl border border-gray-200 mb-8">
-          <h3 className="text-slate-900 font-semibold mb-4">How many pricing tiers?</h3>
-          <div className="flex gap-4">
-            {[2, 3, 4].map((num) => (
-              <button
-                key={num}
-                onClick={() => handleNumTiersChange(num)}
-                className={`px-6 py-3 border-2 rounded-lg font-semibold transition-colors cursor-pointer ${
-                  numTiers === num
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-                }`}
-              >
-                {num} Tiers
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tier Configuration */}
+        {/* Product Configuration */}
         <div className="space-y-6 mb-12">
           {tiers.map((tier, index) => (
             <div key={index} className="bg-white p-8 rounded-xl border border-gray-200">
-              <h3 className="text-lg font-bold text-slate-900 mb-6">
-                Tier {index + 1} {index === 0 && '(Usually Free)'}
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-slate-900">
+                  Product {index + 1}
+                </h3>
+                <button
+                  className="text-sm text-red-500"
+                  onClick={() => setTiers(tiers.filter((_, i) => i !== index))}
+                  disabled={tiers.length <= 1}
+                >
+                  Remove
+                </button>
+              </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
-                {/* Tier Name */}
                 <label className="block">
                   <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Tier ID (lowercase, no spaces)
+                    Product ID (lowercase, no spaces)
                   </span>
                   <input
                     type="text"
                     value={tier.name}
                     onChange={(e) => updateTier(index, 'name', e.target.value.toLowerCase())}
-                    placeholder="free, pro, enterprise"
+                    placeholder="free, pro, oneoff1"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                   />
                 </label>
 
-                {/* Display Name */}
                 <label className="block">
                   <span className="text-slate-700 text-sm font-semibold mb-2 block">
                     Display Name
@@ -172,17 +142,16 @@ export default function ApiTierConfig() {
                     type="text"
                     value={tier.displayName}
                     onChange={(e) => updateTier(index, 'displayName', e.target.value)}
-                    placeholder="Free, Pro, Enterprise"
+                    placeholder="Free, Pro, One-time Template"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                   />
                 </label>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
-                {/* Price */}
                 <label className="block">
                   <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Price ($/month)
+                    Price ({tier.billingMode === 'one_off' ? 'one-time $' : '$/month'})
                   </span>
                   <input
                     type="text"
@@ -193,52 +162,104 @@ export default function ApiTierConfig() {
                   />
                 </label>
 
-                {/* Limit */}
+                {tier.billingMode === 'subscription' && (
+                  <label className="block">
+                    <span className="text-slate-700 text-sm font-semibold mb-2 block">
+                      Monthly Limit
+                    </span>
+                    <input
+                      type="text"
+                      value={tier.limit}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateTier(index, 'limit', val === 'unlimited' ? 'unlimited' : Number(val) || val);
+                      }}
+                      placeholder="100, 1000, unlimited"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <label className="block">
                   <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Monthly Limit
+                    Billing Type
+                  </span>
+                  <select
+                    value={tier.billingMode}
+                    onChange={(e) => updateTier(index, 'billingMode', e.target.value as 'subscription' | 'one_off')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+                  >
+                    <option value="subscription">Subscription (recurring)</option>
+                    <option value="one_off">One-off (single payment)</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-slate-700 text-sm font-semibold mb-2 block">
+                    Inventory (one-off only)
                   </span>
                   <input
-                    type="text"
-                    value={tier.limit}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateTier(index, 'limit', val === 'unlimited' ? 'unlimited' : Number(val) || val);
-                    }}
-                    placeholder="100, 1000, unlimited"
+                    type="number"
+                    value={tier.inventory ?? ''}
+                    onChange={(e) => updateTier(index, 'inventory', e.target.value === '' ? null : Number(e.target.value))}
+                    placeholder="Leave blank for unlimited"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                   />
                 </label>
               </div>
 
-              {/* Features */}
               <label className="block mb-4">
                 <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                  Features (comma-separated)
+                  Image URL (optional)
                 </span>
                 <input
                   type="text"
-                  value={tier.features}
-                  onChange={(e) => updateTier(index, 'features', e.target.value)}
-                  placeholder="API access, Email support, Priority support"
+                  value={tier.imageUrl || ''}
+                  onChange={(e) => updateTier(index, 'imageUrl', e.target.value)}
+                  placeholder="https://..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                 />
               </label>
 
-              {/* Popular Badge */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={tier.popular}
-                  onChange={(e) => updateTier(index, 'popular', e.target.checked)}
-                  className="w-4 h-4 cursor-pointer"
-                />
-                <span className="text-slate-700 text-sm font-semibold">
-                  Show "Popular" badge on this tier
+              <label className="block mb-4">
+                <span className="text-slate-700 text-sm font-semibold mb-2 block">
+                  Description
                 </span>
+                <textarea
+                  value={tier.description || ''}
+                  onChange={(e) => updateTier(index, 'description', e.target.value)}
+                  placeholder="What does this include?"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+                  rows={3}
+                />
               </label>
             </div>
           ))}
+        </div>
+
+        <div className="mb-12">
+          <button
+            onClick={() =>
+              setTiers([
+                ...tiers,
+                {
+                  name: '',
+                  displayName: '',
+                  price: 0,
+                  limit: 0,
+                  billingMode: 'subscription',
+                  description: '',
+                  imageUrl: '',
+                  inventory: null,
+                },
+              ])
+            }
+            className="px-4 py-2 bg-slate-900 text-white rounded-lg font-semibold"
+          >
+            + Add Product
+          </button>
         </div>
 
         {/* Submit */}
