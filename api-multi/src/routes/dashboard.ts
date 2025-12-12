@@ -41,6 +41,7 @@ type ApiKeyRow = {
 	publishableKey: string;
 	secretKeyHash: string;
 	createdAt?: string;
+	status?: string | null;
 };
 
 type EventRow = {
@@ -55,7 +56,8 @@ type StripeTokenRow = {
 export async function handleDashboard(
 	env: Env,
 	platformId: string,
-	corsHeaders: Record<string, string>
+	corsHeaders: Record<string, string>,
+	filterPk?: string | null
 ): Promise<Response> {
 	try {
 		// Tiers (for limits and display)
@@ -75,11 +77,10 @@ export async function handleDashboard(
 		}));
 
 		// Subscriptions
-		const subsResult = await env.DB.prepare(
-			'SELECT userId, plan, status, currentPeriodEnd, canceledAt, priceId, productId, amount, currency FROM subscriptions WHERE platformId = ?'
-		)
+		let subsQuery = 'SELECT userId, plan, status, currentPeriodEnd, canceledAt, priceId, productId, amount, currency, publishableKey FROM subscriptions WHERE platformId = ?';
+		const subsResult = await env.DB.prepare(subsQuery)
 			.bind(platformId)
-			.all<SubscriptionRow>();
+			.all<SubscriptionRow & { publishableKey?: string | null }>();
 		const subscriptions = subsResult.results || [];
 
 		// Usage
@@ -92,10 +93,10 @@ export async function handleDashboard(
 
 		// End-users
 		const usersResult = await env.DB.prepare(
-			'SELECT clerkUserId as userId, email, status, createdAt FROM end_users WHERE platformId = ?'
+			'SELECT clerkUserId as userId, email, status, createdAt, publishableKey FROM end_users WHERE platformId = ?'
 		)
 			.bind(platformId)
-			.all<EndUserRow>();
+			.all<EndUserRow & { publishableKey?: string | null }>();
 		const users = usersResult.results || [];
 
 		// Latest API key (for pk)
@@ -105,7 +106,7 @@ export async function handleDashboard(
 			.bind(platformId)
 			.first<ApiKeyRow>();
 		const allKeysResult = await env.DB.prepare(
-			'SELECT publishableKey, secretKeyHash, createdAt FROM api_keys WHERE platformId = ? ORDER BY createdAt DESC'
+			'SELECT publishableKey, secretKeyHash, createdAt, status FROM api_keys WHERE platformId = ? ORDER BY createdAt DESC'
 		)
 			.bind(platformId)
 			.all<ApiKeyRow>();
@@ -141,9 +142,21 @@ export async function handleDashboard(
 		const userMap = new Map<string, EndUserRow>();
 		for (const u of users) userMap.set(u.userId, u);
 
+		// Fetch labels for keys from KV (optional)
+		const keyLabels = new Map<string, string>();
+		if (allKeysResult.results) {
+			await Promise.all(
+				allKeysResult.results.map(async (k) => {
+					const lbl = await env.TOKENS_KV.get(`keylabel:${k.publishableKey}`);
+					if (lbl) keyLabels.set(k.publishableKey, lbl);
+				})
+			);
+		}
+
 		// Build customers from subscriptions first
 		const customerMap = new Map<string, any>();
 		for (const sub of subscriptions) {
+			if (filterPk && sub.publishableKey && sub.publishableKey !== filterPk) continue;
 			const u = usageMap.get(sub.userId);
 			const e = userMap.get(sub.userId);
 			const plan = sub.plan || u?.plan || 'free';
@@ -166,11 +179,13 @@ export async function handleDashboard(
 				productId: sub.productId,
 				amount: sub.amount,
 				currency: sub.currency,
+				publishableKey: sub.publishableKey || null,
 			});
 		}
 
 		// Add any end-users without subscriptions
 		for (const e of users) {
+			if (filterPk && e.publishableKey && e.publishableKey !== filterPk) continue;
 			if (customerMap.has(e.userId)) continue;
 			const u = usageMap.get(e.userId);
 			const plan = u?.plan || 'free';
@@ -193,6 +208,7 @@ export async function handleDashboard(
 				productId: null,
 				amount: null,
 				currency: null,
+				publishableKey: e.publishableKey || null,
 			});
 		}
 
@@ -221,6 +237,8 @@ export async function handleDashboard(
 				apiKeys: (allKeysResult.results || []).map((k) => ({
 					publishableKey: k.publishableKey,
 					createdAt: k.createdAt || null,
+					label: keyLabels.get(k.publishableKey) || null,
+					status: k.status || null,
 				})),
 				stripeAccountId: stripeResult?.stripeUserId || null,
 			},

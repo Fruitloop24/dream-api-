@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [showSecret, setShowSecret] = useState(false);
+  const [selectedKey, setSelectedKey] = useState<string>('all');
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -159,10 +160,12 @@ export default function Dashboard() {
     window.location.href = oauthUrl;
   };
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (pk?: string) => {
     try {
       setLoadingDashboard(true);
-      const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard', {
+      const url = new URL('https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard');
+      if (pk && pk !== 'all') url.searchParams.set('pk', pk);
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${secretKey}`,
         },
@@ -214,6 +217,7 @@ export default function Dashboard() {
     .filter((c: any) => {
       if (statusFilter === 'active' && c.canceledAt) return false;
       if (statusFilter === 'canceling' && !c.canceledAt) return false;
+      if (selectedKey !== 'all' && c.publishableKey && c.publishableKey !== selectedKey) return false;
       if (search) {
         const hay = `${c.email || ''} ${c.userId || ''}`.toLowerCase();
         return hay.includes(search.toLowerCase());
@@ -312,13 +316,49 @@ export default function Dashboard() {
                   <div className="space-y-1">
                     {(keys.apiKeys || []).map((k: any, idx: number) => (
                       <div key={idx} className="flex items-center justify-between bg-gray-900 px-2 py-1 rounded text-xs text-gray-300">
-                        <span className="truncate">{k.publishableKey}</span>
-                        <span className="text-gray-500">{k.createdAt ? new Date(k.createdAt).toLocaleDateString() : ''}</span>
+                        <div className="flex flex-col">
+                          <span className="truncate">{k.publishableKey}</span>
+                          <span className="text-gray-500">{k.label || 'No label'}</span>
+                        </div>
+                        <span className="text-gray-500 ml-2">{k.createdAt ? new Date(k.createdAt).toLocaleDateString() : ''}</span>
                       </div>
                     ))}
                     {(keys.apiKeys || []).length === 0 && (
                       <div className="text-xs text-gray-500">No keys yet.</div>
                     )}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      className="px-3 py-1 text-xs bg-gray-700 rounded border border-gray-600"
+                      onClick={async () => {
+                        const label = window.prompt('Label for new key (optional)?') || '';
+                        try {
+                          const res = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/keys', {
+                            method: 'POST',
+                            headers: {
+                              'Authorization': `Bearer ${secretKey}`,
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ label }),
+                          });
+                          if (res.ok) {
+                            await loadDashboard(selectedKey === 'all' ? undefined : selectedKey);
+                          } else {
+                            console.error('Failed to create key');
+                          }
+                        } catch (err) {
+                          console.error('Create key error', err);
+                        }
+                      }}
+                    >
+                      New Key
+                    </button>
+                    <button
+                      className="px-3 py-1 text-xs bg-gray-700 rounded border border-gray-600"
+                      onClick={() => loadDashboard(selectedKey === 'all' ? undefined : selectedKey)}
+                    >
+                      Refresh
+                    </button>
                   </div>
                 </div>
                 {keys.stripeAccountId && (
@@ -363,6 +403,22 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">Customers</h3>
                 <div className="flex items-center gap-3">
+                  <select
+                    value={selectedKey}
+                    onChange={(e) => {
+                      const pk = e.target.value;
+                      setSelectedKey(pk);
+                      loadDashboard(pk === 'all' ? undefined : pk);
+                    }}
+                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1 text-sm text-gray-200"
+                  >
+                    <option value="all">All keys</option>
+                    {(keys.apiKeys || []).map((k: any) => (
+                      <option key={k.publishableKey} value={k.publishableKey}>
+                        {k.label || k.publishableKey.slice(0, 12)}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
