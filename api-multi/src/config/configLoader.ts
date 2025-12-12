@@ -118,6 +118,20 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
       popular: number | null;
     }>();
 
+  // Normalize features string to array; supports JSON string or comma-separated list
+  const parseFeatures = (raw: string | null): string[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      if (typeof parsed === 'string') return [parsed];
+    } catch {
+      // Fallback: split comma-separated string
+      return raw.split(',').map((f) => f.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
   if (!rows.results || rows.results.length === 0) return null;
 
   const tiers: ConfigTier[] = rows.results.map((row) => ({
@@ -125,7 +139,7 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
     name: row.displayName || row.name,
     price: row.price,
     limit: row.limit === null ? 'unlimited' : row.limit,
-    features: row.features ? JSON.parse(row.features) : [],
+    features: parseFeatures(row.features),
     popular: !!row.popular,
     stripePriceId: row.priceId,
     priceId: row.priceId,
@@ -158,6 +172,10 @@ async function loadConfig(env: Env, platformId?: string): Promise<Config> {
       console.log('[ConfigLoader] Loaded tiers from TOKENS_KV:', tierData);
       return { tiers: tierData.tiers || [] };
     }
+
+    console.warn(
+      `[ConfigLoader] No tier config found for platform: ${platformId} in TOKENS_KV. Falling back to static config.`
+    );
 
     // STATIC MODE: Read from bundled config.ts (for customer production deploys)
     console.log('[ConfigLoader] STATIC: Loading from config.ts');
@@ -210,9 +228,12 @@ export async function getPriceIdMap(env: Env, platformId?: string): Promise<Reco
 
   for (const tier of config.tiers) {
     const priceId = tier.stripePriceId || tier.priceId; // Support both field names
-    if (priceId) {
-      priceIdMap[tier.name || tier.id] = priceId;
-    }
+    const key = tier.name || tier.id;
+    if (!priceId || !key) continue;
+
+    // Preserve original key and add a lowercase variant so "pro"/"Pro" both work.
+    priceIdMap[key] = priceId;
+    priceIdMap[key.toLowerCase()] = priceId;
   }
 
   return priceIdMap;

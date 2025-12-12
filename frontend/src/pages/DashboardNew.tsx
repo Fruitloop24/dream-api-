@@ -19,13 +19,15 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const [hasPaid, setHasPaid] = useState(false);
-  const [stripeConnected, setStripeConnected] = useState(false);
   const [_platformId, setPlatformId] = useState('');
   const [publishableKey, setPublishableKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
-  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [platformIdGenerated, setPlatformIdGenerated] = useState(false);
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'canceling'>('all');
+  const [search, setSearch] = useState('');
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -60,12 +62,15 @@ export default function Dashboard() {
     }
   }, [hasPaid, publishableKey]);
 
+  useEffect(() => {
+    if (hasPaid && secretKey) {
+      loadDashboard();
+    }
+  }, [hasPaid, secretKey]);
+
   // Check if Stripe is connected (check URL params after OAuth)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('stripe') === 'connected') {
-      setStripeConnected(true);
-    }
     // Check if payment was successful - redirect to OAuth
     if (params.get('payment') === 'success') {
       // After payment, user needs to connect Stripe first
@@ -152,10 +157,25 @@ export default function Dashboard() {
     window.location.href = oauthUrl;
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const loadDashboard = async () => {
+    try {
+      setLoadingDashboard(true);
+      const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${secretKey}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDashboard(data);
+      } else {
+        console.error('Failed to load dashboard');
+      }
+    } catch (error) {
+      console.error('Dashboard load error:', error);
+    } finally {
+      setLoadingDashboard(false);
+    }
   };
 
   if (!isSignedIn) {
@@ -176,202 +196,226 @@ export default function Dashboard() {
   }
 
   // PAID DASHBOARD (after subscription)
+  const metrics = dashboard?.metrics || {};
+  const customers = dashboard?.customers || [];
+  const tiers = dashboard?.tiers || [];
+  const keys = dashboard?.keys || {};
+  const webhook = dashboard?.webhook || {};
+
+  const activeSubs = metrics.activeSubs || 0;
+  const cancelingSubs = metrics.cancelingSubs || 0;
+  const mrr = metrics.mrr || 0;
+  const usageTotal = metrics.usageThisPeriod || 0;
+
+  const filteredCustomers = customers
+    .filter((c: any) => {
+      if (statusFilter === 'active' && c.canceledAt) return false;
+      if (statusFilter === 'canceling' && !c.canceledAt) return false;
+      if (search) {
+        const hay = `${c.email || ''} ${c.userId || ''}`.toLowerCase();
+        return hay.includes(search.toLowerCase());
+      }
+      return true;
+    })
+    .sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0));
+
+  const renderUsageBar = (count: number, limit: number | string) => {
+    const numericLimit = limit === 'unlimited' ? 100 : Number(limit || 1);
+    const pct = Math.min(100, Math.round((count / numericLimit) * 100));
+    return (
+      <div className="space-y-1">
+        <div className="h-2 w-full bg-gray-800 rounded">
+          <div className="h-2 bg-blue-500 rounded" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-xs text-gray-400">{count} / {limit === 'unlimited' ? '∞' : limit}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">dream-api Dashboard</h1>
-            <UserButton />
-          </div>
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-xl font-bold">dream-api Dashboard</h1>
+          <UserButton />
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Welcome */}
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold mb-2">
-              Welcome, {user?.firstName || 'there'}!
-            </h2>
-            <p className="text-gray-400">
-              {hasPaid ? 'Your API is ready to use.' : 'Subscribe to get your API key.'}
-            </p>
-          </div>
-
-          {/* If not paid, show loading (they're being redirected to Stripe) */}
-          {!hasPaid && (
-            <div className="bg-gray-800 rounded-lg p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <h3 className="text-xl font-bold mb-2">Redirecting to checkout...</h3>
-              <p className="text-gray-400">Please wait while we redirect you to Stripe</p>
-            </div>
-          )}
-
-          {/* API Configuration (after payment) */}
-          {hasPaid && (
-            <>
-              {/* ONLY show "Connect Stripe" if no credentials yet */}
-              {!publishableKey && !secretKey && (
-                <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-6 mb-6">
-                  <h3 className="text-xl font-bold mb-4">Next Step: Connect Your Stripe</h3>
-                  <p className="text-gray-300 mb-4">
-                    Connect your Stripe account so we can create billing products for your users.
-                  </p>
-                  <button
-                    onClick={handleConnectStripe}
-                    className="px-6 py-3 bg-purple-600 rounded font-bold hover:bg-purple-700"
-                  >
-                    Connect Stripe Account
-                  </button>
-                </div>
-              )}
-
-              {/* Show credentials ONLY if they exist (after products created) */}
-              {publishableKey && secretKey && (
-                <>
-                  <div className="bg-green-900/30 border border-green-700 rounded-lg p-6 mb-6">
-                    <h3 className="text-2xl font-bold mb-2">🎉 Your API is Ready!</h3>
-                    <p className="text-gray-300">
-                      Here are your credentials. Keep the secret key safe!
-                    </p>
-                  </div>
-
-                  <div className="bg-gray-800 rounded-lg p-6 mb-6">
-                    <h3 className="text-xl font-bold mb-4">Your API Credentials</h3>
-
-                    {/* Publishable Key */}
-                    <div className="mb-4">
-                      <label className="block text-sm text-gray-400 mb-2">Publishable Key (safe to expose)</label>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                          {publishableKey}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(publishableKey)}
-                          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                        >
-                          {copied ? '✓' : 'Copy'}
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        This goes in your end-users' JWT metadata
-                      </p>
-                    </div>
-
-                    {/* Secret Key */}
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-2">Secret Key (server-only!)</label>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                          {secretKey}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(secretKey)}
-                          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                        >
-                          {copied ? '✓' : 'Copy'}
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        ⚠️ Keep this secret! Use for API authentication (Authorization: Bearer sk_live_...)
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Remove the old tier configuration UI from dashboard */}
-              {false && stripeConnected && (
-                <>
-                  <div className="bg-gray-800 rounded-lg p-6 mb-6">
-                    <h3 className="text-xl font-bold mb-4">Configure Your Tiers</h3>
-                    <p className="text-gray-400 mb-4">
-                      Define your pricing tiers. Products will be created in your Stripe account.
-                    </p>
-
-                    {/* Example tier display */}
-                    <div className="space-y-3 mb-4">
-                      <div className="bg-gray-900 p-4 rounded">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-bold">Free Tier</h4>
-                            <p className="text-sm text-gray-400">$0/mo - 100 requests</p>
-                          </div>
-                          <span className="text-green-400">✓ Active</span>
-                        </div>
-                      </div>
-                      <div className="bg-gray-900 p-4 rounded opacity-50">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-bold">Pro Tier</h4>
-                            <p className="text-sm text-gray-400">$29/mo - 10,000 requests</p>
-                          </div>
-                          <button className="text-sm text-blue-400 hover:text-blue-300">
-                            Configure
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      className="px-6 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                      onClick={() => alert('Tier configuration coming soon!')}
-                    >
-                      + Add Tier
-                    </button>
-                  </div>
-
-                  {/* Webhook Configuration */}
-                  <div className="bg-gray-800 rounded-lg p-6 mb-6">
-                    <h3 className="text-xl font-bold mb-4">Webhook URL</h3>
-                    <p className="text-gray-400 mb-4">
-                      Add this webhook URL to your Stripe account to receive payment events.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 bg-gray-900 px-4 py-2 rounded font-mono text-sm">
-                        https://api.dream-api.com/webhook/stripe
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard('https://api.dream-api.com/webhook/stripe')}
-                        className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                      >
-                        {copied ? '✓' : 'Copy'}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      This webhook handles subscription events from your Stripe account.
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {/* Quick Start */}
-              {publishableKey && secretKey && (
-                <div className="bg-gray-800 rounded-lg p-6 mt-6">
-                  <h3 className="text-xl font-bold mb-4">Quick Start</h3>
-                  <pre className="bg-gray-900 p-4 rounded text-sm overflow-x-auto text-green-400">
-{`// Create a customer
-fetch('https://api.dream-api.com/customers', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer ${secretKey}',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    email: 'customer@example.com',
-    name: 'John Doe',
-    plan: 'free'
-  })
-})`}
-                  </pre>
-                </div>
-              )}
-            </>
-          )}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold mb-2">Welcome, {user?.firstName || 'there'}!</h2>
+          <p className="text-gray-400">Your API is ready. Monitor customers, usage, and billing below.</p>
         </div>
+
+        {!publishableKey && !secretKey && (
+          <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-6 mb-6">
+            <h3 className="text-xl font-bold mb-4">Next Step: Connect Your Stripe</h3>
+            <p className="text-gray-300 mb-4">Connect your Stripe account so we can create billing products for your users.</p>
+            <button
+              onClick={handleConnectStripe}
+              className="px-6 py-3 bg-purple-600 rounded font-bold hover:bg-purple-700"
+            >
+              Connect Stripe Account
+            </button>
+          </div>
+        )}
+
+        {publishableKey && secretKey && (
+          <>
+            {/* Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <MetricCard label="Active Subs" value={activeSubs} />
+              <MetricCard label="Canceling" value={cancelingSubs} />
+              <MetricCard label="MRR" value={`$${(mrr / 100).toFixed(2)}`} />
+              <MetricCard label="Usage This Period" value={usageTotal} />
+            </div>
+
+            {/* Keys & tiers */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 className="text-lg font-bold mb-3">Keys</h3>
+                <p className="text-sm text-gray-400 mb-1">Publishable Key</p>
+                <code className="block bg-gray-900 p-2 rounded text-sm break-all mb-2">{keys.publishableKey || publishableKey}</code>
+                <p className="text-sm text-gray-400 mb-1">Secret Key</p>
+                <code className="block bg-gray-900 p-2 rounded text-sm break-all">
+                  {secretKey || keys.secretKeyMasked || '********'}
+                </code>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 lg:col-span-2">
+                <h3 className="text-lg font-bold mb-3">Tiers</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {tiers.map((tier: any) => (
+                    <div key={tier.name} className="bg-gray-900 rounded p-3 border border-gray-800">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold">{tier.displayName || tier.name}</p>
+                          <p className="text-xs text-gray-400">${tier.price}/mo · Limit {tier.limit === 'unlimited' ? '∞' : tier.limit}</p>
+                        </div>
+                        {tier.popular && <span className="text-xs px-2 py-1 bg-blue-600 rounded">Popular</span>}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">priceId: {tier.priceId || 'n/a'}</p>
+                    </div>
+                  ))}
+                  {tiers.length === 0 && <p className="text-sm text-gray-500">No tiers configured.</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Customers */}
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">Customers</h3>
+                <div className="flex items-center gap-3">
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search email"
+                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1 text-sm text-gray-200"
+                  />
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1 text-sm text-gray-200"
+                  >
+                    <option value="all">All</option>
+                    <option value="active">Active</option>
+                    <option value="canceling">Canceling</option>
+                  </select>
+                  {loadingDashboard && <span className="text-xs text-gray-400">Loading...</span>}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-400 border-b border-gray-700">
+                      <th className="py-2 pr-4">Email</th>
+                      <th className="py-2 pr-4">Plan</th>
+                      <th className="py-2 pr-4">Usage</th>
+                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4">Renews/Cancels</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCustomers.map((c: any) => (
+                      <tr key={c.userId} className="border-b border-gray-800">
+                        <td className="py-2 pr-4 text-gray-100">{c.email || c.userId}</td>
+                        <td className="py-2 pr-4">
+                          <span className="px-2 py-1 text-xs rounded bg-blue-900/50 border border-blue-700">
+                            {c.plan || 'free'}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4">
+                          {renderUsageBar(c.usageCount || 0, c.limit ?? 0)}
+                        </td>
+                        <td className="py-2 pr-4 text-gray-200">
+                          <span
+                            className={`px-2 py-1 text-xs rounded ${
+                              c.canceledAt
+                                ? 'bg-yellow-900/50 border border-yellow-700 text-yellow-200'
+                                : (c.status || 'active') === 'active'
+                                  ? 'bg-green-900/40 border border-green-700 text-green-100'
+                                  : 'bg-gray-800 border border-gray-700 text-gray-200'
+                            }`}
+                          >
+                            {c.canceledAt ? 'Canceling' : c.status || 'active'}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-gray-300">
+                          {c.currentPeriodEnd ? new Date(c.currentPeriodEnd).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredCustomers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-4 text-center text-gray-500">No customers yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Webhook health */}
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <h3 className="text-lg font-bold mb-2">Webhook</h3>
+              <p className="text-sm text-gray-400 mb-2">Stripe webhook URL</p>
+              <code className="block bg-gray-900 p-2 rounded text-sm break-all">
+                https://api-multi.k-c-sheffield012376.workers.dev/webhook/stripe
+              </code>
+              <p className="text-xs text-gray-500 mt-2">Monitor events and keep this URL configured in your Stripe dashboard.</p>
+              <div className="mt-3 text-sm text-gray-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Last event</span>
+                  <span>{webhook.lastEventAt ? new Date(webhook.lastEventAt).toLocaleString() : '—'}</span>
+                </div>
+                <div className="mt-2">
+                  <p className="text-gray-400 text-xs mb-1">Recent events</p>
+                  <ul className="space-y-1">
+                    {(webhook.recent || []).map((evt: any, idx: number) => (
+                      <li key={idx} className="flex items-center justify-between text-xs text-gray-300">
+                        <span>{evt.type || 'event'}</span>
+                        <span className="text-gray-500">{evt.createdAt ? new Date(evt.createdAt).toLocaleTimeString() : ''}</span>
+                      </li>
+                    ))}
+                    {(webhook.recent || []).length === 0 && (
+                      <li className="text-gray-500 text-xs">No events yet.</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </main>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+      <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</p>
+      <p className="text-2xl font-bold">{value}</p>
     </div>
   );
 }

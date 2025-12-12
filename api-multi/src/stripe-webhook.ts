@@ -211,8 +211,12 @@ export async function handleStripeWebhook(
 				const productId = typeof price?.product === 'string' ? price.product : price?.product?.id ?? null;
 				const amount = price?.unit_amount ?? null;
 				const currency = price?.currency ?? null;
-				const currentPeriodEnd = subscription.current_period_end
-					? new Date(subscription.current_period_end * 1000).toISOString()
+				const currentPeriodEndUnix =
+					subscription.current_period_end ||
+					item?.current_period_end || // fallback if subscription.current_period_end missing
+					null;
+				const currentPeriodEnd = currentPeriodEndUnix
+					? new Date(currentPeriodEndUnix * 1000).toISOString()
 					: null;
 				const canceledAt = subscription.canceled_at
 					? new Date(subscription.canceled_at * 1000).toISOString()
