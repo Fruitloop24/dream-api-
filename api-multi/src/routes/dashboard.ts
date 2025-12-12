@@ -124,7 +124,9 @@ export async function handleDashboard(
 		const userMap = new Map<string, EndUserRow>();
 		for (const u of users) userMap.set(u.userId, u);
 
-		const customers = subscriptions.map((sub) => {
+		// Build customers from subscriptions first
+		const customerMap = new Map<string, any>();
+		for (const sub of subscriptions) {
 			const u = usageMap.get(sub.userId);
 			const e = userMap.get(sub.userId);
 			const plan = sub.plan || u?.plan || 'free';
@@ -132,7 +134,7 @@ export async function handleDashboard(
 				tierLimitByName[plan] ||
 				(typeof plan === 'string' ? tierLimitByName[plan.toLowerCase()] : undefined) ||
 				0;
-			return {
+			customerMap.set(sub.userId, {
 				userId: sub.userId,
 				email: e?.email || null,
 				plan,
@@ -147,8 +149,37 @@ export async function handleDashboard(
 				productId: sub.productId,
 				amount: sub.amount,
 				currency: sub.currency,
-			};
-		});
+			});
+		}
+
+		// Add any end-users without subscriptions
+		for (const e of users) {
+			if (customerMap.has(e.userId)) continue;
+			const u = usageMap.get(e.userId);
+			const plan = u?.plan || 'free';
+			const limit =
+				tierLimitByName[plan] ||
+				(typeof plan === 'string' ? tierLimitByName[plan.toLowerCase()] : undefined) ||
+				0;
+			customerMap.set(e.userId, {
+				userId: e.userId,
+				email: e.email || null,
+				plan,
+				status: 'none',
+				usageCount: u?.usageCount ?? 0,
+				limit,
+				periodStart: u?.periodStart || null,
+				periodEnd: u?.periodEnd || null,
+				currentPeriodEnd: null,
+				canceledAt: null,
+				priceId: null,
+				productId: null,
+				amount: null,
+				currency: null,
+			});
+		}
+
+		const customers = Array.from(customerMap.values());
 
 		const activeSubs = subscriptions.filter((s) => s.status === 'active').length;
 		const cancelingSubs = subscriptions.filter((s) => !!s.canceledAt).length;
