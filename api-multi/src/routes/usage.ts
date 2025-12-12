@@ -116,6 +116,23 @@ export async function handleDataRequest(
 		);
 	}
 
+	// Calculate next count and re-check to avoid edge cases
+	const nextCount = currentUsageData.usageCount + 1;
+	if (tierLimit !== Infinity && nextCount > tierLimit) {
+		return new Response(
+			JSON.stringify({
+				error: 'Tier limit reached',
+				usageCount: currentUsageData.usageCount,
+				limit: tierLimit,
+				message: 'Please upgrade to unlock more requests',
+			}),
+			{
+				status: 403,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			}
+		);
+	}
+
 	// ========================================================================
 	// YOUR PRODUCT LOGIC GOES HERE
 	// ========================================================================
@@ -131,7 +148,7 @@ export async function handleDataRequest(
 	// ========================================================================
 
 	// Increment usage count
-	currentUsageData.usageCount++;
+	currentUsageData.usageCount = nextCount;
 	currentUsageData.lastUpdated = new Date().toISOString();
 	await env.USAGE_KV.put(usageKey, JSON.stringify(currentUsageData));
 	await upsertUsageSnapshot(
