@@ -34,7 +34,7 @@
 import { Env, PlanTier, UsageData } from '../types';
 import { getTierConfig } from '../config/configLoader';
 import { getCurrentPeriod, shouldResetUsage } from '../services/kv';
-import { upsertUsageSnapshot } from '../services/d1';
+import { upsertUsageSnapshot, upsertUsageInDb } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -68,98 +68,49 @@ export async function handleDataRequest(
 	env: Env,
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
-	// Get current usage (namespaced by platformId for multi-tenancy)
-	const usageKey = `usage:${platformId}:${userId}`;
-	const usageDataRaw = await env.USAGE_KV.get(usageKey);
+	// Get tier limit from config (using platformId for multi-tenancy)
+	const tierConfigs = await getTierConfig(env, platformId);
+	const tierLimit = tierConfigs[plan]?.limit ?? 0;
 
 	const currentPeriod = getCurrentPeriod();
 
-	const initialUsageData: UsageData = usageDataRaw
-		? JSON.parse(usageDataRaw)
-		: {
-				usageCount: 0,
-				plan,
-				lastUpdated: new Date().toISOString(),
-				periodStart: currentPeriod.start,
-				periodEnd: currentPeriod.end,
-		  };
-
-	// Get tier limit from config (using platformId for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId);
-	const tierLimit = tierConfigs[plan]?.limit || 0;
-
-	const currentUsageData = { ...initialUsageData }; // Create a mutable copy
-
-	// Reset usage if new billing period (for limited tiers)
-	if (tierLimit !== Infinity && shouldResetUsage(currentUsageData)) {
-		currentUsageData.usageCount = 0;
-		currentUsageData.periodStart = currentPeriod.start;
-		currentUsageData.periodEnd = currentPeriod.end;
-	}
-
-	// Update plan if changed
-	currentUsageData.plan = plan;
-
-	// Check if tier limit exceeded
-	if (tierLimit !== Infinity && currentUsageData.usageCount >= tierLimit) {
-		return new Response(
-			JSON.stringify({
-				error: 'Tier limit reached',
-				usageCount: currentUsageData.usageCount,
-				limit: tierLimit,
-				message: 'Please upgrade to unlock more requests',
-			}),
-			{
-				status: 403,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-			}
-		);
-	}
-
-	// Calculate next count and re-check to avoid edge cases
-	const nextCount = currentUsageData.usageCount + 1;
-	if (tierLimit !== Infinity && nextCount > tierLimit) {
-		return new Response(
-			JSON.stringify({
-				error: 'Tier limit reached',
-				usageCount: currentUsageData.usageCount,
-				limit: tierLimit,
-				message: 'Please upgrade to unlock more requests',
-			}),
-			{
-				status: 403,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-			}
-		);
-	}
-
-	// ========================================================================
-	// YOUR PRODUCT LOGIC GOES HERE
-	// ========================================================================
-	// Replace this placeholder with your actual business logic:
-	// - Process documents
-	// - Make API calls
-	// - Run AI models
-	// - Generate reports
-	// etc.
-	//
-	// Example:
-	// const result = await processDocument(userId, plan, requestBody);
-	// ========================================================================
-
-	// Increment usage count
-	currentUsageData.usageCount = nextCount;
-	currentUsageData.lastUpdated = new Date().toISOString();
-	await env.USAGE_KV.put(usageKey, JSON.stringify(currentUsageData));
-	await upsertUsageSnapshot(
+	// Use D1 as the source of truth (atomic). KV is just a cache.
+	const dbResult = await upsertUsageInDb(
 		env,
 		platformId,
 		userId,
 		plan,
-		currentUsageData.periodStart,
-		currentUsageData.periodEnd,
-		currentUsageData.usageCount
+		currentPeriod.start,
+		currentPeriod.end,
+		1,
+		tierLimit === Infinity ? 'unlimited' : tierLimit
 	);
+
+	if (!dbResult.success || dbResult.usageCount > (tierLimit === Infinity ? Number.MAX_SAFE_INTEGER : tierLimit)) {
+		return new Response(
+			JSON.stringify({
+				error: 'Tier limit reached',
+				usageCount: dbResult.usageCount,
+				limit: tierLimit === Infinity ? 'unlimited' : tierLimit,
+				message: 'Please upgrade to unlock more requests',
+			}),
+			{
+				status: 403,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			}
+		);
+	}
+
+	// Mirror to KV cache (best effort)
+	const usageKey = `usage:${platformId}:${userId}`;
+	const usageData: UsageData = {
+		usageCount: dbResult.usageCount,
+		plan,
+		lastUpdated: new Date().toISOString(),
+		periodStart: currentPeriod.start,
+		periodEnd: currentPeriod.end,
+	};
+	await env.USAGE_KV.put(usageKey, JSON.stringify(usageData));
 
 	// Return success response
 	return new Response(
@@ -167,7 +118,7 @@ export async function handleDataRequest(
 			success: true,
 			data: { message: 'Request processed successfully' },
 			usage: {
-				count: currentUsageData.usageCount,
+				count: dbResult.usageCount,
 				limit: tierLimit === Infinity ? 'unlimited' : tierLimit,
 				plan,
 			},
@@ -204,20 +155,41 @@ export async function handleUsageCheck(
 	env: Env,
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
-	const usageKey = `usage:${platformId}:${userId}`;
-	const usageDataRaw = await env.USAGE_KV.get(usageKey);
-
 	const currentPeriod = getCurrentPeriod();
 
-	const usageData: UsageData = usageDataRaw
-		? JSON.parse(usageDataRaw)
-		: {
+	// Try KV cache first
+	const usageKey = `usage:${platformId}:${userId}`;
+	const usageDataRaw = await env.USAGE_KV.get(usageKey);
+	let usageData: UsageData | null = usageDataRaw ? JSON.parse(usageDataRaw) : null;
+
+	if (!usageData) {
+		// Fallback to D1 snapshot
+		const fromDb = await env.DB.prepare(
+			'SELECT usageCount, plan, periodStart, periodEnd FROM usage_snapshots WHERE platformId = ? AND userId = ?'
+		)
+			.bind(platformId, userId)
+			.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
+
+		if (fromDb) {
+			usageData = {
+				usageCount: fromDb.usageCount,
+				plan: (fromDb.plan as PlanTier) || plan,
+				lastUpdated: new Date().toISOString(),
+				periodStart: fromDb.periodStart || currentPeriod.start,
+				periodEnd: fromDb.periodEnd || currentPeriod.end,
+			};
+			// Warm KV
+			await env.USAGE_KV.put(usageKey, JSON.stringify(usageData));
+		} else {
+			usageData = {
 				usageCount: 0,
 				plan,
 				lastUpdated: new Date().toISOString(),
 				periodStart: currentPeriod.start,
 				periodEnd: currentPeriod.end,
-		  };
+			};
+		}
+	}
 
 	// Get tier limit from config (using platformId for multi-tenancy)
 	const tierConfigs = await getTierConfig(env, platformId);

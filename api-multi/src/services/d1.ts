@@ -67,6 +67,51 @@ export async function upsertUsageSnapshot(
 		.run();
 }
 
+export async function upsertUsageInDb(
+	env: Env,
+	platformId: string,
+	userId: string,
+	plan: PlanTier | string,
+	periodStart: string,
+	periodEnd: string,
+	incrementBy: number,
+	limit: number | 'unlimited'
+): Promise<{ success: boolean; usageCount: number; limit: number | 'unlimited'; plan: string }> {
+	const isUnlimited = limit === 'unlimited' || limit === Infinity;
+	const currentLimit = isUnlimited ? Number.MAX_SAFE_INTEGER : (limit as number);
+
+	// Upsert + atomic increment with guard
+	const result = await env.DB.prepare(
+		`INSERT INTO usage_snapshots (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(platformId, userId) DO UPDATE SET
+       plan=excluded.plan,
+       periodStart=excluded.periodStart,
+       periodEnd=excluded.periodEnd,
+       usageCount=CASE
+         WHEN usage_snapshots.usageCount + ? > ? THEN usage_snapshots.usageCount
+         ELSE usage_snapshots.usageCount + ?
+       END,
+       updatedAt=CURRENT_TIMESTAMP
+     WHERE usage_snapshots.usageCount + ? <= ?`
+	)
+		.bind(platformId, userId, plan, periodStart, periodEnd, incrementBy, incrementBy, currentLimit, incrementBy, currentLimit)
+		.run();
+
+	const row = await env.DB.prepare(
+		'SELECT usageCount FROM usage_snapshots WHERE platformId = ? AND userId = ?'
+	)
+		.bind(platformId, userId)
+		.first<{ usageCount: number }>();
+
+	if (!row) {
+		return { success: false, usageCount: 0, limit, plan: plan.toString() };
+	}
+
+	const success = row.usageCount <= currentLimit;
+	return { success, usageCount: row.usageCount, limit, plan: plan.toString() };
+}
+
 export async function isEventProcessed(env: Env, eventId: string): Promise<boolean> {
 	const row = await env.DB.prepare('SELECT eventId FROM events WHERE eventId = ? LIMIT 1')
 		.bind(eventId)
