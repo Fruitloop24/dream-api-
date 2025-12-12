@@ -251,7 +251,15 @@ export default {
 
 			// Process request and track usage
 			if (url.pathname === '/api/data' && request.method === 'POST') {
-				return await handleDataRequest(userId, platformId, plan, env, corsHeaders);
+				try {
+					return await handleDataRequest(userId, platformId, plan, env, corsHeaders);
+				} catch (err) {
+					console.error('[Data] Handler error:', err);
+					return new Response(
+						JSON.stringify({ error: 'Internal error', detail: err instanceof Error ? err.message : String(err) }),
+						{ status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+					);
+				}
 			}
 
 			// Get current usage and limits
