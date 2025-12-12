@@ -39,12 +39,17 @@ export async function checkRateLimit(
 	userId: string,
 	env: Env
 ): Promise<{ allowed: boolean; remaining: number }> {
+	// If no KV bound for rate limiting, allow all
+	if (!env.USAGE_KV) {
+		return { allowed: true, remaining: RATE_LIMIT_PER_MINUTE };
+	}
+
 	const now = Date.now();
 	const minute = Math.floor(now / 60000); // Current minute bucket
 	const rateLimitKey = `ratelimit:${userId}:${minute}`;
 
 	// Get current count from KV
-	const currentCount = await env.USAGE_KV?.get(rateLimitKey);
+	const currentCount = await env.USAGE_KV.get(rateLimitKey);
 	const count = currentCount ? parseInt(currentCount) : 0;
 
 	// Check if limit exceeded
