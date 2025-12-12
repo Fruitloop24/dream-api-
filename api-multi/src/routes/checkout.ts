@@ -218,6 +218,7 @@ export async function handleCustomerPortal(
 		// Get user from Clerk to retrieve Stripe customer ID
 		const user = await clerkClient.users.getUser(userId);
 		const stripeCustomerId = user.publicMetadata?.stripeCustomerId as string;
+		const publishableKeyMeta = user.publicMetadata?.publishableKey as string | undefined;
 
 		if (!stripeCustomerId) {
 			return new Response(
@@ -252,8 +253,19 @@ export async function handleCustomerPortal(
 			);
 		}
 
-		// Get platformId from publishableKey
-		const platformId = await env.TOKENS_KV.get(`publishablekey:${publishableKey}:platformId`);
+		// Get platformId from publishableKey (KV first, fallback to DB)
+		let platformId = await env.TOKENS_KV.get(`publishablekey:${publishableKey}:platformId`);
+		if (!platformId) {
+			const row = await env.DB.prepare('SELECT platformId FROM api_keys WHERE publishableKey = ? LIMIT 1')
+				.bind(publishableKey)
+				.first<{ platformId: string }>();
+			if (row?.platformId) {
+				platformId = row.platformId;
+				// warm cache for next time
+				await env.TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
+			}
+		}
+
 		if (!platformId) {
 			return new Response(
 				JSON.stringify({ error: 'Platform not found' }),
@@ -289,7 +301,16 @@ export async function handleCustomerPortal(
 
 		if (!portalSession.ok) {
 			console.error('[Portal] Stripe error response:', session);
-			throw new Error(session.error?.message || 'Failed to create portal session');
+			return new Response(
+				JSON.stringify({
+					error: 'Failed to create portal session',
+					detail: session.error?.message || 'Stripe returned non-200',
+				}),
+				{
+					status: portalSession.status || 500,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				}
+			);
 		}
 
 		return new Response(
