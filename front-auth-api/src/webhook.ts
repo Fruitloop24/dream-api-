@@ -1,3 +1,4 @@
+/// <reference types="@cloudflare/workers-types" />
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
 
@@ -5,7 +6,37 @@ interface Env {
     CLERK_SECRET_KEY: string;
     STRIPE_SECRET_KEY: string;
     STRIPE_WEBHOOK_SECRET?: string;
-    USAGE_KV: KVNamespace;  // For webhook idempotency tracking
+    USAGE_KV: KVNamespace;  // For webhook idempotency tracking (legacy)
+    DB: D1Database;
+}
+
+async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
+    const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
+        .bind(userId)
+        .first<{ platformId: string }>();
+    return row?.platformId ?? null;
+}
+
+async function isEventProcessed(eventId: string, env: Env): Promise<boolean> {
+    const row = await env.DB.prepare('SELECT eventId FROM events WHERE eventId = ?')
+        .bind(eventId)
+        .first<{ eventId: string }>();
+    return !!row;
+}
+
+async function recordEvent(
+    eventId: string,
+    platformId: string | null,
+    type: string,
+    source: string,
+    payloadJson: string,
+    env: Env
+) {
+    await env.DB.prepare(
+        'INSERT INTO events (platformId, source, type, eventId, payload_json) VALUES (?, ?, ?, ?, ?)'
+    )
+        .bind(platformId, source, type, eventId, payloadJson)
+        .run();
 }
 
 export async function handleStripeWebhook(
@@ -49,24 +80,23 @@ export async function handleStripeWebhook(
     }
 
     // ============================================================================
-    // IDEMPOTENCY CHECK
+    // IDEMPOTENCY CHECK (D1 events table)
     // ============================================================================
-    /**
-     * Prevent duplicate webhook processing using KV storage
-     *
-     * WHY: Stripe may send the same event multiple times (network retries, etc)
-     * Without idempotency, this could cause:
-     * - Duplicate plan upgrades
-     * - Double charges (if we added billing logic)
-     * - Inconsistent user metadata
-     *
-     * PATTERN: Store processed event IDs in KV with 30-day TTL
-     * - Event IDs are unique per Stripe event
-     * - 30 days matches Stripe's webhook retention period
-     * - KV eventually consistent is fine (Stripe retries are seconds apart)
-     */
-    const idempotencyKey = `webhook:stripe:${event.id}`;
-    const alreadyProcessed = await env.USAGE_KV.get(idempotencyKey);
+    let derivedUserId: string | null = null;
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
+        derivedUserId = session.client_reference_id || (session.metadata?.userId as string | undefined) || null;
+    } else if (
+        event.type === 'customer.subscription.created' ||
+        event.type === 'customer.subscription.updated' ||
+        event.type === 'customer.subscription.deleted'
+    ) {
+        const subscription = event.data.object as Stripe.Subscription;
+        derivedUserId = (subscription.metadata?.userId as string | undefined) || null;
+    }
+
+    const platformId = derivedUserId ? await getPlatformIdFromDb(derivedUserId, env) : null;
+    const alreadyProcessed = await isEventProcessed(event.id, env);
 
     if (alreadyProcessed) {
         console.log(`⏭️ Event ${event.id} already processed (idempotent), returning success`);
@@ -181,22 +211,14 @@ export async function handleStripeWebhook(
             console.log(`Unhandled event type: ${event.type}`);
     }
 
-    // ============================================================================
-    // MARK EVENT AS PROCESSED (Idempotency)
-    // ============================================================================
-    /**
-     * Store event ID in KV to prevent duplicate processing
-     *
-     * TTL: 2592000 seconds = 30 days (matches Stripe's webhook retention)
-     * Value: timestamp when processed (for debugging)
-     *
-     * This ensures if Stripe retries the same event, we return success immediately
-     * without re-processing (updating Clerk metadata, etc)
-     */
-    await env.USAGE_KV.put(
-        idempotencyKey,
-        new Date().toISOString(),
-        { expirationTtl: 2592000 }  // 30 days
+    // Mark event as processed in D1
+    await recordEvent(
+        event.id,
+        platformId,
+        event.type,
+        'stripe-webhook',
+        body,
+        env
     );
 
     return new Response(JSON.stringify({ received: true }), { status: 200 });

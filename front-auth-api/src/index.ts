@@ -39,6 +39,7 @@ interface Env {
   STRIPE_WEBHOOK_SECRET: string;
   TOKENS_KV: KVNamespace;
   USAGE_KV: KVNamespace;
+  DB: D1Database;
 }
 
 /**
@@ -72,6 +73,32 @@ const PLATFORM_TIERS: Record<string, { limit: number; price: number; name: strin
 };
 
 const RATE_LIMIT_PER_MINUTE = 100;
+
+// ============================================================================
+// D1 HELPERS
+// ============================================================================
+
+async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
+    .bind(userId)
+    .first<{ platformId: string }>();
+  return row?.platformId ?? null;
+}
+
+async function insertPlatform(env: Env, platformId: string, userId: string): Promise<void> {
+  await env.DB.prepare('INSERT OR IGNORE INTO platforms (platformId, clerkUserId) VALUES (?, ?)')
+    .bind(platformId, userId)
+    .run();
+}
+
+async function getPublishableKeyFromDb(platformId: string, env: Env): Promise<string | null> {
+  const row = await env.DB.prepare(
+    'SELECT publishableKey FROM api_keys WHERE platformId = ? ORDER BY createdAt DESC LIMIT 1'
+  )
+    .bind(platformId)
+    .first<{ publishableKey: string }>();
+  return row?.publishableKey ?? null;
+}
 
 // ============================================================================
 // USAGE TRACKING UTILITY FUNCTIONS
@@ -392,12 +419,30 @@ export default {
       if (url.pathname === '/generate-platform-id' && request.method === 'POST') {
         const userId = await verifyAuth(request, env);
 
-        // Check if already generated (idempotent)
-        const existing = await env.TOKENS_KV.get(`user:${userId}:platformId`);
-        if (existing) {
-          console.log(`[PlatformID] Already exists for user ${userId}: ${existing}`);
+        // Check if already generated (idempotent) - DB first, KV fallback
+        const existingDb = await getPlatformIdFromDb(userId, env);
+        if (existingDb) {
+          // Mirror back to KV if missing
+          const existingKv = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+          if (!existingKv) {
+            await env.TOKENS_KV.put(`user:${userId}:platformId`, existingDb);
+            await env.TOKENS_KV.put(`platform:${existingDb}:userId`, userId);
+          }
+          console.log(`[PlatformID] Already exists for user ${userId}: ${existingDb}`);
           return new Response(
-            JSON.stringify({ platformId: existing }),
+            JSON.stringify({ platformId: existingDb }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Legacy KV check (older data before D1)
+        const legacyKv = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        if (legacyKv) {
+          await insertPlatform(env, legacyKv, userId);
+          await env.TOKENS_KV.put(`platform:${legacyKv}:userId`, userId);
+          console.log(`[PlatformID] Migrated KV platform for user ${userId}: ${legacyKv}`);
+          return new Response(
+            JSON.stringify({ platformId: legacyKv }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -405,7 +450,8 @@ export default {
         // Generate new platformId (plt_xxx format)
         const platformId = `plt_${crypto.randomUUID().replace(/-/g, '')}`;
 
-        // Store bidirectional mapping in KV
+        // Store in D1 (SSOT) + mirror bidirectional mapping in KV
+        await insertPlatform(env, platformId, userId);
         await env.TOKENS_KV.put(`user:${userId}:platformId`, platformId);
         await env.TOKENS_KV.put(`platform:${platformId}:userId`, userId);
 
@@ -421,12 +467,22 @@ export default {
       if (url.pathname === '/get-platform-id' && request.method === 'GET') {
         const userId = await verifyAuth(request, env);
 
-        const platformId = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
+
         if (!platformId) {
           return new Response(
             JSON.stringify({ error: 'Platform ID not generated yet' }),
             { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+
+        // Mirror back to KV if it was missing
+        const kvPlatform = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        if (!kvPlatform) {
+          await env.TOKENS_KV.put(`user:${userId}:platformId`, platformId);
+          await env.TOKENS_KV.put(`platform:${platformId}:userId`, userId);
         }
 
         return new Response(
@@ -441,7 +497,9 @@ export default {
         const userId = await verifyAuth(request, env);
 
         // Get platformId (generated at login)
-        const platformId = await env.TOKENS_KV.get(`user:${userId}:platformId`);
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
         if (!platformId) {
           return new Response(
             JSON.stringify({ error: 'Platform ID not found. Please log in first.' }),
@@ -451,7 +509,9 @@ export default {
 
         // Get publishableKey and secretKey (created by oauth-api after tier config)
         // oauth-api writes these as user:{userId}:publishableKey and user:{userId}:secretKey
-        const publishableKey = await env.TOKENS_KV.get(`user:${userId}:publishableKey`);
+        const publishableKey =
+          (await getPublishableKeyFromDb(platformId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:publishableKey`));
         const secretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey`);
         const productsJson = await env.TOKENS_KV.get(`user:${userId}:products`);
 

@@ -37,6 +37,7 @@ interface Env {
   // KV Bindings (must be configured in wrangler.toml)
   PLATFORM_TOKENS_KV: KVNamespace;
   CUSTOMER_TOKENS_KV: KVNamespace;
+  DB: D1Database;
 
   // Stripe Connect OAuth App credentials
   STRIPE_CLIENT_ID: string;
@@ -48,6 +49,72 @@ interface Env {
 
   // URL to redirect back to after success/failure
   FRONTEND_URL: string;
+}
+
+async function ensurePlatform(env: Env, platformId: string, userId: string) {
+  await env.DB.prepare('INSERT OR IGNORE INTO platforms (platformId, clerkUserId) VALUES (?, ?)')
+    .bind(platformId, userId)
+    .run();
+}
+
+async function saveStripeToken(
+  env: Env,
+  platformId: string,
+  stripeUserId: string,
+  accessToken: string,
+  refreshToken?: string,
+  scope?: string
+) {
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO stripe_tokens (platformId, stripeUserId, accessToken, refreshToken, scope) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind(platformId, stripeUserId, accessToken, refreshToken ?? null, scope ?? null)
+    .run();
+}
+
+async function upsertApiKey(
+  env: Env,
+  platformId: string,
+  publishableKey: string,
+  secretKeyHash: string
+) {
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status) VALUES (?, ?, ?, ?)'
+  )
+    .bind(platformId, publishableKey, secretKeyHash, 'active')
+    .run();
+}
+
+type TierInput = {
+  name: string;
+  displayName: string;
+  price: number;
+  limit: number | 'unlimited';
+  features: string;
+  popular: boolean;
+  priceId: string;
+  productId: string;
+};
+
+async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
+  const stmt = env.DB.prepare(
+    'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  for (const tier of tiers) {
+    await stmt
+      .bind(
+        platformId,
+        tier.name,
+        tier.displayName,
+        tier.price,
+        tier.limit === 'unlimited' ? null : tier.limit,
+        tier.features,
+        tier.popular ? 1 : 0,
+        tier.priceId,
+        tier.productId
+      )
+      .run();
+  }
 }
 
 export default {
@@ -136,6 +203,17 @@ export default {
           console.error('Stripe OAuth Error:', tokenData.error_description);
           return Response.redirect(`${env.FRONTEND_URL}/dashboard?stripe=error`, 302);
         }
+
+        // Ensure platform exists in D1 and store Stripe token (SSOT)
+        await ensurePlatform(env, platformId, userId);
+        await saveStripeToken(
+          env,
+          platformId,
+          tokenData.stripe_user_id,
+          tokenData.access_token,
+          (tokenData as any).refresh_token,
+          (tokenData as any).scope
+        );
 
         // Store Stripe credentials in PLATFORM_TOKENS_KV (front-auth-api namespace)
         // This is the MAIN namespace for dev data
@@ -275,6 +353,13 @@ export default {
           priceId: priceIds[i].priceId,
           productId: priceIds[i].productId,
         }));
+
+        // ===================================================================
+        // D1 SSOT: platform, keys, tiers
+        // ===================================================================
+        await ensurePlatform(env, platformId, userId);
+        await upsertApiKey(env, platformId, publishableKey, hashHex);
+        await upsertTiers(env, platformId, tierConfig as TierInput[]);
 
         // ===================================================================
         // SAVE TO PLATFORM_TOKENS_KV (front-auth-api namespace)

@@ -32,6 +32,11 @@ binding = "TOKENS_KV"
 id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 preview_id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "dream-api-ssot"
+database_id = "07e784d5-2c3f-4bb0-a79c-094c1d05410f"
+
 [vars]
 # Non-secret variables
 CLERK_JWT_TEMPLATE = "dream-api"
