@@ -34,7 +34,6 @@
 import { Env, PlanTier, UsageData } from '../types';
 import { getTierConfig } from '../config/configLoader';
 import { getCurrentPeriod, shouldResetUsage } from '../services/kv';
-import { upsertUsageSnapshot, upsertUsageInDb } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -71,27 +70,55 @@ export async function handleDataRequest(
 	// Get tier limit from config (using platformId for multi-tenancy)
 	const tierConfigs = await getTierConfig(env, platformId);
 	const tierLimit = tierConfigs[plan]?.limit ?? 0;
+	const isUnlimited = tierLimit === Infinity;
 
 	const currentPeriod = getCurrentPeriod();
 
-	// Use D1 as the source of truth (atomic). KV is just a cache.
-	const dbResult = await upsertUsageInDb(
-		env,
-		platformId,
-		userId,
-		plan,
-		currentPeriod.start,
-		currentPeriod.end,
-		1,
-		tierLimit === Infinity ? 'unlimited' : tierLimit
-	);
+	// Ensure a row exists
+	await env.DB.prepare(
+		`INSERT OR IGNORE INTO usage_snapshots (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+     VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`
+	)
+		.bind(platformId, userId, plan, currentPeriod.start, currentPeriod.end)
+		.run();
 
-	if (!dbResult.success || dbResult.usageCount > (tierLimit === Infinity ? Number.MAX_SAFE_INTEGER : tierLimit)) {
+	// Load current usage
+	let row = await env.DB.prepare(
+		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_snapshots WHERE platformId = ? AND userId = ?'
+	)
+		.bind(platformId, userId)
+		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
+
+	let usageCount = row?.usageCount ?? 0;
+	let periodStart = row?.periodStart || currentPeriod.start;
+	let periodEnd = row?.periodEnd || currentPeriod.end;
+
+	const usageData: UsageData = {
+		usageCount,
+		plan,
+		lastUpdated: new Date().toISOString(),
+		periodStart,
+		periodEnd,
+	};
+
+	if (!isUnlimited && shouldResetUsage(usageData)) {
+		usageCount = 0;
+		periodStart = currentPeriod.start;
+		periodEnd = currentPeriod.end;
+		await env.DB.prepare(
+			'UPDATE usage_snapshots SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
+		)
+			.bind(periodStart, periodEnd, platformId, userId)
+			.run();
+	}
+
+	// Enforce limit before increment
+	if (!isUnlimited && usageCount >= tierLimit) {
 		return new Response(
 			JSON.stringify({
 				error: 'Tier limit reached',
-				usageCount: dbResult.usageCount,
-				limit: tierLimit === Infinity ? 'unlimited' : tierLimit,
+				usageCount,
+				limit: tierLimit,
 				message: 'Please upgrade to unlock more requests',
 			}),
 			{
@@ -101,16 +128,31 @@ export async function handleDataRequest(
 		);
 	}
 
+	// Increment
+	await env.DB.prepare(
+		'UPDATE usage_snapshots SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
+	)
+		.bind(plan, periodStart, periodEnd, platformId, userId)
+		.run();
+
+	row = await env.DB.prepare(
+		'SELECT usageCount FROM usage_snapshots WHERE platformId = ? AND userId = ?'
+	)
+		.bind(platformId, userId)
+		.first<{ usageCount: number }>();
+
+	usageCount = row?.usageCount ?? usageCount + 1;
+
 	// Mirror to KV cache (best effort)
 	const usageKey = `usage:${platformId}:${userId}`;
-	const usageData: UsageData = {
-		usageCount: dbResult.usageCount,
+	const kvUsage: UsageData = {
+		usageCount,
 		plan,
 		lastUpdated: new Date().toISOString(),
-		periodStart: currentPeriod.start,
-		periodEnd: currentPeriod.end,
+		periodStart,
+		periodEnd,
 	};
-	await env.USAGE_KV.put(usageKey, JSON.stringify(usageData));
+	await env.USAGE_KV.put(usageKey, JSON.stringify(kvUsage));
 
 	// Return success response
 	return new Response(
@@ -118,8 +160,8 @@ export async function handleDataRequest(
 			success: true,
 			data: { message: 'Request processed successfully' },
 			usage: {
-				count: dbResult.usageCount,
-				limit: tierLimit === Infinity ? 'unlimited' : tierLimit,
+				count: usageCount,
+				limit: isUnlimited ? 'unlimited' : tierLimit,
 				plan,
 			},
 		}),
