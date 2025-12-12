@@ -46,22 +46,22 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-		// Look up publishableKey from secretKey hash
-		const publishableKey = await env.TOKENS_KV.get(`secretkey:${hashHex}:publishableKey`);
+		// Prefer D1 (authoritative), then KV as cache
+		let pk: string | null = null;
+		let platformId: string | null = null;
 
-		let pk = publishableKey;
-		let platformId = pk ? await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`) : null;
-
-		// Fallback to D1 if KV miss
-		if (!pk) {
-			const fromDb = await getPlatformFromSecretHash(env, hashHex);
-			if (!fromDb) {
-				console.warn(`[API Key] Invalid key: ${apiKey.substring(0, 12)}...`);
-				return null;
-			}
+		const fromDb = await getPlatformFromSecretHash(env, hashHex);
+		if (fromDb) {
 			pk = fromDb.publishableKey;
 			platformId = fromDb.platformId;
-			// Rehydrate KV for hot path
+		} else {
+			const publishableKey = await env.TOKENS_KV.get(`secretkey:${hashHex}:publishableKey`);
+			pk = publishableKey;
+			platformId = pk ? await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`) : null;
+		}
+
+		// If we found via DB, rehydrate KV for hot path
+		if (fromDb && pk && platformId) {
 			await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
 			await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
 		}
