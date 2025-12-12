@@ -71,6 +71,7 @@ export async function handleDataRequest(
 	const tierConfigs = await getTierConfig(env, platformId);
 	const tierLimit = tierConfigs[plan]?.limit ?? 0;
 	const isUnlimited = tierLimit === Infinity;
+	const limitNumber = isUnlimited ? Number.MAX_SAFE_INTEGER : tierLimit;
 
 	const currentPeriod = getCurrentPeriod();
 
@@ -128,20 +129,30 @@ export async function handleDataRequest(
 		);
 	}
 
-	// Increment
-	await env.DB.prepare(
-		'UPDATE usage_snapshots SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
+	// Increment with guard in D1
+	const updated = await env.DB.prepare(
+		'UPDATE usage_snapshots SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND usageCount < ? RETURNING usageCount'
 	)
-		.bind(plan, periodStart, periodEnd, platformId, userId)
-		.run();
-
-	row = await env.DB.prepare(
-		'SELECT usageCount FROM usage_snapshots WHERE platformId = ? AND userId = ?'
-	)
-		.bind(platformId, userId)
+		.bind(plan, periodStart, periodEnd, platformId, userId, limitNumber)
 		.first<{ usageCount: number }>();
 
-	usageCount = row?.usageCount ?? usageCount + 1;
+	if (!updated) {
+		// Guard hit: already at or above limit
+		return new Response(
+			JSON.stringify({
+				error: 'Tier limit reached',
+				usageCount,
+				limit: tierLimit,
+				message: 'Please upgrade to unlock more requests',
+			}),
+			{
+				status: 403,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			}
+		);
+	}
+
+	usageCount = updated.usageCount;
 
 	// Mirror to KV cache (best effort)
 	const usageKey = `usage:${platformId}:${userId}`;
