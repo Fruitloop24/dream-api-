@@ -44,7 +44,7 @@ export async function checkRateLimit(
 	const rateLimitKey = `ratelimit:${userId}:${minute}`;
 
 	// Get current count from KV
-	const currentCount = await env.USAGE_KV.get(rateLimitKey);
+	const currentCount = await env.USAGE_KV?.get(rateLimitKey);
 	const count = currentCount ? parseInt(currentCount) : 0;
 
 	// Check if limit exceeded

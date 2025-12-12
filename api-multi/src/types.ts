@@ -21,7 +21,6 @@ export interface Env {
 	CLERK_JWT_TEMPLATE: string;         // JWT template name ("end-user-api")
 
 	// KV namespace bindings (set in wrangler.toml)
-	USAGE_KV: KVNamespace;              // Usage tracking: usage:{platformId}:{userId}
 	TOKENS_KV: KVNamespace;             // Tier configs + API key lookups
 	DB: D1Database;                     // SSOT for dashboard/analytics
 

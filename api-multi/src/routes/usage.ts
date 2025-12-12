@@ -31,9 +31,9 @@
  * ============================================================================
  */
 
-import { Env, PlanTier, UsageData } from '../types';
+import { Env, PlanTier } from '../types';
 import { getTierConfig } from '../config/configLoader';
-import { getCurrentPeriod, shouldResetUsage } from '../services/kv';
+import { getCurrentPeriod } from '../services/kv';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -75,9 +75,9 @@ export async function handleDataRequest(
 
 	const currentPeriod = getCurrentPeriod();
 
-	// Ensure a row exists
+	// Ensure a row exists in usage_counts
 	await env.DB.prepare(
-		`INSERT OR IGNORE INTO usage_snapshots (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+		`INSERT OR IGNORE INTO usage_counts (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
      VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`
 	)
 		.bind(platformId, userId, plan, currentPeriod.start, currentPeriod.end)
@@ -85,7 +85,7 @@ export async function handleDataRequest(
 
 	// Load current usage
 	let row = await env.DB.prepare(
-		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_snapshots WHERE platformId = ? AND userId = ?'
+		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
 	)
 		.bind(platformId, userId)
 		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
@@ -94,27 +94,22 @@ export async function handleDataRequest(
 	let periodStart = row?.periodStart || currentPeriod.start;
 	let periodEnd = row?.periodEnd || currentPeriod.end;
 
-	const usageData: UsageData = {
-		usageCount,
-		plan,
-		lastUpdated: new Date().toISOString(),
-		periodStart,
-		periodEnd,
-	};
-
-	if (!isUnlimited && shouldResetUsage(usageData)) {
+	// Reset period if expired
+	const now = new Date();
+	const periodEndDate = new Date(`${periodEnd}T23:59:59.999Z`);
+	if (!isUnlimited && now > periodEndDate) {
 		usageCount = 0;
 		periodStart = currentPeriod.start;
 		periodEnd = currentPeriod.end;
 		await env.DB.prepare(
-			'UPDATE usage_snapshots SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
+			'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
 		)
 			.bind(periodStart, periodEnd, platformId, userId)
 			.run();
 	}
 
 	// Enforce limit before increment
-	if (!isUnlimited && usageCount >= tierLimit) {
+	if (!isUnlimited && usageCount >= limitNumber) {
 		return new Response(
 			JSON.stringify({
 				error: 'Tier limit reached',
@@ -129,41 +124,14 @@ export async function handleDataRequest(
 		);
 	}
 
-	// Increment with guard in D1
+	// Increment in D1
 	const updated = await env.DB.prepare(
-		'UPDATE usage_snapshots SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND usageCount < ? RETURNING usageCount'
+		'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? RETURNING usageCount'
 	)
-		.bind(plan, periodStart, periodEnd, platformId, userId, limitNumber)
+		.bind(plan, periodStart, periodEnd, platformId, userId)
 		.first<{ usageCount: number }>();
 
-	if (!updated) {
-		// Guard hit: already at or above limit
-		return new Response(
-			JSON.stringify({
-				error: 'Tier limit reached',
-				usageCount,
-				limit: tierLimit,
-				message: 'Please upgrade to unlock more requests',
-			}),
-			{
-				status: 403,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-			}
-		);
-	}
-
-	usageCount = updated.usageCount;
-
-	// Mirror to KV cache (best effort)
-	const usageKey = `usage:${platformId}:${userId}`;
-	const kvUsage: UsageData = {
-		usageCount,
-		plan,
-		lastUpdated: new Date().toISOString(),
-		periodStart,
-		periodEnd,
-	};
-	await env.USAGE_KV.put(usageKey, JSON.stringify(kvUsage));
+	usageCount = updated?.usageCount ?? usageCount + 1;
 
 	// Return success response
 	return new Response(
@@ -210,39 +178,15 @@ export async function handleUsageCheck(
 ): Promise<Response> {
 	const currentPeriod = getCurrentPeriod();
 
-	// Try KV cache first
-	const usageKey = `usage:${platformId}:${userId}`;
-	const usageDataRaw = await env.USAGE_KV.get(usageKey);
-	let usageData: UsageData | null = usageDataRaw ? JSON.parse(usageDataRaw) : null;
+	const fromDb = await env.DB.prepare(
+		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
+	)
+		.bind(platformId, userId)
+		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
 
-	if (!usageData) {
-		// Fallback to D1 snapshot
-		const fromDb = await env.DB.prepare(
-			'SELECT usageCount, plan, periodStart, periodEnd FROM usage_snapshots WHERE platformId = ? AND userId = ?'
-		)
-			.bind(platformId, userId)
-			.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
-
-		if (fromDb) {
-			usageData = {
-				usageCount: fromDb.usageCount,
-				plan: (fromDb.plan as PlanTier) || plan,
-				lastUpdated: new Date().toISOString(),
-				periodStart: fromDb.periodStart || currentPeriod.start,
-				periodEnd: fromDb.periodEnd || currentPeriod.end,
-			};
-			// Warm KV
-			await env.USAGE_KV.put(usageKey, JSON.stringify(usageData));
-		} else {
-			usageData = {
-				usageCount: 0,
-				plan,
-				lastUpdated: new Date().toISOString(),
-				periodStart: currentPeriod.start,
-				periodEnd: currentPeriod.end,
-			};
-		}
-	}
+	const usageCount = fromDb?.usageCount ?? 0;
+	const periodStart = fromDb?.periodStart || currentPeriod.start;
+	const periodEnd = fromDb?.periodEnd || currentPeriod.end;
 
 	// Get tier limit from config (using platformId for multi-tenancy)
 	const tierConfigs = await getTierConfig(env, platformId);
@@ -252,11 +196,11 @@ export async function handleUsageCheck(
 		JSON.stringify({
 			userId,
 			plan,
-			usageCount: usageData.usageCount,
+			usageCount,
 			limit: tierLimit === Infinity ? 'unlimited' : tierLimit,
-			remaining: tierLimit === Infinity ? 'unlimited' : Math.max(0, tierLimit - usageData.usageCount),
-			periodStart: usageData.periodStart,
-			periodEnd: usageData.periodEnd,
+			remaining: tierLimit === Infinity ? 'unlimited' : Math.max(0, tierLimit - usageCount),
+			periodStart,
+			periodEnd,
 		}),
 		{
 			status: 200,

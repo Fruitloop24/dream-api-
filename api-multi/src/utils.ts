@@ -39,9 +39,6 @@ export function validateEnv(env: Env): { valid: boolean; missing: string[] } {
 	const missing = required.filter((key) => !env[key as keyof Env]);
 
 	// Check KV bindings (set in wrangler.toml, not via secrets)
-	if (!env.USAGE_KV) {
-		missing.push('USAGE_KV');
-	}
 	if (!env.TOKENS_KV) {
 		missing.push('TOKENS_KV');
 	}
