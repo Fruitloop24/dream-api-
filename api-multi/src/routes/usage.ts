@@ -34,6 +34,7 @@
 import { Env, PlanTier, UsageData } from '../types';
 import { getTierConfig } from '../config/configLoader';
 import { getCurrentPeriod, shouldResetUsage } from '../services/kv';
+import { upsertUsageSnapshot } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -133,6 +134,15 @@ export async function handleDataRequest(
 	currentUsageData.usageCount++;
 	currentUsageData.lastUpdated = new Date().toISOString();
 	await env.USAGE_KV.put(usageKey, JSON.stringify(currentUsageData));
+	await upsertUsageSnapshot(
+		env,
+		platformId,
+		userId,
+		plan,
+		currentUsageData.periodStart,
+		currentUsageData.periodEnd,
+		currentUsageData.usageCount
+	);
 
 	// Return success response
 	return new Response(

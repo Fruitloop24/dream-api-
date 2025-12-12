@@ -23,6 +23,7 @@ export interface Env {
 	// KV namespace bindings (set in wrangler.toml)
 	USAGE_KV: KVNamespace;              // Usage tracking: usage:{platformId}:{userId}
 	TOKENS_KV: KVNamespace;             // Tier configs + API key lookups
+	DB: D1Database;                     // SSOT for dashboard/analytics
 
 	// Stripe (YOUR platform's key for creating checkouts on connected accounts)
 	STRIPE_SECRET_KEY: string;          // Platform Stripe key (sk_test_... or sk_live_...)

@@ -1,6 +1,18 @@
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
 import { Env } from './types';
+import { getPlatformFromPublishableKey, isEventProcessed, recordEvent, upsertSubscription } from './services/d1';
+
+async function resolvePlatformId(env: Env, publishableKey: string | undefined | null): Promise<string | null> {
+	if (!publishableKey) return null;
+	const fromKv = await env.TOKENS_KV.get(`publishablekey:${publishableKey}:platformId`);
+	if (fromKv) return fromKv;
+	const fromDb = await getPlatformFromPublishableKey(env, publishableKey);
+	if (fromDb) {
+		await env.TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, fromDb);
+	}
+	return fromDb ?? null;
+}
 
 /**
  * ============================================================================
@@ -70,29 +82,14 @@ export async function handleStripeWebhook(
 	// ============================================================================
 	// IDEMPOTENCY CHECK
 	// ============================================================================
-	/**
-	 * Prevent duplicate webhook processing using KV storage
-	 *
-	 * WHY: Stripe may send the same event multiple times (network retries, etc)
-	 * Without idempotency, this could cause:
-	 * - Duplicate plan upgrades
-	 * - Double charges (if we added billing logic)
-	 * - Inconsistent user metadata
-	 *
-	 * PATTERN: Store processed event IDs in KV with 30-day TTL
-	 * - Event IDs are unique per Stripe event
-	 * - 30 days matches Stripe's webhook retention period
-	 * - KV eventually consistent is fine (Stripe retries are seconds apart)
-	 */
-	const idempotencyKey = `webhook:stripe:${event.id}`;
-	const alreadyProcessed = await env.USAGE_KV.get(idempotencyKey);
-
+	const alreadyProcessed = await isEventProcessed(env, event.id);
 	if (alreadyProcessed) {
 		console.log(`⏭️ Event ${event.id} already processed (idempotent), returning success`);
 		return new Response(JSON.stringify({ received: true, idempotent: true }), { status: 200 });
 	}
 
 	const clerkClient = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
+	let eventPlatformId: string | null = null;
 
 	// Handle different event types
 	switch (event.type) {
@@ -127,6 +124,7 @@ export async function handleStripeWebhook(
 				const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
 				const pkFromSession = session.metadata?.publishableKey as string | undefined;
 				const publishableKey = existingPk || pkFromSession;
+				eventPlatformId = await resolvePlatformId(env, publishableKey);
 
 				await clerkClient.users.updateUserMetadata(userId, {
 					publicMetadata: {
@@ -137,6 +135,26 @@ export async function handleStripeWebhook(
 					},
 				});
 				console.log(`✅ Updated user ${userId} to ${tier} plan after checkout`);
+
+				// Upsert subscription snapshot (if we can resolve platform)
+				if (eventPlatformId) {
+					await upsertSubscription(env, {
+						platformId: eventPlatformId,
+						userId,
+						publishableKey: publishableKey || null,
+						plan: tier,
+						amount: session.amount_total ?? null,
+						currency: session.currency ?? null,
+						status: 'active',
+						priceId: (session.metadata as any)?.priceId ?? null,
+						productId: null,
+						currentPeriodEnd: null,
+						canceledAt: null,
+						cancelReason: null,
+					});
+				} else {
+					console.warn(`[Webhook] Could not resolve platformId for pk ${publishableKey}, skipping subscription upsert`);
+				}
 			} catch (err: unknown) { // Changed 'any' to 'unknown'
 				const error = err as Error;
 				console.error(`❌ Failed to update user ${userId}:`, error.message);
@@ -174,6 +192,7 @@ export async function handleStripeWebhook(
 				const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
 				const pkFromSub = subscription.metadata?.publishableKey as string | undefined;
 				const publishableKey = existingPk || pkFromSub;
+				eventPlatformId = await resolvePlatformId(env, publishableKey);
 
 				await clerkClient.users.updateUserMetadata(subUserId, {
 					publicMetadata: {
@@ -185,6 +204,38 @@ export async function handleStripeWebhook(
 					},
 				});
 				console.log(`✅ Updated user ${subUserId} to ${subTier} plan`);
+
+				const item = subscription.items.data[0];
+				const price = item?.price;
+				const priceId = price?.id ?? null;
+				const productId = typeof price?.product === 'string' ? price.product : price?.product?.id ?? null;
+				const amount = price?.unit_amount ?? null;
+				const currency = price?.currency ?? null;
+				const currentPeriodEnd = subscription.current_period_end
+					? new Date(subscription.current_period_end * 1000).toISOString()
+					: null;
+				const canceledAt = subscription.canceled_at
+					? new Date(subscription.canceled_at * 1000).toISOString()
+					: null;
+
+				if (eventPlatformId) {
+					await upsertSubscription(env, {
+						platformId: eventPlatformId,
+						userId: subUserId,
+						publishableKey: publishableKey || null,
+						plan: subTier,
+						priceId,
+						productId,
+						amount: amount ?? null,
+						currency: currency ?? null,
+						status: subscription.status,
+						currentPeriodEnd,
+						canceledAt,
+						cancelReason: (subscription.cancellation_details as any)?.comment ?? null,
+					});
+				} else {
+					console.warn(`[Webhook] Could not resolve platformId for pk ${publishableKey}, skipping subscription upsert`);
+				}
 			} catch (err: unknown) { // Changed 'any' to 'unknown'
 				console.error(`❌ Failed to update user ${subUserId}:`, (err as Error).message); // Type assertion
 				return new Response(
@@ -212,6 +263,38 @@ export async function handleStripeWebhook(
 					},
 				});
 				console.log(`✅ Downgraded user ${deletedUserId} to free plan`);
+
+				const publishableKey = deletedSubscription.metadata?.publishableKey as string | undefined;
+				eventPlatformId = await resolvePlatformId(env, publishableKey);
+
+				const item = deletedSubscription.items.data[0];
+				const price = item?.price;
+				const priceId = price?.id ?? null;
+				const productId = typeof price?.product === 'string' ? price.product : price?.product?.id ?? null;
+				const amount = price?.unit_amount ?? null;
+				const currency = price?.currency ?? null;
+				const canceledAt = deletedSubscription.canceled_at
+					? new Date(deletedSubscription.canceled_at * 1000).toISOString()
+					: new Date().toISOString();
+
+				if (eventPlatformId) {
+					await upsertSubscription(env, {
+						platformId: eventPlatformId,
+						userId: deletedUserId,
+						publishableKey: publishableKey || null,
+						plan: 'free',
+						priceId,
+						productId,
+						amount: amount ?? null,
+						currency: currency ?? null,
+						status: 'canceled',
+						currentPeriodEnd: null,
+						canceledAt,
+						cancelReason: (deletedSubscription.cancellation_details as any)?.comment ?? 'canceled',
+					});
+				} else {
+					console.warn(`[Webhook] Could not resolve platformId for pk ${publishableKey}, skipping subscription cancel upsert`);
+				}
 			} catch (err: unknown) { // Changed 'any' to 'unknown'
 				console.error(`❌ Failed to downgrade user ${deletedUserId}:`, (err as Error).message); // Type assertion
 				return new Response(
@@ -226,23 +309,8 @@ export async function handleStripeWebhook(
 			console.log(`Unhandled event type: ${event.type}`);
 	}
 
-	// ============================================================================
-	// MARK EVENT AS PROCESSED (Idempotency)
-	// ============================================================================
-	/**
-	 * Store event ID in KV to prevent duplicate processing
-	 *
-	 * TTL: 2592000 seconds = 30 days (matches Stripe's webhook retention)
-	 * Value: timestamp when processed (for debugging)
-	 *
-	 * This ensures if Stripe retries the same event, we return success immediately
-	 * without re-processing (updating Clerk metadata, etc)
-	 */
-	await env.USAGE_KV.put(
-		idempotencyKey,
-		new Date().toISOString(),
-		{ expirationTtl: 2592000 }  // 30 days
-	);
+	// Record event for idempotency/audit in D1
+	await recordEvent(env, event.id, eventPlatformId, event.type, 'stripe-webhook', body);
 
 	return new Response(JSON.stringify({ received: true }), { status: 200 });
 }

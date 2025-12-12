@@ -20,6 +20,7 @@
  */
 
 import { Env } from '../types';
+import { getPlatformFromPublishableKey, getPlatformFromSecretHash } from '../services/d1';
 
 /**
  * Result of API key verification
@@ -48,21 +49,39 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		// Look up publishableKey from secretKey hash
 		const publishableKey = await env.TOKENS_KV.get(`secretkey:${hashHex}:publishableKey`);
 
-		if (!publishableKey) {
-			console.warn(`[API Key] Invalid key: ${apiKey.substring(0, 12)}...`);
+		let pk = publishableKey;
+		let platformId = pk ? await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`) : null;
+
+		// Fallback to D1 if KV miss
+		if (!pk) {
+			const fromDb = await getPlatformFromSecretHash(env, hashHex);
+			if (!fromDb) {
+				console.warn(`[API Key] Invalid key: ${apiKey.substring(0, 12)}...`);
+				return null;
+			}
+			pk = fromDb.publishableKey;
+			platformId = fromDb.platformId;
+			// Rehydrate KV for hot path
+			await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
+			await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
+		}
+
+		if (!platformId && pk) {
+			platformId =
+				(await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`)) ||
+				(await getPlatformFromPublishableKey(env, pk));
+			if (platformId) {
+				await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
+			}
+		}
+
+		if (!pk || !platformId) {
+			console.error(`[API Key] No platformId/pk for key hash: ${hashHex}`);
 			return null;
 		}
 
-		// Look up platformId from publishableKey
-		const platformId = await env.TOKENS_KV.get(`publishablekey:${publishableKey}:platformId`);
-
-		if (!platformId) {
-			console.error(`[API Key] No platformId for publishableKey: ${publishableKey}`);
-			return null;
-		}
-
-		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${publishableKey}`);
-		return { platformId, publishableKey };
+		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${pk}`);
+		return { platformId, publishableKey: pk };
 	} catch (error) {
 		console.error('[API Key] Verification error:', error);
 		return null;

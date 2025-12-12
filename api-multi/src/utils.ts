@@ -45,6 +45,9 @@ export function validateEnv(env: Env): { valid: boolean; missing: string[] } {
 	if (!env.TOKENS_KV) {
 		missing.push('TOKENS_KV');
 	}
+	if (!env.DB) {
+		missing.push('DB');
+	}
 
 	return { valid: missing.length === 0, missing };
 }

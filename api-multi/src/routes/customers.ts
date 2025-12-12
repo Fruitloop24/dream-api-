@@ -24,6 +24,8 @@
 
 import { ClerkClient } from '@clerk/backend';
 import { Env } from '../types';
+import { upsertEndUser, upsertUsageSnapshot } from '../services/d1';
+import { getCurrentPeriod } from '../services/kv';
 
 interface CreateCustomerBody {
 	email: string;
@@ -84,6 +86,11 @@ export async function handleCreateCustomer(
 		});
 
 		console.log(`[Customers] Created user ${user.id} for platform ${platformId} (pk: ${publishableKey})`);
+
+		// Write to D1 for dashboard/SSOT
+		await upsertEndUser(env, platformId, publishableKey, user.id, body.email);
+		const period = getCurrentPeriod();
+		await upsertUsageSnapshot(env, platformId, user.id, body.plan || 'free', period.start, period.end, 0);
 
 		return new Response(
 			JSON.stringify({
@@ -229,6 +236,12 @@ export async function handleUpdateCustomer(
 				plan: body.plan || user.publicMetadata?.plan,
 			},
 		});
+
+		// Mirror plan to D1 usage snapshot (no counter change here)
+		if (body.plan) {
+			const period = getCurrentPeriod();
+			await upsertUsageSnapshot(env, platformId, customerId, body.plan, period.start, period.end, 0);
+		}
 
 		return new Response(
 			JSON.stringify({
