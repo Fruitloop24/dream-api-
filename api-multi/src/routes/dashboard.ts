@@ -1,4 +1,6 @@
+import { createClerkClient } from '@clerk/backend';
 import { Env } from '../types';
+import { ensureSubscriptionSchema } from '../services/d1';
 
 // Dashboard aggregator for a single platformId. Pulls data from D1 and KV and
 // optionally filters by a specific publishableKey for per-key views.
@@ -17,6 +19,8 @@ type SubscriptionRow = {
 	userId: string;
 	plan: string | null;
 	status: string | null;
+	subscriptionId?: string | null;
+	stripeCustomerId?: string | null;
 	currentPeriodEnd: string | null;
 	canceledAt: string | null;
 	priceId: string | null;
@@ -62,12 +66,18 @@ export async function handleDashboard(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
+		await ensureSubscriptionSchema(env);
 		// Tiers (for limits and display)
 		const tiersResult = await env.DB.prepare(
 			'SELECT name, displayName, price, "limit", priceId, productId, popular FROM tiers WHERE platformId = ?'
 		)
 			.bind(platformId)
 			.all<TierRow>();
+		const tierInfoByName: Record<string, TierRow> = {};
+		(tiersResult.results || []).forEach((t) => {
+			if (t.name) tierInfoByName[t.name.toLowerCase()] = t;
+			if (t.displayName) tierInfoByName[t.displayName.toLowerCase()] = t;
+		});
 		const tiers = (tiersResult.results || []).map((t) => ({
 			name: t.name,
 			displayName: t.displayName || t.name,
@@ -79,7 +89,8 @@ export async function handleDashboard(
 		}));
 
 		// Subscriptions
-		let subsQuery = 'SELECT userId, plan, status, currentPeriodEnd, canceledAt, priceId, productId, amount, currency, publishableKey FROM subscriptions WHERE platformId = ?';
+		let subsQuery =
+			'SELECT userId, plan, status, subscriptionId, stripeCustomerId, currentPeriodEnd, canceledAt, priceId, productId, amount, currency, publishableKey FROM subscriptions WHERE platformId = ?';
 		const subsResult = await env.DB.prepare(subsQuery)
 			.bind(platformId)
 			.all<SubscriptionRow & { publishableKey?: string | null }>();
@@ -150,7 +161,12 @@ export async function handleDashboard(
 			const u = usageMap.get(sub.userId);
 			const e = userMap.get(sub.userId);
 			const plan = sub.plan || u?.plan || 'free';
+			const tierInfo =
+				(typeof plan === 'string' && tierInfoByName[plan.toLowerCase()]) ||
+				(typeof plan === 'string' && tierInfoByName[plan]) ||
+				null;
 			const limit =
+				(tierInfo?.limit === null ? 'unlimited' : tierInfo?.limit) ||
 				tierLimitByName[plan] ||
 				(typeof plan === 'string' ? tierLimitByName[plan.toLowerCase()] : undefined) ||
 				0;
@@ -165,9 +181,11 @@ export async function handleDashboard(
 				periodEnd: u?.periodEnd || null,
 				currentPeriodEnd: sub.currentPeriodEnd,
 				canceledAt: sub.canceledAt,
-				priceId: sub.priceId,
-				productId: sub.productId,
-				amount: sub.amount,
+				subscriptionId: sub.subscriptionId || null,
+				stripeCustomerId: sub.stripeCustomerId || null,
+				priceId: sub.priceId || tierInfo?.priceId || null,
+				productId: sub.productId || tierInfo?.productId || null,
+				amount: sub.amount ?? (tierInfo?.price ? Math.round(tierInfo.price * 100) : null),
 				currency: sub.currency,
 				publishableKey: sub.publishableKey || null,
 			});
@@ -178,7 +196,12 @@ export async function handleDashboard(
 			if (customerMap.has(e.userId)) continue;
 			const u = usageMap.get(e.userId);
 			const plan = u?.plan || 'free';
+			const tierInfo =
+				(typeof plan === 'string' && tierInfoByName[plan.toLowerCase()]) ||
+				(typeof plan === 'string' && tierInfoByName[plan]) ||
+				null;
 			const limit =
+				(tierInfo?.limit === null ? 'unlimited' : tierInfo?.limit) ||
 				tierLimitByName[plan] ||
 				(typeof plan === 'string' ? tierLimitByName[plan.toLowerCase()] : undefined) ||
 				0;
@@ -193,15 +216,34 @@ export async function handleDashboard(
 				periodEnd: u?.periodEnd || null,
 				currentPeriodEnd: null,
 				canceledAt: null,
-				priceId: null,
-				productId: null,
-				amount: null,
+				subscriptionId: null,
+				stripeCustomerId: null,
+				priceId: tierInfo?.priceId || null,
+				productId: tierInfo?.productId || null,
+				amount: tierInfo?.price ? Math.round(tierInfo.price * 100) : null,
 				currency: null,
 				publishableKey: e.publishableKey || null,
 			});
 		}
 
 		const customers = Array.from(customerMap.values());
+
+		// Fallback: pull stripeCustomerId/subscriptionId from Clerk metadata if missing
+		const clerkSecret = env.CLERK_SECRET_KEY;
+		if (clerkSecret) {
+			const clerk = createClerkClient({ secretKey: clerkSecret });
+			for (const customer of customers) {
+				if (customer.subscriptionId && customer.stripeCustomerId) continue;
+				try {
+					const user = await clerk.users.getUser(customer.userId);
+					const meta = user.publicMetadata || {};
+					customer.subscriptionId = customer.subscriptionId || (meta as any).subscriptionId || null;
+					customer.stripeCustomerId = customer.stripeCustomerId || (meta as any).stripeCustomerId || null;
+				} catch (err) {
+					console.warn(`[Dashboard] Failed to fetch Clerk user ${customer.userId}:`, (err as Error).message);
+				}
+			}
+		}
 
 		const activeSubs = subscriptions.filter((s) => s.status === 'active').length;
 		const cancelingSubs = subscriptions.filter((s) => !!s.canceledAt).length;

@@ -4,6 +4,8 @@ type SubscriptionInput = {
 	platformId: string | null;
 	userId: string;
 	publishableKey?: string | null;
+	subscriptionId?: string | null;
+	stripeCustomerId?: string | null;
 	priceId?: string | null;
 	productId?: string | null;
 	plan?: string | null;
@@ -147,16 +149,37 @@ export async function recordEvent(
 		.run();
 }
 
+// Lightweight one-time schema helper so we can ship new columns safely without a migration runner.
+let subscriptionSchemaChecked = false;
+export async function ensureSubscriptionSchema(env: Env) {
+	if (subscriptionSchemaChecked) return;
+	subscriptionSchemaChecked = true;
+	// Add new columns if they are missing; ignore "duplicate column" errors.
+	try {
+		await env.DB.prepare('ALTER TABLE subscriptions ADD COLUMN subscriptionId TEXT').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+	try {
+		await env.DB.prepare('ALTER TABLE subscriptions ADD COLUMN stripeCustomerId TEXT').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+}
+
 export async function upsertSubscription(env: Env, sub: SubscriptionInput) {
+	await ensureSubscriptionSchema(env);
 	await env.DB.prepare(
 		`INSERT OR REPLACE INTO subscriptions
-      (platformId, userId, publishableKey, priceId, productId, plan, amount, currency, status, currentPeriodEnd, canceledAt, cancelReason, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      (platformId, userId, publishableKey, subscriptionId, stripeCustomerId, priceId, productId, plan, amount, currency, status, currentPeriodEnd, canceledAt, cancelReason, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
 	)
 		.bind(
 			sub.platformId,
 			sub.userId,
 			sub.publishableKey ?? null,
+			sub.subscriptionId ?? null,
+			sub.stripeCustomerId ?? null,
 			sub.priceId ?? null,
 			sub.productId ?? null,
 			sub.plan ?? null,
