@@ -40,11 +40,16 @@ type EndUserRow = {
 type ApiKeyRow = {
 	publishableKey: string;
 	secretKeyHash: string;
+	createdAt?: string;
 };
 
 type EventRow = {
 	type: string;
 	createdAt: string;
+};
+
+type StripeTokenRow = {
+	stripeUserId: string;
 };
 
 export async function handleDashboard(
@@ -99,6 +104,18 @@ export async function handleDashboard(
 		)
 			.bind(platformId)
 			.first<ApiKeyRow>();
+		const allKeysResult = await env.DB.prepare(
+			'SELECT publishableKey, secretKeyHash, createdAt FROM api_keys WHERE platformId = ? ORDER BY createdAt DESC'
+		)
+			.bind(platformId)
+			.all<ApiKeyRow>();
+
+		// Stripe account info (no secrets)
+		const stripeResult = await env.DB.prepare(
+			'SELECT stripeUserId FROM stripe_tokens WHERE platformId = ? LIMIT 1'
+		)
+			.bind(platformId)
+			.first<StripeTokenRow>();
 
 		// Recent events (webhook visibility)
 		const eventsResult = await env.DB.prepare(
@@ -200,6 +217,12 @@ export async function handleDashboard(
 			keys: {
 				publishableKey: keyResult?.publishableKey || null,
 				secretKeyMasked: keyResult ? '********' : null,
+				platformId,
+				apiKeys: (allKeysResult.results || []).map((k) => ({
+					publishableKey: k.publishableKey,
+					createdAt: k.createdAt || null,
+				})),
+				stripeAccountId: stripeResult?.stripeUserId || null,
 			},
 			webhook: {
 				lastEventAt: events[0]?.createdAt || null,

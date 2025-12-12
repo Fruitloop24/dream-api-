@@ -28,6 +28,8 @@ export default function Dashboard() {
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'canceling'>('all');
   const [search, setSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -201,6 +203,7 @@ export default function Dashboard() {
   const tiers = dashboard?.tiers || [];
   const keys = dashboard?.keys || {};
   const webhook = dashboard?.webhook || {};
+  const platformId = keys.platformId || _platformId;
 
   const activeSubs = metrics.activeSubs || 0;
   const cancelingSubs = metrics.cancelingSubs || 0;
@@ -218,6 +221,10 @@ export default function Dashboard() {
       return true;
     })
     .sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0));
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
 
   const renderUsageBar = (count: number, limit: number | string) => {
     const numericLimit = limit === 'unlimited' ? 100 : Number(limit || 1);
@@ -245,6 +252,18 @@ export default function Dashboard() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold mb-2">Welcome, {user?.firstName || 'there'}!</h2>
           <p className="text-gray-400">Your API is ready. Monitor customers, usage, and billing below.</p>
+          {platformId && (
+            <div className="mt-3 inline-flex items-center gap-2 text-sm text-gray-300 bg-gray-800 border border-gray-700 rounded px-3 py-1">
+              <span className="text-xs uppercase text-gray-500">Platform ID</span>
+              <span className="font-mono">{platformId}</span>
+              <button
+                onClick={() => copyToClipboard(platformId)}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                Copy
+              </button>
+            </div>
+          )}
         </div>
 
         {!publishableKey && !secretKey && (
@@ -277,9 +296,47 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-400 mb-1">Publishable Key</p>
                 <code className="block bg-gray-900 p-2 rounded text-sm break-all mb-2">{keys.publishableKey || publishableKey}</code>
                 <p className="text-sm text-gray-400 mb-1">Secret Key</p>
-                <code className="block bg-gray-900 p-2 rounded text-sm break-all">
-                  {secretKey || keys.secretKeyMasked || '********'}
-                </code>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-gray-900 p-2 rounded text-sm break-all">
+                    {showSecret ? secretKey || keys.secretKeyMasked || '********' : '********'}
+                  </code>
+                  <button
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="px-2 py-1 text-xs bg-gray-700 rounded border border-gray-600"
+                  >
+                    {showSecret ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-1">All API Keys</p>
+                  <div className="space-y-1">
+                    {(keys.apiKeys || []).map((k: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between bg-gray-900 px-2 py-1 rounded text-xs text-gray-300">
+                        <span className="truncate">{k.publishableKey}</span>
+                        <span className="text-gray-500">{k.createdAt ? new Date(k.createdAt).toLocaleDateString() : ''}</span>
+                      </div>
+                    ))}
+                    {(keys.apiKeys || []).length === 0 && (
+                      <div className="text-xs text-gray-500">No keys yet.</div>
+                    )}
+                  </div>
+                </div>
+                {keys.stripeAccountId && (
+                  <div className="mt-3 text-sm text-gray-300">
+                    <p className="text-xs text-gray-400 mb-1">Stripe account</p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs">{keys.stripeAccountId}</span>
+                      <a
+                        className="text-blue-400 text-xs hover:text-blue-300"
+                        href={`https://dashboard.stripe.com/test/connect/accounts/${keys.stripeAccountId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 lg:col-span-2">
                 <h3 className="text-lg font-bold mb-3">Tiers</h3>
@@ -337,7 +394,11 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {filteredCustomers.map((c: any) => (
-                      <tr key={c.userId} className="border-b border-gray-800">
+                      <tr
+                        key={c.userId}
+                        className="border-b border-gray-800 hover:bg-gray-900 cursor-pointer"
+                        onClick={() => setSelectedCustomer(c)}
+                      >
                         <td className="py-2 pr-4 text-gray-100">{c.email || c.userId}</td>
                         <td className="py-2 pr-4">
                           <span className="px-2 py-1 text-xs rounded bg-blue-900/50 border border-blue-700">
@@ -373,6 +434,41 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
+              {selectedCustomer && (
+                <div className="mt-4 bg-gray-900 border border-gray-800 rounded p-4 text-sm text-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-xs text-gray-500">User ID</p>
+                      <p className="font-mono text-xs">{selectedCustomer.userId}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                        onClick={() => copyToClipboard(selectedCustomer.userId)}
+                      >
+                        Copy ID
+                      </button>
+                      <button
+                        className="text-xs text-gray-400 hover:text-gray-200"
+                        onClick={() => setSelectedCustomer(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <DetailItem label="Email" value={selectedCustomer.email || '—'} />
+                    <DetailItem label="Plan" value={selectedCustomer.plan || 'free'} />
+                    <DetailItem label="Status" value={selectedCustomer.canceledAt ? 'Canceling' : selectedCustomer.status || 'active'} />
+                    <DetailItem label="Usage" value={`${selectedCustomer.usageCount || 0} / ${selectedCustomer.limit || 0}`} />
+                    <DetailItem label="Renews/Cancels" value={selectedCustomer.currentPeriodEnd ? new Date(selectedCustomer.currentPeriodEnd).toLocaleDateString() : '—'} />
+                    <DetailItem label="Stripe Customer" value={selectedCustomer.stripeCustomerId || selectedCustomer.customerId || '—'} />
+                    <DetailItem label="Subscription ID" value={selectedCustomer.subscriptionId || '—'} />
+                    <DetailItem label="Price ID" value={selectedCustomer.priceId || '—'} />
+                    <DetailItem label="Amount" value={selectedCustomer.amount ? `$${(selectedCustomer.amount / 100).toFixed(2)}` : '—'} />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Webhook health */}
@@ -416,6 +512,15 @@ function MetricCard({ label, value }: { label: string; value: string | number })
     <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
       <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</p>
       <p className="text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      <p className="text-sm text-gray-200 break-words">{value}</p>
     </div>
   );
 }
