@@ -44,6 +44,7 @@ secretkey:{sha256}:publishableKey → pk_live_xyz
 
 ### api-multi usage (D1-only)
 - Counters live in D1 (`usage_counts`). KV is no longer in the usage hot path. Rate limiter no-ops if USAGE_KV is missing.
+- Tiers load from D1 `tiers` first; KV `platform:{platformId}:tierConfig` is a cache.
 
 ---
 

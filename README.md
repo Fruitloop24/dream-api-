@@ -132,7 +132,7 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checko
 | Checkout redirect URL | Needs fix | Falls back to old `app.panacea-tech.net` domain; allow override via body |
 | Graceful cancel | TODO | Keep access until period end; currently downgrades when Stripe sends `customer.subscription.deleted` |
 | successUrl/cancelUrl | TODO | Let devs pass their own redirect URLs |
-| Tier config priceIds | Ensure KV hydrated | Checkout needs priceIds in tierConfig; D1 holds canonical tiers, hydrate KV as cache |
+| Tier config priceIds | Ensure KV hydrated | Checkout needs priceIds; tiers now stored in D1 and loaded first (KV is cache) |
 
 ---
 

@@ -65,9 +65,11 @@ interface ConfigTier {
   name: string;
   price: number;
   limit: number | 'unlimited';
-  features: string[];
-  popular: boolean;
-  stripePriceId: string | null;
+  features?: string[] | string;
+  popular?: boolean;
+  stripePriceId?: string | null;
+  priceId?: string | null;
+  productId?: string | null;
 }
 
 interface Config {
@@ -98,8 +100,49 @@ interface ConfigModule {
   config: Config;
 }
 
+async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | null> {
+  if (!platformId || !env.DB) return null;
+
+  const rows = await env.DB.prepare(
+    'SELECT name, displayName, price, "limit", priceId, productId, features, popular FROM tiers WHERE platformId = ?'
+  )
+    .bind(platformId)
+    .all<{
+      name: string;
+      displayName: string | null;
+      price: number;
+      limit: number | null;
+      priceId: string | null;
+      productId: string | null;
+      features: string | null;
+      popular: number | null;
+    }>();
+
+  if (!rows.results || rows.results.length === 0) return null;
+
+  const tiers: ConfigTier[] = rows.results.map((row) => ({
+    id: row.name,
+    name: row.displayName || row.name,
+    price: row.price,
+    limit: row.limit === null ? 'unlimited' : row.limit,
+    features: row.features ? JSON.parse(row.features) : [],
+    popular: !!row.popular,
+    stripePriceId: row.priceId,
+    priceId: row.priceId,
+    productId: row.productId,
+  }));
+
+  return { tiers };
+}
+
 async function loadConfig(env: Env, platformId?: string): Promise<Config> {
   try {
+    // Prefer D1 tiers if available
+    const dbConfig = await loadTiersFromDb(env, platformId);
+    if (dbConfig) {
+      return dbConfig;
+    }
+
     // MULTI-TENANT MODE: Read tier config from TOKENS_KV
     // oauth-api stores it at platform:{platformId}:tierConfig after product creation
     if (platformId && env?.TOKENS_KV) {
