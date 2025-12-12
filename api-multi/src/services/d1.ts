@@ -79,9 +79,10 @@ export async function upsertUsageInDb(
 ): Promise<{ success: boolean; usageCount: number; limit: number | 'unlimited'; plan: string }> {
 	const isUnlimited = limit === 'unlimited' || limit === Infinity;
 	const currentLimit = isUnlimited ? Number.MAX_SAFE_INTEGER : (limit as number);
+	const nowIso = new Date().toISOString();
 
 	// Upsert + atomic increment with guard
-	const result = await env.DB.prepare(
+	await env.DB.prepare(
 		`INSERT INTO usage_snapshots (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(platformId, userId) DO UPDATE SET
