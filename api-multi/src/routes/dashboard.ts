@@ -59,8 +59,7 @@ type StripeTokenRow = {
 export async function handleDashboard(
 	env: Env,
 	platformId: string,
-	corsHeaders: Record<string, string>,
-	filterPk?: string | null
+	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
 		// Tiers (for limits and display)
@@ -145,21 +144,9 @@ export async function handleDashboard(
 		const userMap = new Map<string, EndUserRow>();
 		for (const u of users) userMap.set(u.userId, u);
 
-		// Fetch labels for keys from KV (optional)
-		const keyLabels = new Map<string, string>();
-		if (allKeysResult.results) {
-			await Promise.all(
-				allKeysResult.results.map(async (k) => {
-					const lbl = await env.TOKENS_KV.get(`keylabel:${k.publishableKey}`);
-					if (lbl) keyLabels.set(k.publishableKey, lbl);
-				})
-			);
-		}
-
 		// Build customers from subscriptions first
 		const customerMap = new Map<string, any>();
 		for (const sub of subscriptions) {
-			if (filterPk && sub.publishableKey && sub.publishableKey !== filterPk) continue;
 			const u = usageMap.get(sub.userId);
 			const e = userMap.get(sub.userId);
 			const plan = sub.plan || u?.plan || 'free';
@@ -188,7 +175,6 @@ export async function handleDashboard(
 
 		// Add any end-users without subscriptions
 		for (const e of users) {
-			if (filterPk && e.publishableKey && e.publishableKey !== filterPk) continue;
 			if (customerMap.has(e.userId)) continue;
 			const u = usageMap.get(e.userId);
 			const plan = u?.plan || 'free';
@@ -240,7 +226,7 @@ export async function handleDashboard(
 				apiKeys: (allKeysResult.results || []).map((k) => ({
 					publishableKey: k.publishableKey,
 					createdAt: k.createdAt || null,
-					label: keyLabels.get(k.publishableKey) || null,
+					label: null,
 					status: k.status || null,
 				})),
 				stripeAccountId: stripeResult?.stripeUserId || null,

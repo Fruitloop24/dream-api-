@@ -270,8 +270,7 @@ export default {
 
 			// Dashboard aggregate (customers, tiers, metrics)
 			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
-				const filterPk = url.searchParams.get('pk');
-				return await handleDashboard(env, platformId, corsHeaders, filterPk);
+				return await handleDashboard(env, platformId, corsHeaders);
 			}
 
 			// Create Stripe Checkout session (upgrade flow)
@@ -284,44 +283,6 @@ export default {
 			if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
 				return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin);
-			}
-
-			// Create an additional API key (same platform)
-			// Note: platform-scoped; allows multiple keys per dev for different projects.
-			if (url.pathname === '/api/keys' && request.method === 'POST') {
-				const body = await request.json().catch(() => ({})) as { label?: string };
-				const label = body.label || null;
-
-				// Generate keys
-				const publishableKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}`;
-				const secretKey = `sk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
-
-				// Hash secretKey for secure storage
-				const encoder = new TextEncoder();
-				const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(secretKey));
-				const hashArray = Array.from(new Uint8Array(hashBuffer));
-				const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-
-				// Store in D1
-				await env.DB.prepare(
-					'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status) VALUES (?, ?, ?, ?)'
-				)
-					.bind(platformId, publishableKey, hashHex, 'active')
-					.run();
-
-				// Store label in KV (optional)
-				if (label) {
-					await env.TOKENS_KV.put(`keylabel:${publishableKey}`, label);
-				}
-
-				// KV mappings for auth
-				await env.TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
-				await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
-
-				return new Response(
-					JSON.stringify({ publishableKey, secretKey, label }),
-					{ status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-				);
 			}
 
 			// ====================================================================

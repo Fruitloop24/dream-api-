@@ -199,20 +199,13 @@ wrangler tail api-multi
 # Dashboard snapshot (per platform)
 curl https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
   -H "Authorization: Bearer sk_live_xxx"
-
-# Create another API key for same platform (optional label)
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/keys \
-  -H "Authorization: Bearer sk_live_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"label":"mobile-app"}'
 ```
 
 ---
 
 ## What’s New (Dec 12, 2025)
 
-- **Dashboard endpoint:** `/api/dashboard` aggregates customers (usage/subs), tiers, keys, metrics, webhook events. Optional `?pk=` filter for per-key views.
-- **Multiple API keys per platform:** `POST /api/keys` generates an additional pk/sk (label stored in KV).
+- **Dashboard endpoint:** `/api/dashboard` aggregates customers (usage/subs), tiers, keys, metrics, webhook events.
 - **Webhook storage:** `currentPeriodEnd` and `canceledAt` recorded on subscription updates for graceful cancel visibility.
 - **Product config:** UI supports subscription vs one-off products (price, limit for subs, optional inventory/image/description for one-off). OAuth worker creates products/prices accordingly.
-- **Frontend dashboard:** metrics cards, customers table with usage bars and cancel dates, key list with labels, webhook recent events, per-key filter.
+- **Frontend dashboard:** metrics cards, customers table with usage bars and cancel dates, key list, webhook recent events.

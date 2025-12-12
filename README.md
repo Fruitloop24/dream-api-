@@ -118,7 +118,6 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checko
 | `/webhook/stripe` | POST | Connect webhook |
 | `/api/tiers` | GET | List pricing tiers |
 | `/api/dashboard` | GET | Platform snapshot (customers, usage, tiers, metrics, events) |
-| `/api/keys` | POST | Create additional API key (optional label) |
 | `/health` | GET | Health check |
 
 **Base:** `https://api-multi.k-c-sheffield012376.workers.dev`
@@ -191,10 +190,6 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-port
   -H "Authorization: Bearer sk_live_xxx" \
   -H "Content-Type: application/json" \
   -H "X-User-Id: user_xxx"
-
-# Dashboard snapshot
-curl https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
-  -H "Authorization: Bearer sk_live_xxx"
 ```
 
 ---
