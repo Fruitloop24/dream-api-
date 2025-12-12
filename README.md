@@ -117,6 +117,8 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checko
 | `/api/customer-portal` | POST | Stripe billing portal |
 | `/webhook/stripe` | POST | Connect webhook |
 | `/api/tiers` | GET | List pricing tiers |
+| `/api/dashboard` | GET | Platform snapshot (customers, usage, tiers, metrics, events) |
+| `/api/keys` | POST | Create additional API key (optional label) |
 | `/health` | GET | Health check |
 
 **Base:** `https://api-multi.k-c-sheffield012376.workers.dev`
@@ -156,13 +158,52 @@ cd oauth-api && npm run dev       # :8789
 cd api-multi && npm run dev       # :8787
 ```
 
+### Quick Tests (curl)
+
+```bash
+# Create customer (free)
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customers \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","firstName":"Test","lastName":"User","password":"S3cure!Pass#2025$zY","plan":"free"}'
+
+# Usage check
+curl https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "X-User-Id: user_xxx" \
+  -H "X-User-Plan: free"
+
+# Track usage
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "X-User-Id: user_xxx" \
+  -H "X-User-Plan: free"
+
+# Create checkout (upgrade)
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: user_xxx" \
+  -d '{"tier": "pro", "successUrl": "https://example.com/success", "cancelUrl": "https://example.com/cancel"}'
+
+# Customer portal (cancel at period end)
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-portal \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: user_xxx"
+
+# Dashboard snapshot
+curl https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
+  -H "Authorization: Bearer sk_live_xxx"
+```
+
 ---
 
 ## Next Steps
 
-1. **Fix checkout redirect** - Update fallback URL or let devs pass `successUrl`
-2. **Hydrate tier config** - Ensure KV has priceIds (or read tiers from D1)
-3. **Dashboard** - Build off D1 tables (`end_users`, `usage_counts`, `subscriptions`, `events`)
+1. **Checkout redirect override** - allow success/cancel overrides everywhere
+2. **Hydrate tier config** - Ensure D1/KV have priceIds (used by checkout)
+3. **Dashboard polish** - Per-customer actions (portal/checkout/plan change), key management UI
 4. **SDK** - `npm install dream-api` for easy integration
 5. **AI Integration Helper** - Generate framework-specific code
 

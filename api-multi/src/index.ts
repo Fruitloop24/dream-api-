@@ -287,6 +287,7 @@ export default {
 			}
 
 			// Create an additional API key (same platform)
+			// Note: platform-scoped; allows multiple keys per dev for different projects.
 			if (url.pathname === '/api/keys' && request.method === 'POST') {
 				const body = await request.json().catch(() => ({})) as { label?: string };
 				const label = body.label || null;

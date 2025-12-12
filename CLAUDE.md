@@ -79,23 +79,13 @@ secretkey:{sha256}:publishableKey → pk_live_xyz
 ## Current Issues (Dec 9, 2025)
 
 ### 1. Checkout Redirect URL
-**Problem:** Falls back to `app.panacea-tech.net` (old domain)
-**Location:** `api-multi/src/routes/checkout.ts`
-```typescript
-const frontendUrl = origin || 'https://app.panacea-tech.net';  // ← needs update
-```
-**Fix options:**
-- Update fallback to `dream-frontend-dyn.pages.dev`
-- Let devs pass `successUrl`/`cancelUrl` in request body (preferred)
+- Allow successUrl/cancelUrl override in body (fallback still present in `api-multi/src/routes/checkout.ts`).
 
 ### 2. Graceful cancel
-**Problem:** Currently plan downgrades on `customer.subscription.deleted` (at period end). If deleted event is missed, plan could stay pro.
-**Next:** Store `current_period_end` from `customer.subscription.updated (cancel_at_period_end)` and downgrade after that if deleted is missed; optionally downgrade immediately when status becomes `canceled`.
-
-**Location:** `api-multi/src/stripe-webhook.ts`
+- Webhook now stores `currentPeriodEnd` + `canceledAt` on `customer.subscription.updated`. Access stays until Stripe sends `customer.subscription.deleted`. Optional safety: downgrade after period end if delete missed.
 
 ### 3. Checkout auth pattern (Standard Connect)
-**Now:** Prefer connected account OAuth `accessToken` (no `Stripe-Account`). Fallback: platform `STRIPE_SECRET_KEY` + `Stripe-Account` header if access token missing.
+- Prefer connected account OAuth `accessToken`. Fallback: platform `STRIPE_SECRET_KEY` + `Stripe-Account` header if access token missing.
 
 ---
 
@@ -205,4 +195,24 @@ curl https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
 
 # View worker logs
 wrangler tail api-multi
+
+# Dashboard snapshot (per platform)
+curl https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
+  -H "Authorization: Bearer sk_live_xxx"
+
+# Create another API key for same platform (optional label)
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/keys \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"mobile-app"}'
 ```
+
+---
+
+## What’s New (Dec 12, 2025)
+
+- **Dashboard endpoint:** `/api/dashboard` aggregates customers (usage/subs), tiers, keys, metrics, webhook events. Optional `?pk=` filter for per-key views.
+- **Multiple API keys per platform:** `POST /api/keys` generates an additional pk/sk (label stored in KV).
+- **Webhook storage:** `currentPeriodEnd` and `canceledAt` recorded on subscription updates for graceful cancel visibility.
+- **Product config:** UI supports subscription vs one-off products (price, limit for subs, optional inventory/image/description for one-off). OAuth worker creates products/prices accordingly.
+- **Frontend dashboard:** metrics cards, customers table with usage bars and cancel dates, key list with labels, webhook recent events, per-key filter.

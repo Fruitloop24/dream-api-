@@ -1,5 +1,8 @@
 import { Env } from '../types';
 
+// Dashboard aggregator for a single platformId. Pulls data from D1 and KV and
+// optionally filters by a specific publishableKey for per-key views.
+
 type TierRow = {
 	name: string;
 	displayName: string | null;

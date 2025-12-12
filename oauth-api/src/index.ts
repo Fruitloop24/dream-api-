@@ -294,7 +294,7 @@ export default {
 
       try {
         for (const tier of tiers) {
-          const billingMode = tier.billingMode || 'subscription';
+          const billingMode = tier.billingMode || 'subscription'; // fallback to recurring
 
           // Create product
           const productResponse = await fetch('https://api.stripe.com/v1/products', {
