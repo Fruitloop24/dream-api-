@@ -95,7 +95,19 @@ export async function upsertUsageInDb(
        updatedAt=CURRENT_TIMESTAMP
      WHERE usage_snapshots.usageCount + ? <= ?`
 	)
-		.bind(platformId, userId, plan, periodStart, periodEnd, incrementBy, incrementBy, currentLimit, incrementBy, currentLimit)
+		.bind(
+			platformId,
+			userId,
+			plan,
+			periodStart,
+			periodEnd,
+			incrementBy, // initial insert usageCount
+			incrementBy, // CASE guard +
+			currentLimit, // CASE guard limit
+			incrementBy, // CASE increment
+			incrementBy, // WHERE guard +
+			currentLimit // WHERE guard limit
+		)
 		.run();
 
 	const row = await env.DB.prepare(
