@@ -46,40 +46,18 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-		// Prefer D1 (authoritative), then KV as cache
-		let pk: string | null = null;
-		let platformId: string | null = null;
-
+		// D1 is authoritative for keys
 		const fromDb = await getPlatformFromSecretHash(env, hashHex);
-		if (fromDb) {
-			pk = fromDb.publishableKey;
-			platformId = fromDb.platformId;
-		} else {
-			const publishableKey = await env.TOKENS_KV.get(`secretkey:${hashHex}:publishableKey`);
-			pk = publishableKey;
-			platformId = pk ? await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`) : null;
-		}
-
-		// If we found via DB, rehydrate KV for hot path
-		if (fromDb && pk && platformId) {
-			await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
-			await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
-		}
-
-		if (!platformId && pk) {
-			platformId =
-				(await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`)) ||
-				(await getPlatformFromPublishableKey(env, pk));
-			if (platformId) {
-				await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
-			}
-		}
-
-		if (!pk || !platformId) {
-			console.error(`[API Key] Missing pk/platform for hash ${hashHex}, pk: ${pk}, platformId: ${platformId}`);
-			console.error(`[API Key] No platformId/pk for key hash: ${hashHex}`);
+		if (!fromDb) {
+			console.warn(`[API Key] Invalid key hash: ${hashHex}`);
 			return null;
 		}
+
+		const pk = fromDb.publishableKey;
+		const platformId = fromDb.platformId;
+		// Best-effort rehydrate KV cache
+		await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
+		await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
 
 		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${pk}`);
 		return { platformId, publishableKey: pk };
