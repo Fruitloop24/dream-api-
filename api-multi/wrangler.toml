@@ -19,7 +19,7 @@ database_id = "07e784d5-2c3f-4bb0-a79c-094c1d05410f"
 
 # Optional: R2 bucket for hosted product images
 [[r2_buckets]]
-binding = "ASSETS_BUCKET"
+binding = "dream_api_assets"
 bucket_name = "dream-api-assets"
 preview_bucket_name = "dream-api-assets"
 

@@ -32,7 +32,7 @@ export interface Env {
 	STRIPE_WEBHOOK_SECRET?: string;     // For Connect webhook verification (per-platform)
 
 	// Optional R2 bucket for hosted product images (one-off store)
-	ASSETS_BUCKET?: R2Bucket;
+	dream_api_assets?: R2Bucket;
 }
 
 /**
