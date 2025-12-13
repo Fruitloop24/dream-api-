@@ -26,6 +26,7 @@ export default function ApiTierConfig() {
   const navigate = useNavigate();
   const { user } = useUser();
   const { getToken } = useAuth();
+  const [mode, setMode] = useState<'test' | 'live'>('test');
   const [sellingMode, setSellingMode] = useState<'subscription' | 'one_off'>('subscription');
   const [tiers, setTiers] = useState<Tier[]>([
     { name: 'free', displayName: 'Free', price: 0, limit: 100, billingMode: 'subscription', description: 'Free plan', inventory: null, features: '' },
@@ -123,7 +124,7 @@ export default function ApiTierConfig() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId: user?.id, tiers }),
+        body: JSON.stringify({ userId: user?.id, tiers, mode }),
       });
 
       if (response.ok) {
@@ -156,6 +157,31 @@ export default function ApiTierConfig() {
           <h2 className="text-lg font-semibold text-slate-900 mb-2">What are you selling?</h2>
           <p className="text-sm text-slate-600 mb-4">
             Keep flows separate: subscriptions for SaaS/courses with usage limits; one-off for store/cart (no limits, cart checkout).
+          </p>
+          <div className="flex gap-3 mb-4">
+            <button
+              onClick={() => setMode('test')}
+              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
+                mode === 'test'
+                  ? 'bg-amber-100 text-amber-900 border-amber-500'
+                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
+              }`}
+            >
+              Test mode (recommended first)
+            </button>
+            <button
+              onClick={() => setMode('live')}
+              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
+                mode === 'live'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
+              }`}
+            >
+              Live mode
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">
+            We’ll create {mode === 'test' ? 'test' : 'live'} Stripe products and {mode} API keys. Start in test, then rerun in live to ship.
           </p>
           <div className="flex gap-3">
             <button

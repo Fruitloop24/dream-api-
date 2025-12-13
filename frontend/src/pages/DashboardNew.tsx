@@ -32,6 +32,9 @@ export default function Dashboard() {
   const [showSecret, setShowSecret] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [mode, setMode] = useState<'test' | 'live'>('test');
+  const [testPublishableKey, setTestPublishableKey] = useState('');
+  const [testSecretKey, setTestSecretKey] = useState('');
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -67,11 +70,11 @@ export default function Dashboard() {
   }, [hasPaid, publishableKey]);
 
   useEffect(() => {
-    if (hasPaid && secretKey) {
+    if (hasPaid && (secretKey || testSecretKey)) {
       loadDashboard();
       loadProducts();
     }
-  }, [hasPaid, secretKey]);
+  }, [hasPaid, secretKey, testSecretKey, mode]);
 
   // Check if Stripe is connected (check URL params after OAuth)
   useEffect(() => {
@@ -122,6 +125,8 @@ export default function Dashboard() {
         setPlatformId(data.platformId);
         setPublishableKey(data.publishableKey);
         setSecretKey(data.secretKey);
+        setTestPublishableKey(data.testPublishableKey || '');
+        setTestSecretKey(data.testSecretKey || '');
       } else {
         // Keys not generated yet (need to configure tiers first)
         console.log('[Dashboard] Credentials not ready yet');
@@ -165,9 +170,15 @@ export default function Dashboard() {
   const loadProducts = async () => {
     try {
       setLoadingProducts(true);
+      const selectedSecret = mode === 'test' ? (testSecretKey || secretKey) : (secretKey || testSecretKey);
+      if (!selectedSecret) {
+        setLoadingProducts(false);
+        return;
+      }
       const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/products', {
         headers: {
-          'Authorization': `Bearer ${secretKey}`,
+          'Authorization': `Bearer ${selectedSecret}`,
+          'X-Env': mode,
         },
       });
       if (response.ok) {
@@ -186,9 +197,15 @@ export default function Dashboard() {
   const loadDashboard = async () => {
     try {
       setLoadingDashboard(true);
+      const selectedSecret = mode === 'test' ? (testSecretKey || secretKey) : (secretKey || testSecretKey);
+      if (!selectedSecret) {
+        setLoadingDashboard(false);
+        return;
+      }
       const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard', {
         headers: {
-          'Authorization': `Bearer ${secretKey}`,
+          'Authorization': `Bearer ${selectedSecret}`,
+          'X-Env': mode,
         },
       });
       if (response.ok) {
@@ -316,13 +333,39 @@ export default function Dashboard() {
             {/* Keys & tiers */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-lg font-bold mb-3">Keys</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-bold">Keys</h3>
+                  <div className="flex gap-2 text-xs">
+                    <button
+                      onClick={() => setMode('test')}
+                      className={`px-2 py-1 rounded border ${
+                        mode === 'test' ? 'bg-amber-200 text-amber-900 border-amber-400' : 'bg-gray-900 text-gray-300 border-gray-700'
+                      }`}
+                    >
+                      Test
+                    </button>
+                    <button
+                      onClick={() => setMode('live')}
+                      className={`px-2 py-1 rounded border ${
+                        mode === 'live' ? 'bg-green-200 text-green-900 border-green-400' : 'bg-gray-900 text-gray-300 border-gray-700'
+                      }`}
+                    >
+                      Live
+                    </button>
+                  </div>
+                </div>
                 <p className="text-sm text-gray-400 mb-1">Publishable Key</p>
-                <code className="block bg-gray-900 p-2 rounded text-sm break-all mb-2">{keys.publishableKey || publishableKey}</code>
+                <code className="block bg-gray-900 p-2 rounded text-sm break-all mb-2">
+                  {mode === 'test' ? (testPublishableKey || keys.publishableKey || publishableKey) : (publishableKey || testPublishableKey)}
+                </code>
                 <p className="text-sm text-gray-400 mb-1">Secret Key</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-gray-900 p-2 rounded text-sm break-all">
-                    {showSecret ? secretKey || keys.secretKeyMasked || '********' : '********'}
+                    {showSecret
+                      ? mode === 'test'
+                        ? (testSecretKey || secretKey || keys.secretKeyMasked || '********')
+                        : (secretKey || testSecretKey || keys.secretKeyMasked || '********')
+                      : '********'}
                   </code>
                   <button
                     onClick={() => setShowSecret(!showSecret)}
