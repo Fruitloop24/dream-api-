@@ -33,7 +33,6 @@ export default function ApiTierConfig() {
   ]);
   const [loading, setLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
-  const [uploadReady, setUploadReady] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
   // Check if coming from Stripe OAuth
@@ -43,26 +42,6 @@ export default function ApiTierConfig() {
       setStripeConnected(true);
     }
   }, []);
-
-  // Load secret key automatically (if already generated) for uploads
-  useEffect(() => {
-    const loadSecret = async () => {
-      try {
-        const token = await getToken({ template: 'dream-api' });
-        if (!token) return;
-        const res = await fetch(`${FRONT_AUTH_API}/get-credentials`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.secretKey) setUploadReady(true);
-        }
-      } catch (err) {
-        console.warn('Could not load credentials for uploads', err);
-      }
-    };
-    loadSecret();
-  }, [getToken]);
 
   const updateTier = (index: number, field: keyof Tier, value: any) => {
     const updated = [...tiers];
@@ -204,7 +183,7 @@ export default function ApiTierConfig() {
             This sets all products below. Use separate keys/platforms if you want both flows.
           </p>
           <p className="text-xs text-slate-500 mt-2">
-            Tip: we’ll upload product images under your platform automatically once keys are generated. Until then, paste external URLs.
+            Upload any product image right away; we’ll scope it to your platform automatically. Or paste an external URL if you prefer.
           </p>
         </div>
 
@@ -346,13 +325,10 @@ export default function ApiTierConfig() {
                         const file = e.target.files?.[0];
                         if (file) handleImageUpload(file, index);
                       }}
-                      disabled={uploadingIndex !== null || !uploadReady}
+                      disabled={uploadingIndex !== null}
                     />
                   </label>
                   {uploadingIndex === index && <span className="text-xs text-blue-600">Uploading...</span>}
-                  {!uploadReady && (
-                    <span className="text-xs text-amber-600">Finish Stripe connect + key gen, then upload, or paste an external URL.</span>
-                  )}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
                   Paste a hosted image URL or upload to our CDN (requires secret key above). Shown on product cards.

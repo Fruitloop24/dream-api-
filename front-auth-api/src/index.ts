@@ -34,6 +34,7 @@ interface Env {
   CLERK_PUBLISHABLE_KEY: string;
   CLERK_WEBHOOK_SECRET: string;
   FRONTEND_URL: string;
+  API_MULTI_URL?: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_PRICE_ID: string;
   STRIPE_WEBHOOK_SECRET: string;
@@ -476,8 +477,10 @@ export default {
           },
         });
 
+        const apiMultiBase = (env.API_MULTI_URL || 'https://api-multi.k-c-sheffield012376.workers.dev').replace(/\/$/, '');
+
         return new Response(
-          JSON.stringify({ key, url: `${env.FRONTEND_URL.replace(/\/$/, '')}/api/assets/${key}` }),
+          JSON.stringify({ key, url: `${apiMultiBase}/api/assets/${key}` }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

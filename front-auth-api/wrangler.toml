@@ -45,6 +45,7 @@ preview_bucket_name = "dream-api-assets"
 [vars]
 # Non-secret variables
 CLERK_JWT_TEMPLATE = "dream-api"
+API_MULTI_URL = "https://api-multi.k-c-sheffield012376.workers.dev"
 
 # Local development settings
 [dev]
