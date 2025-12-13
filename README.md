@@ -1,8 +1,8 @@
 # dream-api
 
-**$15/mo API** - Auth + billing + usage tracking for indie SaaS devs.
+**$15/mo API** - Auth, billing, usage tracking, and one-off checkout for indie devs.
 
-**Status:** MVP Working | **Updated:** Dec 11, 2025
+**Status:** Working | **Updated:** Current
 
 ---
 
@@ -26,10 +26,31 @@ await fetch('/api/data', {
 // Returns: { usage: { count: 1, limit: 100 } }
 // At limit: { error: "Tier limit reached", message: "Please upgrade" }
 
-// Upgrade via Stripe checkout (on THEIR Stripe account)
+// Upgrade via Stripe checkout (subscription on THEIR Stripe account)
 const checkout = await fetch('/api/create-checkout', {
   headers: { 'Authorization': 'Bearer sk_live_xxx', 'X-User-Id': customer.id },
   body: JSON.stringify({ tier: 'pro', successUrl: 'https://their-app.com/success' })
+});
+// Returns: { url: "https://checkout.stripe.com/..." }
+
+// List one-off products (store/cart)
+const products = await fetch('/api/products', {
+  headers: { 'Authorization': 'Bearer sk_live_xxx' }
+});
+
+// Cart checkout (one-off)
+const cart = await fetch('/api/cart/checkout', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer sk_live_xxx',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'buyer@example.com',
+    items: [{ priceId: 'price_xxx', quantity: 1 }],
+    successUrl: 'https://example.com/success',
+    cancelUrl: 'https://example.com/cancel'
+  })
 });
 // Returns: { url: "https://checkout.stripe.com/..." }
 ```
@@ -67,7 +88,7 @@ const checkout = await fetch('/api/create-checkout', {
 
 ---
 
-## Tested Flow (Dec 9, 2025)
+## Tested Flow
 
 ```bash
 # 1. Create customer
@@ -93,12 +114,19 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
 # → {"success":true,"usage":{"count":2,"limit":2}}
 # → {"error":"Tier limit reached","message":"Please upgrade"}
 
-# 4. Create checkout to upgrade
+# 4. Create checkout to upgrade (subscription)
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
   -H "Authorization: Bearer sk_live_xxx" \
   -H "X-User-Id: user_xxx" \
   -H "Content-Type: application/json" \
   -d '{"tier": "pro"}'
+# → {"url":"https://checkout.stripe.com/..."}
+
+# 5. One-off cart checkout
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/cart/checkout \
+  -H "Authorization: Bearer sk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"buyer@example.com","items":[{"priceId":"price_xxx","quantity":1}]}'
 # → {"url":"https://checkout.stripe.com/..."}
 ```
 
@@ -115,6 +143,8 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checko
 | `/api/usage` | GET | Check current usage |
 | `/api/create-checkout` | POST | Stripe checkout (upgrade) |
 | `/api/customer-portal` | POST | Stripe billing portal |
+| `/api/products` | GET | One-off products (store/cart) |
+| `/api/cart/checkout` | POST | One-off cart checkout |
 | `/webhook/stripe` | POST | Connect webhook |
 | `/api/tiers` | GET | List pricing tiers |
 | `/api/dashboard` | GET | Platform snapshot (customers, usage, tiers, metrics, events) |
@@ -126,14 +156,17 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checko
 
 ---
 
-## Known Issues
+## Modes & Keys
+- Test vs Live: product creation accepts `mode` (test/live) and issues mode-scoped pk/sk. Dashboard toggles between modes and can promote test config to live.
+- KV/D1 store tier configs, Stripe tokens, and keys per mode. Default headers use live unless `X-Env: test` is sent.
 
-| Issue | Status | Notes |
-|-------|--------|-------|
-| Checkout redirect URL | Needs fix | Falls back to old `app.panacea-tech.net` domain; allow override via body |
-| Graceful cancel | TODO | Keep access until period end; currently downgrades when Stripe sends `customer.subscription.deleted` |
-| successUrl/cancelUrl | TODO | Let devs pass their own redirect URLs |
-| Tier config priceIds | Ensure KV hydrated | Checkout needs priceIds; tiers now stored in D1 and loaded first (KV is cache) |
+## One-off inventory
+- Tiers include optional `inventory`; cart checkout blocks sold-out/over-qty; webhook decrements inventory on payment and marks sold out. `/api/products` surfaces `soldOut`.
+
+## Known Issues
+- Graceful cancel: still relies on Stripe `customer.subscription.deleted` (no sweeper).
+- Success/cancel URL defaults remain; body overrides recommended.
+- Test vs live products/priceIds are separate; ensure the correct mode when creating or promoting.
 
 ---
 

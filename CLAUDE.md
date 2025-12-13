@@ -1,211 +1,55 @@
 # dream-api - Technical Reference
 
-**Updated:** Dec 11, 2025 | **Status:** MVP Working (redirect override + grace cancel TODO)
-
----
+**Updated:** Current | **Status:** Working (grace cancel/redirect tweaks still pending)
 
 ## Quick Context
+API-as-a-Service: Devs pay you → get auth, billing, usage tracking, one-off cart checkout, and hosted dashboard. Two Clerk apps: platform devs (`dream-api`) and shared end-users (`end-user-api`, isolated by publishableKey).
 
-API-as-a-Service: Devs pay $15/mo → get white-label auth + billing API for their customers.
+## Keys & Modes
+- Keys per mode (test/live): `pk_mode_xxx`, `sk_mode_xxx`, tied to a stable `platformId (plt_xxx)`.
+- Mode is selected via `X-Env: test|live` (defaults to live). Promote endpoint clones test config to live products/keys.
 
-**Two Clerk apps:**
-- `dream-api` - Platform devs (pay you)
-- `end-user-api` - Their customers (shared multi-tenant, isolated by `publishableKey`)
-
-**Three keys:**
-- `platformId` (plt_xxx) - Internal, never changes, KV only
-- `publishableKey` (pk_live_xxx) - In end-user JWT, isolates data
-- `secretKey` (sk_live_xxx) - API auth, SHA-256 hashed
-
----
-
-## KV Structure
-
-### front-auth-api TOKENS_KV (`d09d8bf4e63a47c495384e9ed9b4ec7e`)
-```
-user:{userId}:platformId         → plt_abc123
-user:{userId}:publishableKey     → pk_live_xyz
-user:{userId}:secretKey          → sk_live_abc (plaintext)
-user:{userId}:products           → [{tier, priceId, productId}]
-user:{userId}:stripeToken        → {accessToken, stripeUserId}
-platform:{platformId}:userId     → userId
-platform:{platformId}:stripeToken → {accessToken, stripeUserId}
-publishablekey:{pk}:platformId   → plt_abc123
-secretkey:{sha256}:publishableKey → pk_live_xyz
-```
-
-### api-multi TOKENS_KV (`a9f3331b0c8b48d58c32896482484208`)
-```
-platform:{platformId}:tierConfig  → {tiers: [{name, limit, price, priceId}]}
-platform:{platformId}:stripeToken → {accessToken, stripeUserId}
-publishablekey:{pk}:platformId    → plt_abc123
-secretkey:{sha256}:publishableKey → pk_live_xyz
-```
-
-### api-multi usage (D1-only)
-- Counters live in D1 (`usage_counts`). KV is no longer in the usage hot path. Rate limiter no-ops if USAGE_KV is missing.
-- Tiers load from D1 `tiers` first; KV `platform:{platformId}:tierConfig` is a cache.
-
----
-
-## JWT Templates
-
-### dream-api (platform devs)
-```json
-{ "plan": "{{user.public_metadata.plan}}" }
-```
-
-### end-user-api (shared multi-tenant)
-```json
-{ "publishableKey": "{{user.public_metadata.publishableKey}}" }
-```
-
----
+## KV / D1 Structure (high level)
+- front-auth TOKENS_KV: `user:{userId}:platformId`, `publishableKey[:mode]`, `secretKey[:mode]`, `products[:mode]`, `stripeToken`, reverse lookups.
+- api-multi TOKENS_KV: `platform:{platformId}:tierConfig[:mode]`, `platform:{platformId}:stripeToken[:mode]`, reverse lookups.
+- D1 tables (mode-aware): `api_keys(mode)`, `stripe_tokens(mode)`, `tiers(mode, inventory, soldOut)`, `platforms`, `end_users`, `usage_counts`, `subscriptions`, `events`, `usage_snapshots`.
+- Assets: R2 bucket `dream-api-assets`, keys prefixed by platformId. Upload via front-auth `/upload-asset` (Clerk auth) or api-multi `/api/assets` (secret key). Public GET `/api/assets/<platformId/...>`.
 
 ## Key Files
+- api-multi/src/index.ts – main router (mode-aware)
+- api-multi/src/routes/checkout.ts – subscription checkout (mode-aware)
+- api-multi/src/routes/products.ts – one-off catalog + cart checkout (inventory checks)
+- api-multi/src/routes/assets.ts – asset serve/upload to R2
+- api-multi/src/stripe-webhook.ts – Connect webhooks; decrements one-off inventory on payment
+- oauth-api/src/index.ts – Stripe Connect OAuth, product creation (test/live), promote-to-live
+- front-auth-api/src/index.ts – platform auth/payment, credentials, asset upload (Clerk auth)
 
-| File | Purpose |
-|------|---------|
-| `api-multi/src/index.ts` | Main router, auth flow |
-| `api-multi/src/middleware/apiKey.ts` | SK verification → platformId + publishableKey |
-| `api-multi/src/routes/customers.ts` | Create/get/update customers in end-user-api |
-| `api-multi/src/routes/usage.ts` | Track usage (D1) and enforce tier limits |
-| `api-multi/src/routes/checkout.ts` | Stripe checkout on dev's account |
-| `api-multi/src/stripe-webhook.ts` | Handle Connect webhooks, update Clerk plan |
-| `oauth-api/src/index.ts` | Stripe Connect OAuth, product creation, key gen |
-
----
-
-## Current Issues (Dec 9, 2025)
-
-### 1. Checkout Redirect URL
-- Allow successUrl/cancelUrl override in body (fallback still present in `api-multi/src/routes/checkout.ts`).
-
-### 2. Graceful cancel
-- Webhook now stores `currentPeriodEnd` + `canceledAt` on `customer.subscription.updated`. Access stays until Stripe sends `customer.subscription.deleted`. Optional safety: downgrade after period end if delete missed.
-
-### 3. Checkout auth pattern (Standard Connect)
-- Prefer connected account OAuth `accessToken`. Fallback: platform `STRIPE_SECRET_KEY` + `Stripe-Account` header if access token missing.
-
----
-
-## Test Customer (Dec 9, 2025)
-
-```
-Name: Sharon Sheffield
-Email: sharon.sheffield@example.com
-ID: user_36cd84eF3m4MI8hDhgMnA63FxxS
-Plan: free (should be pro after payment)
-publishableKey: pk_live_xxx (check KV for actual value)
-```
-
----
-
-## Environment Variables
-
-### api-multi/.dev.vars
-```bash
-CLERK_SECRET_KEY=sk_test_...      # end-user-api Clerk
-CLERK_PUBLISHABLE_KEY=pk_test_...
-STRIPE_SECRET_KEY=sk_test_...     # YOUR platform Stripe (for Connect)
-STRIPE_WEBHOOK_SECRET=whsec_...   # Connect webhook signing secret
-FRONTEND_URL=http://localhost:5173
-```
-
-### oauth-api/.dev.vars
-```bash
-STRIPE_CLIENT_ID=ca_...           # Stripe Connect app ID
-STRIPE_CLIENT_SECRET=sk_test_...  # YOUR platform Stripe
-CLERK_SECRET_KEY=sk_test_...      # dream-api Clerk
-FRONTEND_URL=http://localhost:5173
-```
-
-### front-auth-api/.dev.vars
-```bash
-CLERK_SECRET_KEY=sk_test_...      # dream-api Clerk
-STRIPE_SECRET_KEY=sk_test_...     # YOUR platform Stripe
-STRIPE_PRICE_ID=price_...         # $15/mo product
-STRIPE_WEBHOOK_SECRET=whsec_...
-FRONTEND_URL=http://localhost:5173
-```
-
----
+## Current Notes
+- One-off inventory: enforced. Cart blocks sold-out/over-qty; webhook decrements inventory and marks soldOut. `/api/products` surfaces `soldOut`.
+- Test/live: mode stored on keys, tiers, stripe_tokens; `create-products` accepts `mode`; promote endpoint clones test config to live.
+- Checkout URLs: body overrides supported; legacy default remains.
+- Graceful cancel: still depends on Stripe `customer.subscription.deleted` (no sweeper).
 
 ## Data Model (D1)
-
-- `platforms(platformId, clerkUserId, createdAt)`
-- `api_keys(platformId, publishableKey, secretKeyHash, status, createdAt)`
-- `stripe_tokens(platformId, stripeUserId, accessToken, refreshToken, scope, createdAt)`
-- `tiers(platformId, name, displayName, price, limit, priceId, productId, features, popular, createdAt)`
-- `end_users(platformId, publishableKey, clerkUserId, email, status, createdAt, updatedAt)`
-- `usage_counts(platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)` ← usage gating
-- `subscriptions(platformId, userId, publishableKey, plan, priceId, productId, amount, currency, status, currentPeriodEnd, canceledAt, cancelReason, updatedAt)`
-- `events(platformId, source, type, eventId UNIQUE, payload_json, createdAt)`
-
-**Usage model:** D1-only for counters; tiers still loaded from TOKENS_KV (hydrate from D1 if KV missing).
-
----
+- platforms(platformId, clerkUserId, createdAt)
+- api_keys(platformId, publishableKey, secretKeyHash, status, mode, createdAt)
+- stripe_tokens(platformId, stripeUserId, accessToken, refreshToken, scope, mode, createdAt)
+- tiers(platformId, name, displayName, price, limit, priceId, productId, features JSON, popular, inventory, soldOut, mode, createdAt)
+- end_users(platformId, publishableKey, clerkUserId, email, status, createdAt, updatedAt)
+- usage_counts(platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+- subscriptions(platformId, userId, publishableKey, plan, priceId, productId, amount, currency, status, currentPeriodEnd, canceledAt, cancelReason, updatedAt)
+- events(platformId, source, type, eventId UNIQUE, payload_json, createdAt)
+- usage_snapshots(platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
 
 ## Deployment URLs
+- Frontend: https://dream-frontend-dyn.pages.dev
+- Platform: https://front-auth-api.k-c-sheffield012376.workers.dev
+- OAuth: https://oauth-api.k-c-sheffield012376.workers.dev
+- API: https://api-multi.k-c-sheffield012376.workers.dev
 
-```
-Frontend:  https://dream-frontend-dyn.pages.dev
-Platform:  https://front-auth-api.k-c-sheffield012376.workers.dev
-OAuth:     https://oauth-api.k-c-sheffield012376.workers.dev
-API:       https://api-multi.k-c-sheffield012376.workers.dev
-```
-
----
-
-## Architecture Decisions
-
-**Why 3 keys?** Key rotation without data migration. New pk/sk linked to same platformId.
-
-**Why duplicate KV?** api-multi needs fast tier lookups. Cross-namespace = +30ms per call.
-
-**Why shared Clerk?** One app for all devs' customers. Isolation via publishableKey in JWT.
-
-**Why Stripe Connect Standard?** Devs keep 100% revenue. No platform fees. They own the customer relationship.
-
----
-
-## Next Phase
-
-1. Fix checkout redirect (quick)
-2. Debug webhook (medium - need logs)
-3. D1 database for analytics
-4. Dashboard UI (customers, MRR, usage charts)
-5. SDK: `npm install dream-api`
-6. AI integration helper (generate framework-specific code)
-
----
-
-## Useful Commands
-
-```bash
-# Check Sharon's plan
-curl -X GET "https://api-multi.k-c-sheffield012376.workers.dev/api/customers/user_36cd84eF3m4MI8hDhgMnA63FxxS" \
-  -H "Authorization: Bearer sk_live_xxx"
-
-# Check usage
-curl https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
-  -H "Authorization: Bearer sk_live_xxx" \
-  -H "X-User-Id: user_36cd84eF3m4MI8hDhgMnA63FxxS" \
-  -H "X-User-Plan: free"
-
-# View worker logs
-wrangler tail api-multi
-
-# Dashboard snapshot (per platform)
-curl https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
-  -H "Authorization: Bearer sk_live_xxx"
-```
-
----
-
-## What’s New (Dec 12, 2025)
-
-- **Dashboard endpoint:** `/api/dashboard` aggregates customers (usage/subs), tiers, keys, metrics, webhook events.
-- **Webhook storage:** `currentPeriodEnd` and `canceledAt` recorded on subscription updates for graceful cancel visibility.
-- **Product config:** UI supports subscription vs one-off products (price, limit for subs, optional inventory/image/description for one-off). OAuth worker creates products/prices accordingly.
-- **Frontend dashboard:** metrics cards, customers table with usage bars and cancel dates, key list, webhook recent events.
+## Useful Calls
+- Products (one-off): `GET /api/products` (Bearer sk, optional `X-Env: test`)
+- Cart checkout: `POST /api/cart/checkout` `{email?, items:[{priceId,quantity}], successUrl?, cancelUrl?}` → `{url}`
+- Subscription checkout: `POST /api/create-checkout` `{tier|priceId, successUrl?, cancelUrl?}`
+- Assets upload: front-auth `/upload-asset` (Clerk auth, base64) or api-multi `/api/assets` (secret key)
+- Promote: `POST oauth-api/promote-to-live {userId}` clones test config to live keys/products
