@@ -588,6 +588,7 @@ export default {
         const testPublishableKey = await env.TOKENS_KV.get(`user:${userId}:publishableKey:test`);
         const testSecretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey:test`);
         const productsJson = await env.TOKENS_KV.get(`user:${userId}:products`);
+        const testProductsJson = await env.TOKENS_KV.get(`user:${userId}:products:test`);
 
         if (!publishableKey || !secretKey) {
           return new Response(
@@ -608,7 +609,8 @@ export default {
             secretKey,
             testPublishableKey,
             testSecretKey,
-            products
+            products,
+            testProducts: testProductsJson ? JSON.parse(testProductsJson) : []
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );

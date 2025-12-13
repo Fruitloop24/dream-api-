@@ -35,6 +35,7 @@ export default function Dashboard() {
   const [mode, setMode] = useState<'test' | 'live'>('test');
   const [testPublishableKey, setTestPublishableKey] = useState('');
   const [testSecretKey, setTestSecretKey] = useState('');
+  const [promoting, setPromoting] = useState(false);
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -221,6 +222,39 @@ export default function Dashboard() {
     }
   };
 
+  const handlePromoteToLive = async () => {
+    if (promoting) return;
+    try {
+      setPromoting(true);
+      const token = await getToken({ template: 'dream-api' });
+      const response = await fetch(`${FRONT_AUTH_API}/promote-to-live`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: user?.id }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        alert(`Promote failed: ${text}`);
+        return;
+      }
+      const data = await response.json();
+      setPublishableKey(data.publishableKey || publishableKey);
+      setSecretKey(data.secretKey || secretKey);
+      setMode('live');
+      await loadCredentials();
+      await loadDashboard();
+      await loadProducts();
+    } catch (err) {
+      console.error('Promote-to-live error', err);
+      alert('Failed to promote to live');
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   if (!isSignedIn) {
     return null;
   }
@@ -390,12 +424,21 @@ export default function Dashboard() {
                       <div className="text-xs text-gray-500">No keys yet.</div>
                     )}
                   </div>
-                  <div className="mt-3">
+                <div className="mt-3">
+                  {mode === 'test' && (
                     <button
-                      className="px-4 py-2 bg-blue-600 text-white rounded font-semibold"
-                      onClick={() => navigate('/api-tier-config')}
+                      className="px-4 py-2 bg-amber-500 text-white rounded font-semibold mr-2 disabled:opacity-60"
+                      onClick={handlePromoteToLive}
+                      disabled={promoting || !testSecretKey}
                     >
-                      Create New Project (New Key + Products)
+                      {promoting ? 'Promoting...' : 'Promote Test → Live'}
+                    </button>
+                  )}
+                  <button
+                    className="px-4 py-2 bg-blue-600 text-white rounded font-semibold"
+                    onClick={() => navigate('/api-tier-config')}
+                  >
+                    Create New Project (New Key + Products)
                     </button>
                     <p className="text-xs text-gray-500 mt-1">
                       Generate a fresh key by configuring products (subscription or one-off).

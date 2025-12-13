@@ -454,6 +454,7 @@ export default {
           await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
         }
         await env.PLATFORM_TOKENS_KV.put(`user:${userId}:products`, JSON.stringify(priceIds));
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:products:${mode}`, JSON.stringify(priceIds));
 
         // Reverse lookups
         await env.PLATFORM_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
@@ -580,3 +581,159 @@ export default {
     return new Response('Not Found', { status: 404 });
   },
 };
+    // Promote test config to live (reuse test tiers, create live prices/keys)
+    if (url.pathname === '/promote-to-live' && request.method === 'POST') {
+      const body = await request.json() as { userId: string };
+      const { userId } = body;
+      if (!userId) {
+        return new Response('Missing userId', { status: 400 });
+      }
+
+      // Get platformId (created during OAuth callback)
+      const platformId = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`);
+      if (!platformId) {
+        return new Response('Platform ID not found. Please connect Stripe first.', { status: 404 });
+      }
+
+      // Load test tier config from KV
+      const tierConfigJson = await env.CUSTOMER_TOKENS_KV.get(`platform:${platformId}:tierConfig:test`);
+      if (!tierConfigJson) {
+        return new Response('No test tier config found. Create test products first.', { status: 404 });
+      }
+      const tierConfig = JSON.parse(tierConfigJson) as { tiers: any[] };
+      if (!tierConfig.tiers || tierConfig.tiers.length === 0) {
+        return new Response('No test tiers found.', { status: 400 });
+      }
+
+      // Get Stripe credentials from PLATFORM_TOKENS_KV (front-auth-api namespace)
+      const stripeDataJson =
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`));
+      if (!stripeDataJson) {
+        return new Response('Stripe credentials not found. Please connect Stripe first.', { status: 404 });
+      }
+      const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+
+      // Create Stripe products/prices in live mode
+      try {
+        const priceIds: Array<{ tier: string; priceId: string; productId: string }> = [];
+        for (const tier of tierConfig.tiers) {
+          const billingMode = tier.billingMode || 'subscription';
+
+          // Create product
+          const productResponse = await fetch('https://api.stripe.com/v1/products', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${stripeData.accessToken}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: (() => {
+              const params = new URLSearchParams({
+                name: tier.displayName,
+                description: tier.description || '',
+                'metadata[platformId]': platformId,
+                'metadata[tierName]': tier.name,
+                'metadata[limit]': tier.limit?.toString() ?? '',
+              });
+              if (tier.imageUrl) params.append('images[]', tier.imageUrl);
+              return params;
+            })(),
+          });
+
+          if (!productResponse.ok) {
+            const error = await productResponse.text();
+            throw new Error(`Failed to create product: ${error}`);
+          }
+
+          const product = await productResponse.json() as { id: string };
+
+          const params = new URLSearchParams({
+            product: product.id,
+            unit_amount: (tier.price * 100).toString(),
+            currency: 'usd',
+            'metadata[platformId]': platformId,
+            'metadata[tierName]': tier.name,
+            'metadata[limit]': tier.limit?.toString() ?? '',
+          });
+
+          if (billingMode === 'subscription') {
+            params.set('recurring[interval]', 'month');
+          }
+
+          const priceResponse = await fetch('https://api.stripe.com/v1/prices', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${stripeData.accessToken}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: params,
+          });
+
+          if (!priceResponse.ok) {
+            const error = await priceResponse.text();
+            throw new Error(`Failed to create price: ${error}`);
+          }
+
+          const price = await priceResponse.json() as { id: string };
+
+          priceIds.push({
+            tier: tier.name,
+            priceId: price.id,
+            productId: product.id,
+          });
+        }
+
+        // Generate live keys
+        const publishableKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}`;
+        const secretKey = `sk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
+        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secretKey));
+        const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        // Build live tier config with product IDs
+        const liveTierConfig = tierConfig.tiers.map((tier, i) => ({
+          ...tier,
+          priceId: priceIds[i].priceId,
+          productId: priceIds[i].productId,
+          mode: 'live',
+        }));
+
+        // Persist in D1 and KV
+        await ensurePlatform(env, platformId, userId);
+        await upsertApiKey(env, platformId, publishableKey, hashHex, 'live');
+        await upsertTiers(env, platformId, liveTierConfig as TierInput[]);
+
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey`, publishableKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey:live`, publishableKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey:live`, secretKey);
+
+        await env.PLATFORM_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
+        await env.PLATFORM_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
+
+        await env.CUSTOMER_TOKENS_KV.put(
+          `platform:${platformId}:tierConfig:live`,
+          JSON.stringify({ tiers: liveTierConfig })
+        );
+        await env.CUSTOMER_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
+        await env.CUSTOMER_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
+        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken:live`, stripeDataJson);
+        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            publishableKey,
+            secretKey,
+            products: priceIds,
+            mode: 'live',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('[PromoteLive] Error:', error);
+        return new Response(
+          JSON.stringify({ error: error instanceof Error ? error.message : 'Failed to promote to live' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
