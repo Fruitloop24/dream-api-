@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 
 const OAUTH_API = import.meta.env.VITE_OAUTH_API_URL || 'http://localhost:8789';
+const API_MULTI = import.meta.env.VITE_API_MULTI_URL || 'http://localhost:8787';
 
 interface Tier {
   name: string;
@@ -31,6 +32,8 @@ export default function ApiTierConfig() {
   ]);
   const [loading, setLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
+  const [secretForUploads, setSecretForUploads] = useState('');
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
   // Check if coming from Stripe OAuth
   useEffect(() => {
@@ -56,6 +59,52 @@ export default function ApiTierConfig() {
         inventory: mode === 'one_off' ? tier.inventory ?? null : null,
       }))
     );
+  };
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1] || '';
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleImageUpload = async (file: File, index: number) => {
+    if (!secretForUploads) {
+      alert('Enter your secret key to upload images');
+      return;
+    }
+    try {
+      setUploadingIndex(index);
+      const base64 = await fileToBase64(file);
+      const res = await fetch(`${API_MULTI}/api/assets`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${secretForUploads}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          data: base64,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text);
+      }
+      const data = await res.json();
+      updateTier(index, 'imageUrl', data.url || '');
+    } catch (err) {
+      console.error('Upload failed', err);
+      alert('Upload failed. Check your secret key and try again.');
+    } finally {
+      setUploadingIndex(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -133,6 +182,19 @@ export default function ApiTierConfig() {
           <p className="text-xs text-slate-500 mt-3">
             This sets all products below. Use separate keys/platforms if you want both flows.
           </p>
+          <div className="mt-4">
+            <label className="block text-sm font-semibold text-slate-800 mb-2">Secret key (for image uploads to our CDN)</label>
+            <input
+              type="text"
+              value={secretForUploads}
+              onChange={(e) => setSecretForUploads(e.target.value)}
+              placeholder="sk_live_..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Optional: paste your secret key to upload product images to the built-in CDN (R2). You can still paste external image URLs without this.
+            </p>
+          </div>
         </div>
 
         {/* Stripe Connected Banner */}
@@ -263,6 +325,24 @@ export default function ApiTierConfig() {
                   placeholder="https://..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                 />
+                <div className="mt-2 flex items-center gap-3 text-sm text-slate-600">
+                  <label className="flex items-center gap-2">
+                    <span className="px-2 py-1 bg-slate-100 rounded border border-slate-200 text-xs">Upload</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(file, index);
+                      }}
+                      disabled={uploadingIndex !== null}
+                    />
+                  </label>
+                  {uploadingIndex === index && <span className="text-xs text-blue-600">Uploading...</span>}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Paste a hosted image URL or upload to our CDN (requires secret key above). Shown on product cards.
+                </div>
               </label>
 
               <label className="block mb-4">
