@@ -30,12 +30,13 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [showSecret, setShowSecret] = useState(false);
-  const [products, setProducts] = useState<any[]>([]);
+  const [productsByMode, setProductsByMode] = useState<{ test?: any[]; live?: any[] }>({});
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [mode, setMode] = useState<'test' | 'live'>('test');
   const [testPublishableKey, setTestPublishableKey] = useState('');
   const [testSecretKey, setTestSecretKey] = useState('');
   const [promoting, setPromoting] = useState(false);
+  const [dashboardByMode, setDashboardByMode] = useState<{ test?: any; live?: any }>({});
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -65,17 +66,23 @@ export default function Dashboard() {
 
   // Load credentials if user has paid
   useEffect(() => {
-    if (hasPaid && !publishableKey) {
+    if (hasPaid && (!publishableKey && !testPublishableKey)) {
       loadCredentials();
     }
-  }, [hasPaid, publishableKey]);
+  }, [hasPaid, publishableKey, testPublishableKey]);
 
   useEffect(() => {
     if (hasPaid && (secretKey || testSecretKey)) {
-      loadDashboard();
-      loadProducts();
+      const modesToLoad: Array<'test' | 'live'> = [];
+      if (testSecretKey) modesToLoad.push('test');
+      if (secretKey) modesToLoad.push('live');
+      modesToLoad.forEach((m) => {
+        loadDashboard(m);
+        loadProducts(m);
+      });
+      if (mode === 'test' && !testSecretKey && secretKey) setMode('live');
     }
-  }, [hasPaid, secretKey, testSecretKey, mode]);
+  }, [hasPaid, secretKey, testSecretKey]);
 
   // Check if Stripe is connected (check URL params after OAuth)
   useEffect(() => {
@@ -128,6 +135,7 @@ export default function Dashboard() {
         setSecretKey(data.secretKey);
         setTestPublishableKey(data.testPublishableKey || '');
         setTestSecretKey(data.testSecretKey || '');
+        if (data.publishableKey) setMode('live');
       } else {
         // Keys not generated yet (need to configure tiers first)
         console.log('[Dashboard] Credentials not ready yet');
@@ -168,10 +176,10 @@ export default function Dashboard() {
     window.location.href = oauthUrl;
   };
 
-  const loadProducts = async () => {
+  const loadProducts = async (whichMode: 'test' | 'live' = mode) => {
     try {
       setLoadingProducts(true);
-      const selectedSecret = mode === 'test' ? (testSecretKey || secretKey) : (secretKey || testSecretKey);
+      const selectedSecret = whichMode === 'test' ? (testSecretKey || secretKey) : (secretKey || testSecretKey);
       if (!selectedSecret) {
         setLoadingProducts(false);
         return;
@@ -179,12 +187,12 @@ export default function Dashboard() {
       const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/products', {
         headers: {
           'Authorization': `Bearer ${selectedSecret}`,
-          'X-Env': mode,
+          'X-Env': whichMode,
         },
       });
       if (response.ok) {
         const data = await response.json();
-        setProducts(data.products || []);
+        setProductsByMode((prev) => ({ ...prev, [whichMode]: data.products || [] }));
       } else {
         console.error('Failed to load products');
       }
@@ -195,10 +203,10 @@ export default function Dashboard() {
     }
   };
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (whichMode: 'test' | 'live' = mode) => {
     try {
       setLoadingDashboard(true);
-      const selectedSecret = mode === 'test' ? (testSecretKey || secretKey) : (secretKey || testSecretKey);
+      const selectedSecret = whichMode === 'test' ? (testSecretKey || secretKey) : (secretKey || testSecretKey);
       if (!selectedSecret) {
         setLoadingDashboard(false);
         return;
@@ -206,12 +214,12 @@ export default function Dashboard() {
       const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard', {
         headers: {
           'Authorization': `Bearer ${selectedSecret}`,
-          'X-Env': mode,
+          'X-Env': whichMode,
         },
       });
       if (response.ok) {
         const data = await response.json();
-        setDashboard(data);
+        setDashboardByMode((prev) => ({ ...prev, [whichMode]: data }));
       } else {
         console.error('Failed to load dashboard');
       }
@@ -273,17 +281,27 @@ export default function Dashboard() {
   }
 
   // PAID DASHBOARD (after subscription)
-  const metrics = dashboard?.metrics || {};
-  const customers = dashboard?.customers || [];
-  const tiers = dashboard?.tiers || [];
-  const keys = dashboard?.keys || {};
-  const webhook = dashboard?.webhook || {};
+  const currentDashboard = dashboardByMode[mode] || {};
+  const metrics = currentDashboard?.metrics || {};
+  const customers = currentDashboard?.customers || [];
+  const tiers = currentDashboard?.tiers || [];
+  const keys = currentDashboard?.keys || {};
+  const webhook = currentDashboard?.webhook || {};
   const platformId = keys.platformId || _platformId;
+  const products = productsByMode[mode] || [];
 
   const activeSubs = metrics.activeSubs || 0;
   const cancelingSubs = metrics.cancelingSubs || 0;
   const mrr = metrics.mrr || 0;
   const usageTotal = metrics.usageThisPeriod || 0;
+  const displayPublishable =
+    mode === 'test'
+      ? (testPublishableKey || keys.publishableKey || publishableKey)
+      : (publishableKey || keys.publishableKey || testPublishableKey);
+  const displaySecret =
+    mode === 'test'
+      ? (testSecretKey || keys.secretKey || secretKey)
+      : (secretKey || keys.secretKey || testSecretKey);
 
   const filteredCustomers = customers
     .filter((c: any) => {
@@ -371,7 +389,11 @@ export default function Dashboard() {
                   <h3 className="text-lg font-bold">Keys</h3>
                   <div className="flex gap-2 text-xs">
                     <button
-                      onClick={() => setMode('test')}
+                      onClick={() => {
+                        setMode('test');
+                        loadDashboard('test');
+                        loadProducts('test');
+                      }}
                       className={`px-2 py-1 rounded border ${
                         mode === 'test' ? 'bg-amber-200 text-amber-900 border-amber-400' : 'bg-gray-900 text-gray-300 border-gray-700'
                       }`}
@@ -379,7 +401,11 @@ export default function Dashboard() {
                       Test
                     </button>
                     <button
-                      onClick={() => setMode('live')}
+                      onClick={() => {
+                        setMode('live');
+                        loadDashboard('live');
+                        loadProducts('live');
+                      }}
                       className={`px-2 py-1 rounded border ${
                         mode === 'live' ? 'bg-green-200 text-green-900 border-green-400' : 'bg-gray-900 text-gray-300 border-gray-700'
                       }`}
@@ -390,15 +416,13 @@ export default function Dashboard() {
                 </div>
                 <p className="text-sm text-gray-400 mb-1">Publishable Key</p>
                 <code className="block bg-gray-900 p-2 rounded text-sm break-all mb-2">
-                  {mode === 'test' ? (testPublishableKey || keys.publishableKey || publishableKey) : (publishableKey || testPublishableKey)}
+                  {displayPublishable || '—'}
                 </code>
                 <p className="text-sm text-gray-400 mb-1">Secret Key</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-gray-900 p-2 rounded text-sm break-all">
                     {showSecret
-                      ? mode === 'test'
-                        ? (testSecretKey || secretKey || keys.secretKeyMasked || '********')
-                        : (secretKey || testSecretKey || keys.secretKeyMasked || '********')
+                      ? (displaySecret || keys.secretKeyMasked || '********')
                       : '********'}
                   </code>
                   <button
