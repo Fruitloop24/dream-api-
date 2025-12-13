@@ -1,7 +1,7 @@
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
 import { Env } from './types';
-import { getPlatformFromPublishableKey, isEventProcessed, recordEvent, upsertSubscription } from './services/d1';
+import { getPlatformFromPublishableKey, isEventProcessed, recordEvent, upsertSubscription, decrementInventory } from './services/d1';
 
 async function resolvePlatformId(env: Env, publishableKey: string | undefined | null): Promise<string | null> {
 	if (!publishableKey) return null;
@@ -12,6 +12,34 @@ async function resolvePlatformId(env: Env, publishableKey: string | undefined | 
 		await env.TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, fromDb);
 	}
 	return fromDb ?? null;
+}
+
+async function getDevStripeToken(platformId: string, env: Env): Promise<{ accessToken: string; stripeUserId: string } | null> {
+	const stripeDataJson = await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+	if (!stripeDataJson) return null;
+	return JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+}
+
+async function fetchLineItems(sessionId: string, accessToken: string): Promise<Array<{ priceId: string; quantity: number }>> {
+	const resp = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}/line_items`, {
+		method: 'GET',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+		},
+	});
+
+	if (!resp.ok) {
+		const errText = await resp.text();
+		throw new Error(`Failed to fetch line items: ${errText}`);
+	}
+
+	const data = await resp.json() as { data?: Array<{ price?: { id?: string } | string; quantity?: number }> };
+	const items = (data.data || []).map((li) => {
+		const priceId = typeof li.price === 'string' ? li.price : li.price?.id;
+		return { priceId: priceId || '', quantity: li.quantity || 1 };
+	}).filter((li) => li.priceId);
+
+	return items;
 }
 
 /**
@@ -101,70 +129,97 @@ export async function handleStripeWebhook(
 			console.log(`[Webhook] checkout.session.completed - userId: ${userId}`);
 			console.log(`[Webhook] session metadata:`, JSON.stringify(session.metadata));
 
-			if (!userId) {
-				console.error('No userId in checkout session');
-				return new Response(JSON.stringify({ error: 'No userId' }), { status: 400 });
-			}
-
-			// Get tier from session metadata (sent during checkout)
-			// IMPORTANT: Should always be present - if not, fail explicitly
-			const tier = session.metadata?.tier;
-			if (!tier) {
-				console.error('❌ No tier metadata in checkout session');
-				return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
-			}
-
-			console.log(`[Webhook] Attempting to update user ${userId} to plan: ${tier}`);
-			console.log(`[Webhook] Clerk secret key exists: ${!!env.CLERK_SECRET_KEY}`);
-
-			// Update Clerk user metadata with purchased tier
-			try {
-				// Fetch existing metadata to preserve publishableKey
-				const existingUser = await clerkClient.users.getUser(userId);
-				const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
-				const pkFromSession = session.metadata?.publishableKey as string | undefined;
-				const publishableKey = existingPk || pkFromSession;
-				eventPlatformId = await resolvePlatformId(env, publishableKey);
-
-				await clerkClient.users.updateUserMetadata(userId, {
-					publicMetadata: {
-						...existingUser.publicMetadata,
-						plan: tier,
-						stripeCustomerId: session.customer as string,
-						...(publishableKey ? { publishableKey } : {}),
-					},
-				});
-				console.log(`✅ Updated user ${userId} to ${tier} plan after checkout`);
-
-				// Upsert subscription snapshot (if we can resolve platform)
-				if (eventPlatformId) {
-					await upsertSubscription(env, {
-						platformId: eventPlatformId,
-						userId,
-						publishableKey: publishableKey || null,
-						subscriptionId: (session.subscription as string) || null,
-						stripeCustomerId: (session.customer as string) || null,
-						plan: tier,
-						amount: session.amount_total ?? null,
-						currency: session.currency ?? null,
-						status: 'active',
-						priceId: (session.metadata as any)?.priceId ?? null,
-						productId: null,
-						currentPeriodEnd: null,
-						canceledAt: null,
-						cancelReason: null,
-					});
-				} else {
-					console.warn(`[Webhook] Could not resolve platformId for pk ${publishableKey}, skipping subscription upsert`);
+			// Subscription checkout
+			if (session.mode === 'subscription') {
+				if (!userId) {
+					console.error('No userId in checkout session');
+					return new Response(JSON.stringify({ error: 'No userId' }), { status: 400 });
 				}
-			} catch (err: unknown) { // Changed 'any' to 'unknown'
-				const error = err as Error;
-				console.error(`❌ Failed to update user ${userId}:`, error.message);
-				console.error(`❌ Full error:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-				return new Response(
-					JSON.stringify({ error: 'Failed to update user metadata', details: error.message }),
-					{ status: 500 }
-				);
+
+				// Get tier from session metadata (sent during checkout)
+				const tier = session.metadata?.tier;
+				if (!tier) {
+					console.error('❌ No tier metadata in checkout session');
+					return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
+				}
+
+				console.log(`[Webhook] Attempting to update user ${userId} to plan: ${tier}`);
+				console.log(`[Webhook] Clerk secret key exists: ${!!env.CLERK_SECRET_KEY}`);
+
+				// Update Clerk user metadata with purchased tier
+				try {
+					// Fetch existing metadata to preserve publishableKey
+					const existingUser = await clerkClient.users.getUser(userId);
+					const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
+					const pkFromSession = session.metadata?.publishableKey as string | undefined;
+					const publishableKey = existingPk || pkFromSession;
+					eventPlatformId = await resolvePlatformId(env, publishableKey);
+
+					await clerkClient.users.updateUserMetadata(userId, {
+						publicMetadata: {
+							...existingUser.publicMetadata,
+							plan: tier,
+							stripeCustomerId: session.customer as string,
+							...(publishableKey ? { publishableKey } : {}),
+						},
+					});
+					console.log(`✅ Updated user ${userId} to ${tier} plan after checkout`);
+
+					// Upsert subscription snapshot (if we can resolve platform)
+					if (eventPlatformId) {
+						await upsertSubscription(env, {
+							platformId: eventPlatformId,
+							userId,
+							publishableKey: publishableKey || null,
+							subscriptionId: (session.subscription as string) || null,
+							stripeCustomerId: (session.customer as string) || null,
+							plan: tier,
+							amount: session.amount_total ?? null,
+							currency: session.currency ?? null,
+							status: 'active',
+							priceId: (session.metadata as any)?.priceId ?? null,
+							productId: null,
+							currentPeriodEnd: null,
+							canceledAt: null,
+							cancelReason: null,
+						});
+					} else {
+						console.warn(`[Webhook] Could not resolve platformId for pk ${publishableKey}, skipping subscription upsert`);
+					}
+				} catch (err: unknown) { // Changed 'any' to 'unknown'
+					const error = err as Error;
+					console.error(`❌ Failed to update user ${userId}:`, error.message);
+					console.error(`❌ Full error:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+					return new Response(
+						JSON.stringify({ error: 'Failed to update user metadata', details: error.message }),
+						{ status: 500 }
+					);
+				}
+			}
+
+			// One-off checkout: decrement inventory
+			if (session.mode === 'payment') {
+				const publishableKey = session.metadata?.publishableKey as string | undefined;
+				eventPlatformId = await resolvePlatformId(env, publishableKey);
+				if (!eventPlatformId) {
+					console.warn('[Webhook] No platformId resolved for one-off checkout');
+					break;
+				}
+
+				const stripeToken = await getDevStripeToken(eventPlatformId, env);
+				if (!stripeToken) {
+					console.warn('[Webhook] No Stripe token for platform during one-off inventory update');
+					break;
+				}
+
+				const items = await fetchLineItems(session.id, stripeToken.accessToken);
+				if (items.length === 0) {
+					console.warn('[Webhook] No line items found for one-off session');
+					break;
+				}
+
+				await decrementInventory(env, eventPlatformId, items);
+				console.log(`[Webhook] Decremented inventory for platform ${eventPlatformId}`, items);
 			}
 			break;
 		}

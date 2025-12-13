@@ -100,9 +100,26 @@ type TierInput = {
   productId: string;
 };
 
+let tierSchemaChecked = false;
+async function ensureTierSchema(env: Env) {
+  if (tierSchemaChecked) return;
+  tierSchemaChecked = true;
+  try {
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN inventory INTEGER').run();
+  } catch (err) {
+    /* no-op */
+  }
+  try {
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN soldOut INTEGER DEFAULT 0').run();
+  } catch (err) {
+    /* no-op */
+  }
+}
+
 async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
+  await ensureTierSchema(env);
   const stmt = env.DB.prepare(
-    'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId, inventory, soldOut) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   for (const tier of tiers) {
     const featuresStr = JSON.stringify({
@@ -124,7 +141,9 @@ async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
         featuresStr,
         popularFlag,
         tier.priceId,
-        tier.productId
+        tier.productId,
+        tier.inventory ?? null,
+        tier.inventory !== null && tier.inventory !== undefined ? (tier.inventory <= 0 ? 1 : 0) : 0
       )
       .run();
   }

@@ -418,11 +418,15 @@ export default function Dashboard() {
                         <p className="font-semibold text-gray-100">{p.displayName || p.name}</p>
                         <p className="text-sm text-gray-400">${p.price?.toFixed(2) ?? '0.00'}</p>
                       </div>
-                      {p.inventory !== null && (
+                      {p.soldOut ? (
+                        <span className="text-xs px-2 py-1 bg-red-900/60 border border-red-800 rounded text-red-100">
+                          Sold out
+                        </span>
+                      ) : p.inventory !== null ? (
                         <span className="text-xs px-2 py-1 bg-slate-800 border border-slate-700 rounded text-gray-200">
                           {p.inventory} left
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     {p.description && <p className="text-xs text-gray-400 mt-2 line-clamp-3">{p.description}</p>}
                     {Array.isArray(p.features) && p.features.length > 0 && (

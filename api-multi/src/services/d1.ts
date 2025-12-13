@@ -17,6 +17,24 @@ type SubscriptionInput = {
 	cancelReason?: string | null;
 };
 
+// Track whether we already checked/added tier columns for inventory
+let tierSchemaChecked = false;
+
+export async function ensureTierSchema(env: Env) {
+	if (tierSchemaChecked) return;
+	tierSchemaChecked = true;
+	try {
+		await env.DB.prepare('ALTER TABLE tiers ADD COLUMN inventory INTEGER').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+	try {
+		await env.DB.prepare('ALTER TABLE tiers ADD COLUMN soldOut INTEGER DEFAULT 0').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+}
+
 export async function getPlatformFromSecretHash(
 	env: Env,
 	secretKeyHash: string
@@ -30,6 +48,7 @@ export async function getPlatformFromSecretHash(
 }
 
 export async function getPlatformFromPublishableKey(env: Env, pk: string): Promise<string | null> {
+	await ensureTierSchema(env);
 	const row = await env.DB.prepare(
 		'SELECT platformId FROM api_keys WHERE publishableKey = ? LIMIT 1'
 	)
@@ -191,4 +210,34 @@ export async function upsertSubscription(env: Env, sub: SubscriptionInput) {
 			sub.cancelReason ?? null
 		)
 		.run();
+}
+
+export async function decrementInventory(
+	env: Env,
+	platformId: string,
+	items: { priceId: string; quantity: number }[]
+): Promise<void> {
+	if (!items.length) return;
+	await ensureTierSchema(env);
+
+	for (const item of items) {
+		const qty = Math.max(1, Math.floor(item.quantity || 1));
+		await env.DB.prepare(
+			`UPDATE tiers
+       SET
+         inventory = CASE
+           WHEN inventory IS NULL THEN NULL
+           WHEN inventory - ? < 0 THEN 0
+           ELSE inventory - ?
+         END,
+         soldOut = CASE
+           WHEN inventory IS NULL THEN soldOut
+           WHEN inventory - ? <= 0 THEN 1
+           ELSE 0
+         END
+       WHERE platformId = ? AND priceId = ?`
+		)
+			.bind(qty, qty, qty, platformId, item.priceId)
+			.run();
+	}
 }

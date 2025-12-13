@@ -1,6 +1,6 @@
 import { createClerkClient } from '@clerk/backend';
 import { Env } from '../types';
-import { ensureSubscriptionSchema } from '../services/d1';
+import { ensureSubscriptionSchema, ensureTierSchema } from '../services/d1';
 
 // Dashboard aggregator for a single platformId. Pulls data from D1 and KV and
 // optionally filters by a specific publishableKey for per-key views.
@@ -13,6 +13,8 @@ type TierRow = {
 	priceId: string | null;
 	productId: string | null;
 	popular: number | null;
+	inventory?: number | null;
+	soldOut?: number | null;
 };
 
 type SubscriptionRow = {
@@ -67,9 +69,10 @@ export async function handleDashboard(
 ): Promise<Response> {
 	try {
 		await ensureSubscriptionSchema(env);
+		await ensureTierSchema(env);
 		// Tiers (for limits and display)
 		const tiersResult = await env.DB.prepare(
-			'SELECT name, displayName, price, "limit", priceId, productId, popular FROM tiers WHERE platformId = ?'
+			'SELECT name, displayName, price, "limit", priceId, productId, popular, inventory, soldOut FROM tiers WHERE platformId = ?'
 		)
 			.bind(platformId)
 			.all<TierRow>();
@@ -86,6 +89,8 @@ export async function handleDashboard(
 			priceId: t.priceId,
 			productId: t.productId,
 			popular: !!t.popular,
+			inventory: t.inventory ?? null,
+			soldOut: !!t.soldOut || (typeof t.inventory === 'number' && t.inventory <= 0),
 		}));
 
 		// Subscriptions

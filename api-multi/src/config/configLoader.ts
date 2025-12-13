@@ -43,6 +43,7 @@
  */
 
 import { TierConfig, Env } from '../types';
+import { ensureTierSchema } from '../services/d1';
 
 interface Branding {
   appName: string;
@@ -71,6 +72,7 @@ interface ConfigTier {
   billingMode?: 'subscription' | 'one_off';
   imageUrl?: string | null;
   inventory?: number | null;
+  soldOut?: boolean;
   popular?: boolean;
   stripePriceId?: string | null;
   priceId?: string | null;
@@ -108,8 +110,10 @@ interface ConfigModule {
 async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | null> {
   if (!platformId || !env.DB) return null;
 
+  await ensureTierSchema(env);
+
   const rows = await env.DB.prepare(
-    'SELECT name, displayName, price, "limit", priceId, productId, features, popular FROM tiers WHERE platformId = ?'
+    'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut FROM tiers WHERE platformId = ?'
   )
     .bind(platformId)
     .all<{
@@ -121,6 +125,8 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
       productId: string | null;
       features: string | null;
       popular: number | null;
+      inventory?: number | null;
+      soldOut?: number | null;
     }>();
 
   if (!rows.results || rows.results.length === 0) return null;
@@ -130,6 +136,7 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
     let billingMode: 'subscription' | 'one_off' = 'subscription';
     let imageUrl: string | null = null;
     let inventory: number | null = null;
+    let soldOut = false;
     let features: string[] = [];
 
     if (row.features) {
@@ -165,6 +172,19 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
       }
     }
 
+    if (row.inventory !== undefined && row.inventory !== null) {
+      inventory = Number(row.inventory);
+      if (Number.isNaN(inventory)) inventory = null;
+    }
+
+    if (row.soldOut !== undefined && row.soldOut !== null) {
+      soldOut = !!row.soldOut;
+    }
+
+    if (!soldOut && typeof inventory === 'number' && inventory <= 0) {
+      soldOut = true;
+    }
+
     return {
       id: row.name,
       name: row.displayName || row.name,
@@ -176,6 +196,7 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
       billingMode,
       imageUrl,
       inventory,
+      soldOut,
       popular: !!row.popular,
       stripePriceId: row.priceId,
       priceId: row.priceId,

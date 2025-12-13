@@ -1,6 +1,7 @@
 import { Env } from '../types';
 import { getAllTiers } from '../config/configLoader';
 import { buildStripeHeaders, getDevStripeToken } from './checkout';
+import { ensureTierSchema } from '../services/d1';
 
 type CartItem = {
   productId?: string;
@@ -17,6 +18,7 @@ export async function handleGetProducts(
   platformId: string,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
+  await ensureTierSchema(env);
   const tiers = await getAllTiers(env, platformId);
   const products = tiers
     .filter((t) => (t.billingMode || 'subscription') === 'one_off')
@@ -30,6 +32,7 @@ export async function handleGetProducts(
       currency: 'usd',
       imageUrl: t.imageUrl || null,
       inventory: typeof t.inventory === 'number' ? t.inventory : null,
+      soldOut: t.soldOut || (typeof t.inventory === 'number' ? t.inventory <= 0 : false),
       priceId: t.priceId,
       productId: t.productId,
       features: Array.isArray(t.features) ? t.features : t.features ? [t.features] : [],
@@ -53,6 +56,7 @@ export async function handleCartCheckout(
   request: Request
 ): Promise<Response> {
   try {
+    await ensureTierSchema(env);
     const body = await request.json().catch(() => ({})) as {
       email?: string;
       successUrl?: string;
@@ -92,7 +96,21 @@ export async function handleCartCheckout(
         );
       }
 
+      if (product.soldOut || (typeof product.inventory === 'number' && product.inventory <= 0)) {
+        return new Response(
+          JSON.stringify({ error: `Item sold out: ${product.displayName || product.name}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const quantity = item.quantity && item.quantity > 0 ? Math.min(item.quantity, 99) : 1;
+      if (typeof product.inventory === 'number' && quantity > product.inventory) {
+        return new Response(
+          JSON.stringify({ error: `Not enough inventory for ${product.displayName || product.name}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       lineItems.push({
         price: product.priceId,
         quantity: quantity.toString(),
