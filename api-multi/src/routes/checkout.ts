@@ -22,18 +22,33 @@
 import { Env } from '../types';
 import { getPriceIdMap } from '../config/configLoader';
 import type { ClerkClient } from '@clerk/backend';
+import { ensureStripeTokenSchema } from '../services/d1';
 
 /**
  * Get dev's Stripe access token from KV
  */
-export async function getDevStripeToken(platformId: string, env: Env): Promise<{ accessToken: string; stripeUserId: string } | null> {
-	const stripeDataJson = await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`);
-	if (!stripeDataJson) {
-		console.error(`[Checkout] No Stripe token found for platform: ${platformId}`);
+export async function getDevStripeToken(platformId: string, env: Env, mode: string = 'live'): Promise<{ accessToken: string; stripeUserId: string } | null> {
+	// Mode-specific KV key (fallback to legacy)
+	const stripeDataJson =
+		(await env.TOKENS_KV.get(`platform:${platformId}:stripeToken:${mode}`)) ||
+		(await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`));
+	if (stripeDataJson) {
+		const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+		return stripeData;
+	}
+
+	// Fallback to D1 stripe_tokens table
+	await ensureStripeTokenSchema(env);
+	const row = await env.DB.prepare(
+		'SELECT accessToken, stripeUserId FROM stripe_tokens WHERE platformId = ? AND (mode = ? OR mode IS NULL) ORDER BY createdAt DESC LIMIT 1'
+	)
+		.bind(platformId, mode)
+		.first<{ accessToken: string; stripeUserId: string }>();
+	if (!row) {
+		console.error(`[Checkout] No Stripe token found for platform: ${platformId}, mode: ${mode}`);
 		return null;
 	}
-	const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
-	return stripeData;
+	return row;
 }
 
 /**
@@ -100,7 +115,8 @@ export async function handleCreateCheckout(
 	env: Env,
 	corsHeaders: Record<string, string>,
 	origin: string,
-	request: Request
+	request: Request,
+	mode: string = 'live'
 ): Promise<Response> {
 	try {
 		// Get target tier and price ID from request body
@@ -122,7 +138,7 @@ export async function handleCreateCheckout(
 		// If no priceId provided, load from config (multi-tenant using platformId)
 		if (!priceId) {
 			console.log(`🔍 Loading price ID from config for tier: ${targetTier}, platformId: ${platformId}`);
-			const priceIdMap = await getPriceIdMap(env, platformId);
+			const priceIdMap = await getPriceIdMap(env, platformId, mode);
 			console.log(`[Checkout] Price ID Map from KV: ${JSON.stringify(priceIdMap)}`);
 			priceId = priceIdMap[targetTier] || '';
 			console.log(`💳 Loaded price ID: ${priceId}`);
@@ -136,7 +152,7 @@ export async function handleCreateCheckout(
 		}
 
 		// Get DEV's Stripe token from KV (they connected via OAuth)
-		const devStripeData = await getDevStripeToken(platformId, env);
+		const devStripeData = await getDevStripeToken(platformId, env, mode);
 		if (!devStripeData) {
 			throw new Error('Developer has not connected their Stripe account');
 		}
@@ -212,7 +228,8 @@ export async function handleCustomerPortal(
 	clerkClient: ClerkClient,
 	env: Env,
 	corsHeaders: Record<string, string>,
-	origin: string
+	origin: string,
+	mode: string = 'live'
 ): Promise<Response> {
 	try {
 		// Get user from Clerk to retrieve Stripe customer ID
@@ -277,7 +294,7 @@ export async function handleCustomerPortal(
 		}
 
 		// Get DEV's Stripe token
-		const devStripeData = await getDevStripeToken(platformId, env);
+		const devStripeData = await getDevStripeToken(platformId, env, mode);
 		if (!devStripeData) {
 			return new Response(
 				JSON.stringify({ error: 'Developer has not connected their Stripe account' }),

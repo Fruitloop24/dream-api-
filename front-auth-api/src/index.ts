@@ -579,12 +579,14 @@ export default {
           );
         }
 
-        // Get publishableKey and secretKey (created by oauth-api after tier config)
-        // oauth-api writes these as user:{userId}:publishableKey and user:{userId}:secretKey
+      // Get publishableKey and secretKey (created by oauth-api after tier config)
+      // oauth-api writes these as user:{userId}:publishableKey and user:{userId}:secretKey
         const publishableKey =
           (await getPublishableKeyFromDb(platformId, env)) ||
           (await env.TOKENS_KV.get(`user:${userId}:publishableKey`));
         const secretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey`);
+        const testPublishableKey = await env.TOKENS_KV.get(`user:${userId}:publishableKey:test`);
+        const testSecretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey:test`);
         const productsJson = await env.TOKENS_KV.get(`user:${userId}:products`);
 
         if (!publishableKey || !secretKey) {
@@ -604,6 +606,8 @@ export default {
             platformId,
             publishableKey,
             secretKey,
+            testPublishableKey,
+            testSecretKey,
             products
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

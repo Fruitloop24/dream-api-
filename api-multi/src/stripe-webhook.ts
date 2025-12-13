@@ -1,7 +1,7 @@
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
 import { Env } from './types';
-import { getPlatformFromPublishableKey, isEventProcessed, recordEvent, upsertSubscription, decrementInventory } from './services/d1';
+import { getPlatformFromPublishableKey, isEventProcessed, recordEvent, upsertSubscription, decrementInventory, getModeForPublishableKey, ensureStripeTokenSchema } from './services/d1';
 
 async function resolvePlatformId(env: Env, publishableKey: string | undefined | null): Promise<string | null> {
 	if (!publishableKey) return null;
@@ -14,10 +14,19 @@ async function resolvePlatformId(env: Env, publishableKey: string | undefined | 
 	return fromDb ?? null;
 }
 
-async function getDevStripeToken(platformId: string, env: Env): Promise<{ accessToken: string; stripeUserId: string } | null> {
-	const stripeDataJson = await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`);
-	if (!stripeDataJson) return null;
-	return JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+async function getDevStripeToken(platformId: string, env: Env, mode: string = 'live'): Promise<{ accessToken: string; stripeUserId: string } | null> {
+	const stripeDataJson =
+		(await env.TOKENS_KV.get(`platform:${platformId}:stripeToken:${mode}`)) ||
+		(await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`));
+	if (stripeDataJson) return JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+
+	await ensureStripeTokenSchema(env);
+	const row = await env.DB.prepare(
+		'SELECT accessToken, stripeUserId FROM stripe_tokens WHERE platformId = ? AND (mode = ? OR mode IS NULL) ORDER BY createdAt DESC LIMIT 1'
+	)
+		.bind(platformId, mode)
+		.first<{ accessToken: string; stripeUserId: string }>();
+	return row ?? null;
 }
 
 async function fetchLineItems(sessionId: string, accessToken: string): Promise<Array<{ priceId: string; quantity: number }>> {
@@ -201,12 +210,13 @@ export async function handleStripeWebhook(
 			if (session.mode === 'payment') {
 				const publishableKey = session.metadata?.publishableKey as string | undefined;
 				eventPlatformId = await resolvePlatformId(env, publishableKey);
+				const eventMode = (await getModeForPublishableKey(env, publishableKey || '')) || (publishableKey?.startsWith('pk_test_') ? 'test' : 'live');
 				if (!eventPlatformId) {
 					console.warn('[Webhook] No platformId resolved for one-off checkout');
 					break;
 				}
 
-				const stripeToken = await getDevStripeToken(eventPlatformId, env);
+				const stripeToken = await getDevStripeToken(eventPlatformId, env, eventMode);
 				if (!stripeToken) {
 					console.warn('[Webhook] No Stripe token for platform during one-off inventory update');
 					break;
@@ -218,7 +228,7 @@ export async function handleStripeWebhook(
 					break;
 				}
 
-				await decrementInventory(env, eventPlatformId, items);
+				await decrementInventory(env, eventPlatformId, items, eventMode);
 				console.log(`[Webhook] Decremented inventory for platform ${eventPlatformId}`, items);
 			}
 			break;

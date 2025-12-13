@@ -65,10 +65,11 @@ export async function handleDataRequest(
 	platformId: string,
 	plan: PlanTier,
 	env: Env,
-	corsHeaders: Record<string, string>
+	corsHeaders: Record<string, string>,
+	mode: string = 'live'
 ): Promise<Response> {
 	// Get tier limit from config (using platformId for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId);
+	const tierConfigs = await getTierConfig(env, platformId, mode);
 	const tierLimit = tierConfigs[plan]?.limit ?? 0;
 	const isUnlimited = tierLimit === Infinity;
 	const limitNumber = isUnlimited ? Number.MAX_SAFE_INTEGER : tierLimit;
@@ -174,7 +175,8 @@ export async function handleUsageCheck(
 	platformId: string,
 	plan: PlanTier,
 	env: Env,
-	corsHeaders: Record<string, string>
+	corsHeaders: Record<string, string>,
+	mode: string = 'live'
 ): Promise<Response> {
 	const currentPeriod = getCurrentPeriod();
 
@@ -189,7 +191,7 @@ export async function handleUsageCheck(
 	const periodEnd = fromDb?.periodEnd || currentPeriod.end;
 
 	// Get tier limit from config (using platformId for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId);
+	const tierConfigs = await getTierConfig(env, platformId, mode);
 	const tierLimit = tierConfigs[plan]?.limit || 0;
 
 	return new Response(

@@ -206,7 +206,8 @@ export default {
 				);
 			}
 
-			const { platformId, publishableKey } = authResult;
+			const { platformId, publishableKey, mode: keyMode } = authResult;
+			const mode = keyMode || (publishableKey?.startsWith('pk_test_') ? 'test' : 'live');
 
 			// Get userId from header (customer identifies their end-user)
 			const userId = request.headers.get('X-User-Id') || 'anonymous';
@@ -261,7 +262,7 @@ export default {
 			// Process request and track usage
 			if (url.pathname === '/api/data' && request.method === 'POST') {
 				try {
-					return await handleDataRequest(userId, platformId, plan, env, corsHeaders);
+					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, mode);
 				} catch (err) {
 					console.error('[Data] Handler error:', err);
 					return new Response(
@@ -273,23 +274,23 @@ export default {
 
 			// Get current usage and limits
 			if (url.pathname === '/api/usage' && request.method === 'GET') {
-				return await handleUsageCheck(userId, platformId, plan, env, corsHeaders);
+				return await handleUsageCheck(userId, platformId, plan, env, corsHeaders, mode);
 			}
 
 			// Dashboard aggregate (customers, tiers, metrics)
 			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
-				return await handleDashboard(env, platformId, corsHeaders);
+				return await handleDashboard(env, platformId, corsHeaders, mode);
 			}
 
 			// Create Stripe Checkout session (upgrade flow)
 			if (url.pathname === '/api/create-checkout' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
-				return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request);
+				return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request, mode);
 			}
 
 			// List one-off products (for cart/catalog rendering)
 			if (url.pathname === '/api/products' && request.method === 'GET') {
-				return await handleGetProducts(env, platformId, corsHeaders);
+				return await handleGetProducts(env, platformId, corsHeaders, mode);
 			}
 
 			// Upload product assets (base64 body → R2)
@@ -305,13 +306,13 @@ export default {
 			// Cart checkout for one-off items
 			if (url.pathname === '/api/cart/checkout' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
-				return await handleCartCheckout(platformId, publishableKey, env, corsHeaders, origin, request);
+				return await handleCartCheckout(platformId, publishableKey, env, corsHeaders, origin, request, mode);
 			}
 
 			// Create Stripe Customer Portal session (manage subscription)
 			if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
-				return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin);
+				return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin, mode);
 			}
 
 			// ====================================================================

@@ -19,6 +19,28 @@ type SubscriptionInput = {
 
 // Track whether we already checked/added tier columns for inventory
 let tierSchemaChecked = false;
+let apiKeySchemaChecked = false;
+let stripeTokenSchemaChecked = false;
+
+export async function ensureApiKeySchema(env: Env) {
+	if (apiKeySchemaChecked) return;
+	apiKeySchemaChecked = true;
+	try {
+		await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+}
+
+export async function ensureStripeTokenSchema(env: Env) {
+	if (stripeTokenSchemaChecked) return;
+	stripeTokenSchemaChecked = true;
+	try {
+		await env.DB.prepare('ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+	} catch (err) {
+		/* no-op */
+	}
+}
 
 export async function ensureTierSchema(env: Env) {
 	if (tierSchemaChecked) return;
@@ -33,17 +55,23 @@ export async function ensureTierSchema(env: Env) {
 	} catch (err) {
 		/* no-op if exists */
 	}
+	try {
+		await env.DB.prepare('ALTER TABLE tiers ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
 }
 
 export async function getPlatformFromSecretHash(
 	env: Env,
 	secretKeyHash: string
-): Promise<{ platformId: string; publishableKey: string } | null> {
+): Promise<{ platformId: string; publishableKey: string; mode?: string } | null> {
+	await ensureApiKeySchema(env);
 	const row = await env.DB.prepare(
-		'SELECT platformId, publishableKey FROM api_keys WHERE secretKeyHash = ? LIMIT 1'
+		'SELECT platformId, publishableKey, mode FROM api_keys WHERE secretKeyHash = ? LIMIT 1'
 	)
 		.bind(secretKeyHash)
-		.first<{ platformId: string; publishableKey: string }>();
+		.first<{ platformId: string; publishableKey: string; mode?: string }>();
 	return row ?? null;
 }
 
@@ -55,6 +83,15 @@ export async function getPlatformFromPublishableKey(env: Env, pk: string): Promi
 		.bind(pk)
 		.first<{ platformId: string }>();
 	return row?.platformId ?? null;
+}
+
+export async function getModeForPublishableKey(env: Env, pk: string): Promise<string | null> {
+	const row = await env.DB.prepare(
+		'SELECT mode FROM api_keys WHERE publishableKey = ? LIMIT 1'
+	)
+		.bind(pk)
+		.first<{ mode: string | null }>();
+	return row?.mode ?? null;
 }
 
 export async function upsertEndUser(
@@ -215,7 +252,8 @@ export async function upsertSubscription(env: Env, sub: SubscriptionInput) {
 export async function decrementInventory(
 	env: Env,
 	platformId: string,
-	items: { priceId: string; quantity: number }[]
+	items: { priceId: string; quantity: number }[],
+	mode: string = 'live'
 ): Promise<void> {
 	if (!items.length) return;
 	await ensureTierSchema(env);
@@ -234,10 +272,10 @@ export async function decrementInventory(
            WHEN inventory IS NULL THEN soldOut
            WHEN inventory - ? <= 0 THEN 1
            ELSE 0
-         END
-       WHERE platformId = ? AND priceId = ?`
+       END
+       WHERE platformId = ? AND priceId = ? AND (mode = ? OR mode IS NULL)`
 		)
-			.bind(qty, qty, qty, platformId, item.priceId)
+			.bind(qty, qty, qty, platformId, item.priceId, mode)
 			.run();
 	}
 }

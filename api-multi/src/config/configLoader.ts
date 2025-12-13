@@ -107,15 +107,15 @@ interface ConfigModule {
   config: Config;
 }
 
-async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | null> {
+async function loadTiersFromDb(env: Env, platformId?: string, mode: string = 'live'): Promise<Config | null> {
   if (!platformId || !env.DB) return null;
 
   await ensureTierSchema(env);
 
   const rows = await env.DB.prepare(
-    'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut FROM tiers WHERE platformId = ?'
+    'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)'
   )
-    .bind(platformId)
+    .bind(platformId, mode)
     .all<{
       name: string;
       displayName: string | null;
@@ -207,10 +207,10 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
   return { tiers };
 }
 
-async function loadConfig(env: Env, platformId?: string): Promise<Config> {
+async function loadConfig(env: Env, platformId?: string, mode: string = 'live'): Promise<Config> {
   try {
     // Prefer D1 tiers if available
-    const dbConfig = await loadTiersFromDb(env, platformId);
+    const dbConfig = await loadTiersFromDb(env, platformId, mode);
     if (dbConfig) {
       return dbConfig;
     }
@@ -221,7 +221,9 @@ async function loadConfig(env: Env, platformId?: string): Promise<Config> {
       console.log(`[ConfigLoader] MULTI-TENANT: Loading config for platform ${platformId}`);
 
       // Read tier config from TOKENS_KV (oauth-api stores it at platform:{platformId}:tierConfig)
-      const tierConfigJson = await env.TOKENS_KV.get(`platform:${platformId}:tierConfig`);
+      const tierConfigJson =
+        (await env.TOKENS_KV.get(`platform:${platformId}:tierConfig:${mode}`)) ||
+        (await env.TOKENS_KV.get(`platform:${platformId}:tierConfig`)); // legacy live
       if (!tierConfigJson) {
         throw new Error(`No tier config found for platform: ${platformId} in TOKENS_KV`);
       }
@@ -272,16 +274,16 @@ function transformTiers(tiers: ConfigTier[]): Record<string, TierConfig> {
 /**
  * Get tier configuration (multi-tenant)
  */
-export async function getTierConfig(env: Env, platformId?: string): Promise<Record<string, TierConfig>> {
-  const config = await loadConfig(env, platformId);
+export async function getTierConfig(env: Env, platformId?: string, mode: string = 'live'): Promise<Record<string, TierConfig>> {
+  const config = await loadConfig(env, platformId, mode);
   return transformTiers(config.tiers);
 }
 
 /**
  * Get Stripe Price ID map (multi-tenant)
  */
-export async function getPriceIdMap(env: Env, platformId?: string): Promise<Record<string, string>> {
-  const config = await loadConfig(env, platformId);
+export async function getPriceIdMap(env: Env, platformId?: string, mode: string = 'live'): Promise<Record<string, string>> {
+  const config = await loadConfig(env, platformId, mode);
   const priceIdMap: Record<string, string> = {};
 
   for (const tier of config.tiers) {
@@ -300,8 +302,8 @@ export async function getPriceIdMap(env: Env, platformId?: string): Promise<Reco
 /**
  * Get all tiers (multi-tenant)
  */
-export async function getAllTiers(env: Env, platformId?: string): Promise<ConfigTier[]> {
-  const config = await loadConfig(env, platformId);
+export async function getAllTiers(env: Env, platformId?: string, mode: string = 'live'): Promise<ConfigTier[]> {
+  const config = await loadConfig(env, platformId, mode);
   return config.tiers.map((t) => ({
     ...t,
     billingMode: t.billingMode || 'subscription',

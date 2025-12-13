@@ -63,12 +63,14 @@ async function saveStripeToken(
   stripeUserId: string,
   accessToken: string,
   refreshToken?: string,
-  scope?: string
+  scope?: string,
+  mode: 'live' | 'test' = 'live'
 ) {
+  await ensureStripeTokenSchema(env);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO stripe_tokens (platformId, stripeUserId, accessToken, refreshToken, scope) VALUES (?, ?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO stripe_tokens (platformId, stripeUserId, accessToken, refreshToken, scope, mode) VALUES (?, ?, ?, ?, ?, ?)'
   )
-    .bind(platformId, stripeUserId, accessToken, refreshToken ?? null, scope ?? null)
+    .bind(platformId, stripeUserId, accessToken, refreshToken ?? null, scope ?? null, mode)
     .run();
 }
 
@@ -76,12 +78,14 @@ async function upsertApiKey(
   env: Env,
   platformId: string,
   publishableKey: string,
-  secretKeyHash: string
+  secretKeyHash: string,
+  mode: 'live' | 'test' = 'live'
 ) {
+  await ensureApiKeySchema(env);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status) VALUES (?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status, mode) VALUES (?, ?, ?, ?, ?)'
   )
-    .bind(platformId, publishableKey, secretKeyHash, 'active')
+    .bind(platformId, publishableKey, secretKeyHash, 'active', mode)
     .run();
 }
 
@@ -98,6 +102,7 @@ type TierInput = {
   popular?: boolean;
   priceId: string;
   productId: string;
+  mode?: 'live' | 'test';
 };
 
 let tierSchemaChecked = false;
@@ -114,12 +119,39 @@ async function ensureTierSchema(env: Env) {
   } catch (err) {
     /* no-op */
   }
+  try {
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+  } catch (err) {
+    /* no-op */
+  }
+}
+
+let apiKeySchemaChecked = false;
+async function ensureApiKeySchema(env: Env) {
+  if (apiKeySchemaChecked) return;
+  apiKeySchemaChecked = true;
+  try {
+    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+  } catch (err) {
+    /* no-op */
+  }
+}
+
+let stripeTokenSchemaChecked = false;
+async function ensureStripeTokenSchema(env: Env) {
+  if (stripeTokenSchemaChecked) return;
+  stripeTokenSchemaChecked = true;
+  try {
+    await env.DB.prepare('ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+  } catch (err) {
+    /* no-op */
+  }
 }
 
 async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
   await ensureTierSchema(env);
   const stmt = env.DB.prepare(
-    'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId, inventory, soldOut) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId, inventory, soldOut, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   for (const tier of tiers) {
     const featuresStr = JSON.stringify({
@@ -143,7 +175,8 @@ async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
         tier.priceId,
         tier.productId,
         tier.inventory ?? null,
-        tier.inventory !== null && tier.inventory !== undefined ? (tier.inventory <= 0 ? 1 : 0) : 0
+        tier.inventory !== null && tier.inventory !== undefined ? (tier.inventory <= 0 ? 1 : 0) : 0,
+        tier.mode || 'live'
       )
       .run();
   }
@@ -279,6 +312,7 @@ export default {
     if (url.pathname === '/create-products' && request.method === 'POST') {
     const body = await request.json() as {
       userId: string;
+      mode?: 'live' | 'test';
       tiers: Array<{
         name: string;
         displayName: string;
@@ -292,6 +326,7 @@ export default {
     };
 
       const { userId, tiers } = body;
+      const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
 
       if (!userId || !tiers || tiers.length === 0) {
         return new Response('Missing userId or tiers', { status: 400 });
@@ -386,8 +421,9 @@ export default {
         // ===================================================================
         // GENERATE KEYS (publishableKey + secretKey)
         // ===================================================================
-        const publishableKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}`;
-        const secretKey = `sk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
+        const keyPrefix = mode === 'test' ? 'test' : 'live';
+        const publishableKey = `pk_${keyPrefix}_${crypto.randomUUID().replace(/-/g, '')}`;
+        const secretKey = `sk_${keyPrefix}_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
 
         // Hash secretKey for secure storage
         const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secretKey));
@@ -404,15 +440,19 @@ export default {
         // D1 SSOT: platform, keys, tiers
         // ===================================================================
         await ensurePlatform(env, platformId, userId);
-        await upsertApiKey(env, platformId, publishableKey, hashHex);
-        await upsertTiers(env, platformId, tierConfig as TierInput[]);
+        await upsertApiKey(env, platformId, publishableKey, hashHex, mode);
+        await upsertTiers(env, platformId, tierConfig.map((t) => ({ ...t, mode })) as TierInput[]);
 
         // ===================================================================
         // SAVE TO PLATFORM_TOKENS_KV (front-auth-api namespace)
         // This is the MAIN namespace - stores EVERYTHING about the dev
         // ===================================================================
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey`, publishableKey);
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey:${mode}`, publishableKey);
+        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey:${mode}`, secretKey);
+        if (mode === 'live') {
+          await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey`, publishableKey);
+          await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
+        }
         await env.PLATFORM_TOKENS_KV.put(`user:${userId}:products`, JSON.stringify(priceIds));
 
         // Reverse lookups
@@ -424,13 +464,22 @@ export default {
         // Only copy what api-multi needs for fast tier limit lookups
         // ===================================================================
         await env.CUSTOMER_TOKENS_KV.put(
-          `platform:${platformId}:tierConfig`,
+          `platform:${platformId}:tierConfig:${mode}`,
           JSON.stringify({ tiers: tierConfig })
         );
+        if (mode === 'live') {
+          await env.CUSTOMER_TOKENS_KV.put(
+            `platform:${platformId}:tierConfig`,
+            JSON.stringify({ tiers: tierConfig })
+          );
+        }
         await env.CUSTOMER_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
         await env.CUSTOMER_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
         // Copy Stripe token (needed for checkout/portal)
-        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
+        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken:${mode}`, stripeDataJson);
+        if (mode === 'live') {
+          await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
+        }
 
         console.log(`[Products] Created ${priceIds.length} products for platform ${platformId}`);
         console.log(`[Keys] Generated publishableKey: ${publishableKey}`);
@@ -514,6 +563,7 @@ export default {
             publishableKey,
             secretKey,
             products: priceIds,
+            mode,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );

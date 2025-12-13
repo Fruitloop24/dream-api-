@@ -16,10 +16,11 @@ type CartItem = {
 export async function handleGetProducts(
   env: Env,
   platformId: string,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  mode: string = 'live'
 ): Promise<Response> {
   await ensureTierSchema(env);
-  const tiers = await getAllTiers(env, platformId);
+  const tiers = await getAllTiers(env, platformId, mode);
   const products = tiers
     .filter((t) => (t.billingMode || 'subscription') === 'one_off')
     .map((t) => ({
@@ -53,7 +54,8 @@ export async function handleCartCheckout(
   env: Env,
   corsHeaders: Record<string, string>,
   origin: string,
-  request: Request
+  request: Request,
+  mode: string = 'live'
 ): Promise<Response> {
   try {
     await ensureTierSchema(env);
@@ -72,7 +74,7 @@ export async function handleCartCheckout(
       );
     }
 
-    const tiers = await getAllTiers(env, platformId);
+    const tiers = await getAllTiers(env, platformId, mode);
     const oneOffs = tiers.filter((t) => (t.billingMode || 'subscription') === 'one_off');
 
     const indexByKey = new Map<string, typeof oneOffs[number]>();
@@ -117,7 +119,7 @@ export async function handleCartCheckout(
       });
     }
 
-    const devStripeData = await getDevStripeToken(platformId, env);
+    const devStripeData = await getDevStripeToken(platformId, env, mode);
     if (!devStripeData) {
       throw new Error('Developer has not connected their Stripe account');
     }

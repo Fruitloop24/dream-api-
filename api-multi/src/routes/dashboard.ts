@@ -65,16 +65,17 @@ type StripeTokenRow = {
 export async function handleDashboard(
 	env: Env,
 	platformId: string,
-	corsHeaders: Record<string, string>
+	corsHeaders: Record<string, string>,
+	mode: string = 'live'
 ): Promise<Response> {
 	try {
 		await ensureSubscriptionSchema(env);
 		await ensureTierSchema(env);
 		// Tiers (for limits and display)
 		const tiersResult = await env.DB.prepare(
-			'SELECT name, displayName, price, "limit", priceId, productId, popular, inventory, soldOut FROM tiers WHERE platformId = ?'
+			'SELECT name, displayName, price, "limit", priceId, productId, popular, inventory, soldOut FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)'
 		)
-			.bind(platformId)
+			.bind(platformId, mode)
 			.all<TierRow>();
 		const tierInfoByName: Record<string, TierRow> = {};
 		(tiersResult.results || []).forEach((t) => {

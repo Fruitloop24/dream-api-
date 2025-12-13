@@ -28,6 +28,7 @@ import { getPlatformFromPublishableKey, getPlatformFromSecretHash } from '../ser
 export interface ApiKeyVerifyResult {
 	platformId: string;
 	publishableKey: string;
+	mode?: string;
 }
 
 /**
@@ -55,12 +56,13 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 
 		const pk = fromDb.publishableKey;
 		const platformId = fromDb.platformId;
+		const mode = fromDb.mode || (pk.startsWith('pk_test_') ? 'test' : 'live');
 		// Best-effort rehydrate KV cache
 		await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
 		await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
 
-		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${pk}`);
-		return { platformId, publishableKey: pk };
+		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${pk}, Mode: ${mode}`);
+		return { platformId, publishableKey: pk, mode };
 	} catch (error) {
 		console.error('[API Key] Verification error:', error);
 		return null;
