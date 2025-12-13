@@ -75,7 +75,7 @@ export async function handleAssetGet(
 	}
 
 	const key = pathname.replace('/api/assets/', '');
-	if (!key || !key.startsWith(platformId)) {
+	if (platformId && !key.startsWith(platformId)) {
 		return new Response('Not found', { status: 404, headers: corsHeaders });
 	}
 

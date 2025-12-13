@@ -5,10 +5,10 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 
 const OAUTH_API = import.meta.env.VITE_OAUTH_API_URL || 'http://localhost:8789';
-const API_MULTI = import.meta.env.VITE_API_MULTI_URL || 'http://localhost:8787';
+const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
 
 interface Tier {
   name: string;
@@ -25,6 +25,7 @@ interface Tier {
 export default function ApiTierConfig() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [sellingMode, setSellingMode] = useState<'subscription' | 'one_off'>('subscription');
   const [tiers, setTiers] = useState<Tier[]>([
     { name: 'free', displayName: 'Free', price: 0, limit: 100, billingMode: 'subscription', description: 'Free plan', inventory: null, features: '' },
@@ -32,7 +33,7 @@ export default function ApiTierConfig() {
   ]);
   const [loading, setLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
-  const [secretForUploads, setSecretForUploads] = useState('');
+  const [uploadReady, setUploadReady] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
   // Check if coming from Stripe OAuth
@@ -42,6 +43,26 @@ export default function ApiTierConfig() {
       setStripeConnected(true);
     }
   }, []);
+
+  // Load secret key automatically (if already generated) for uploads
+  useEffect(() => {
+    const loadSecret = async () => {
+      try {
+        const token = await getToken({ template: 'dream-api' });
+        if (!token) return;
+        const res = await fetch(`${FRONT_AUTH_API}/get-credentials`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.secretKey) setUploadReady(true);
+        }
+      } catch (err) {
+        console.warn('Could not load credentials for uploads', err);
+      }
+    };
+    loadSecret();
+  }, [getToken]);
 
   const updateTier = (index: number, field: keyof Tier, value: any) => {
     const updated = [...tiers];
@@ -74,17 +95,17 @@ export default function ApiTierConfig() {
     });
 
   const handleImageUpload = async (file: File, index: number) => {
-    if (!secretForUploads) {
-      alert('Enter your secret key to upload images');
-      return;
-    }
     try {
       setUploadingIndex(index);
       const base64 = await fileToBase64(file);
-      const res = await fetch(`${API_MULTI}/api/assets`, {
+      const token = await getToken({ template: 'dream-api' });
+      if (!token) {
+        throw new Error('Missing auth token');
+      }
+      const res = await fetch(`${FRONT_AUTH_API}/upload-asset`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${secretForUploads}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -182,19 +203,9 @@ export default function ApiTierConfig() {
           <p className="text-xs text-slate-500 mt-3">
             This sets all products below. Use separate keys/platforms if you want both flows.
           </p>
-          <div className="mt-4">
-            <label className="block text-sm font-semibold text-slate-800 mb-2">Secret key (for image uploads to our CDN)</label>
-            <input
-              type="text"
-              value={secretForUploads}
-              onChange={(e) => setSecretForUploads(e.target.value)}
-              placeholder="sk_live_..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Optional: paste your secret key to upload product images to the built-in CDN (R2). You can still paste external image URLs without this.
-            </p>
-          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Tip: we’ll upload product images under your platform automatically once keys are generated. Until then, paste external URLs.
+          </p>
         </div>
 
         {/* Stripe Connected Banner */}
@@ -335,10 +346,13 @@ export default function ApiTierConfig() {
                         const file = e.target.files?.[0];
                         if (file) handleImageUpload(file, index);
                       }}
-                      disabled={uploadingIndex !== null}
+                      disabled={uploadingIndex !== null || !uploadReady}
                     />
                   </label>
                   {uploadingIndex === index && <span className="text-xs text-blue-600">Uploading...</span>}
+                  {!uploadReady && (
+                    <span className="text-xs text-amber-600">Finish Stripe connect + key gen, then upload, or paste an external URL.</span>
+                  )}
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
                   Paste a hosted image URL or upload to our CDN (requires secret key above). Shown on product cards.

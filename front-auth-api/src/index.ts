@@ -40,6 +40,7 @@ interface Env {
   TOKENS_KV: KVNamespace;
   USAGE_KV: KVNamespace;
   DB: D1Database;
+  dream_api_assets?: R2Bucket;
 }
 
 /**
@@ -296,6 +297,20 @@ async function verifyAuth(request: Request, env: Env): Promise<string> {
   return auth.userId;
 }
 
+function decodeBase64(data: string): Uint8Array {
+  const binary = atob(data);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -356,7 +371,7 @@ export default {
         );
       }
 
-      // Create Stripe checkout session for $29/mo subscription
+    // Create Stripe checkout session for $29/mo subscription
       if (url.pathname === '/create-checkout' && request.method === 'POST') {
         const userId = await verifyAuth(request, env);
 
@@ -409,6 +424,60 @@ export default {
             checkoutUrl: session.url,
             usage: usageResult.usage
           }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Authenticated asset upload (before API keys exist)
+      if (url.pathname === '/upload-asset' && request.method === 'POST') {
+        if (!env.dream_api_assets) {
+          return new Response(JSON.stringify({ error: 'Assets bucket not configured' }), {
+            status: 501,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const userId = await verifyAuth(request, env);
+
+        // Get platformId from D1 or KV (generated at login)
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
+        if (!platformId) {
+          return new Response(JSON.stringify({ error: 'Platform ID not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        let body: { filename?: string; contentType?: string; data?: string };
+        try {
+          body = await request.json();
+        } catch (err) {
+          return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (!body.filename || !body.data) {
+          return new Response(JSON.stringify({ error: 'Missing filename or data' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const key = `${platformId}/${Date.now()}-${sanitizeFilename(body.filename)}`;
+        const bytes = decodeBase64(body.data);
+        await env.dream_api_assets.put(key, bytes, {
+          httpMetadata: {
+            contentType: body.contentType || 'application/octet-stream',
+            cacheControl: 'public, max-age=31536000, immutable',
+          },
+        });
+
+        return new Response(
+          JSON.stringify({ key, url: `${env.FRONTEND_URL.replace(/\/$/, '')}/api/assets/${key}` }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

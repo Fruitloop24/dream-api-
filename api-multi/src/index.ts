@@ -137,6 +137,12 @@ export default {
 			});
 		}
 
+		// Public asset fetch (images hosted per platform)
+		if (url.pathname.startsWith('/api/assets/') && request.method === 'GET') {
+			// platformId is included in the key; auth not required for public assets
+			return await handleAssetGet(env, '', url.pathname, corsHeaders);
+		}
+
 		// Stripe webhook (signature verification inside handler)
 		if (url.pathname === '/webhook/stripe' && request.method === 'POST') {
 			return await handleStripeWebhook(request, env);
