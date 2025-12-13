@@ -30,6 +30,8 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [showSecret, setShowSecret] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   // Redirect to landing if not signed in
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (hasPaid && secretKey) {
       loadDashboard();
+      loadProducts();
     }
   }, [hasPaid, secretKey]);
 
@@ -157,6 +160,27 @@ export default function Dashboard() {
   const handleConnectStripe = () => {
     const oauthUrl = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
     window.location.href = oauthUrl;
+  };
+
+  const loadProducts = async () => {
+    try {
+      setLoadingProducts(true);
+      const response = await fetch('https://api-multi.k-c-sheffield012376.workers.dev/api/products', {
+        headers: {
+          'Authorization': `Bearer ${secretKey}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setProducts(data.products || []);
+      } else {
+        console.error('Failed to load products');
+      }
+    } catch (error) {
+      console.error('Products load error:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
   };
 
   const loadDashboard = async () => {
@@ -369,6 +393,58 @@ export default function Dashboard() {
                   ))}
                   {tiers.length === 0 && <p className="text-sm text-gray-500">No tiers configured.</p>}
                 </div>
+              </div>
+            </div>
+
+            {/* One-off products (store/cart) */}
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold">One-off products (store/cart)</h3>
+                {loadingProducts && <span className="text-xs text-gray-400">Loading...</span>}
+              </div>
+              <p className="text-sm text-gray-400 mb-3">
+                Use <code className="bg-gray-900 px-1 py-0.5 rounded text-xs text-gray-200">/api/products</code> to render your catalog, and <code className="bg-gray-900 px-1 py-0.5 rounded text-xs text-gray-200">/api/cart/checkout</code> for cart checkout. Images can be uploaded via the assets endpoint.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {products.map((p: any) => (
+                  <div key={p.id || p.key} className="bg-gray-900 border border-gray-800 rounded p-3">
+                    {p.imageUrl && (
+                      <div className="h-32 w-full mb-3 overflow-hidden rounded bg-gray-800">
+                        <img src={p.imageUrl} alt={p.displayName} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-100">{p.displayName || p.name}</p>
+                        <p className="text-sm text-gray-400">${p.price?.toFixed(2) ?? '0.00'}</p>
+                      </div>
+                      {p.inventory !== null && (
+                        <span className="text-xs px-2 py-1 bg-slate-800 border border-slate-700 rounded text-gray-200">
+                          {p.inventory} left
+                        </span>
+                      )}
+                    </div>
+                    {p.description && <p className="text-xs text-gray-400 mt-2 line-clamp-3">{p.description}</p>}
+                    {Array.isArray(p.features) && p.features.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {p.features.map((f: string, idx: number) => (
+                          <span key={idx} className="text-[11px] px-2 py-1 bg-blue-900/40 border border-blue-800 rounded text-blue-100">
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-3 text-[11px] text-gray-500 space-y-1">
+                      <div>priceId: {p.priceId || 'n/a'}</div>
+                      <div>productId: {p.productId || p.id || 'n/a'}</div>
+                    </div>
+                  </div>
+                ))}
+                {products.length === 0 && (
+                  <div className="text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded p-3">
+                    No one-off products yet. Configure with one-off mode in Tier Config and reload.
+                  </div>
+                )}
               </div>
             </div>
 

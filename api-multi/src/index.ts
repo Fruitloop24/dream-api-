@@ -56,6 +56,7 @@ import { handleCreateCheckout, handleCustomerPortal } from './routes/checkout';
 import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer } from './routes/customers';
 import { handleDashboard } from './routes/dashboard';
 import { handleCartCheckout, handleGetProducts } from './routes/products';
+import { handleAssetGet, handleAssetUpload } from './routes/assets';
 
 // Utilities
 import { validateEnv } from './utils';
@@ -283,6 +284,16 @@ export default {
 			// List one-off products (for cart/catalog rendering)
 			if (url.pathname === '/api/products' && request.method === 'GET') {
 				return await handleGetProducts(env, platformId, corsHeaders);
+			}
+
+			// Upload product assets (base64 body → R2)
+			if (url.pathname === '/api/assets' && request.method === 'POST') {
+				return await handleAssetUpload(env, platformId, corsHeaders, request);
+			}
+
+			// Serve product assets from R2 (scoped by platformId)
+			if (url.pathname.startsWith('/api/assets/') && request.method === 'GET') {
+				return await handleAssetGet(env, platformId, url.pathname, corsHeaders);
 			}
 
 			// Cart checkout for one-off items
