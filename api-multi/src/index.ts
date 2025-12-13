@@ -55,6 +55,7 @@ import { handleDataRequest, handleUsageCheck } from './routes/usage';
 import { handleCreateCheckout, handleCustomerPortal } from './routes/checkout';
 import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer } from './routes/customers';
 import { handleDashboard } from './routes/dashboard';
+import { handleCartCheckout, handleGetProducts } from './routes/products';
 
 // Utilities
 import { validateEnv } from './utils';
@@ -277,6 +278,17 @@ export default {
 			if (url.pathname === '/api/create-checkout' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
 				return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request);
+			}
+
+			// List one-off products (for cart/catalog rendering)
+			if (url.pathname === '/api/products' && request.method === 'GET') {
+				return await handleGetProducts(env, platformId, corsHeaders);
+			}
+
+			// Cart checkout for one-off items
+			if (url.pathname === '/api/cart/checkout' && request.method === 'POST') {
+				const origin = request.headers.get('Origin') || '';
+				return await handleCartCheckout(platformId, publishableKey, env, corsHeaders, origin, request);
 			}
 
 			// Create Stripe Customer Portal session (manage subscription)

@@ -41,4 +41,7 @@
 - Portal error handling improved but could add retries for transient Stripe errors.
 
 ### Ask to reviewer AI
-Be candid: assess reliability, edge cases, security, and rollout risks. Call out missing sweepers, inventory enforcement, rate limiting, and any multi-tenant isolation holes. Suggest minimal hardening steps before wider launch.
+- Be candid on reliability, edge cases, security, and rollout risks; flag multi-tenant isolation holes and fail-open paths.
+- Call out missing sweepers (plan downgrade after period end), lack of inventory enforcement, weak rate limiting, webhook fragility, and portal error handling.
+- Highlight any data consistency risks between KV/D1/Clerk and how to harden them before a wider launch.
+- Output: prioritized findings with severity, suggested minimal fixes, and must-run tests (webhook retries, usage gating bypass attempts, checkout/portal URL overrides).

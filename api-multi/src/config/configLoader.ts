@@ -63,9 +63,14 @@ interface Product {
 interface ConfigTier {
   id: string;
   name: string;
+  displayName?: string | null;
   price: number;
   limit: number | 'unlimited';
   features?: string[] | string;
+  description?: string;
+  billingMode?: 'subscription' | 'one_off';
+  imageUrl?: string | null;
+  inventory?: number | null;
   popular?: boolean;
   stripePriceId?: string | null;
   priceId?: string | null;
@@ -118,33 +123,65 @@ async function loadTiersFromDb(env: Env, platformId?: string): Promise<Config | 
       popular: number | null;
     }>();
 
-  // Normalize features string to array; supports JSON string or comma-separated list
-  const parseFeatures = (raw: string | null): string[] => {
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-      if (typeof parsed === 'string') return [parsed];
-    } catch {
-      // Fallback: split comma-separated string
-      return raw.split(',').map((f) => f.trim()).filter(Boolean);
-    }
-    return [];
-  };
-
   if (!rows.results || rows.results.length === 0) return null;
 
-  const tiers: ConfigTier[] = rows.results.map((row) => ({
-    id: row.name,
-    name: row.displayName || row.name,
-    price: row.price,
-    limit: row.limit === null ? 'unlimited' : row.limit,
-    features: parseFeatures(row.features),
-    popular: !!row.popular,
-    stripePriceId: row.priceId,
-    priceId: row.priceId,
-    productId: row.productId,
-  }));
+  const tiers: ConfigTier[] = rows.results.map((row) => {
+    let description = '';
+    let billingMode: 'subscription' | 'one_off' = 'subscription';
+    let imageUrl: string | null = null;
+    let inventory: number | null = null;
+    let features: string[] = [];
+
+    if (row.features) {
+      try {
+        const parsed = JSON.parse(row.features);
+        if (Array.isArray(parsed)) {
+          features = parsed;
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          const obj = parsed as {
+            description?: string;
+            features?: string[] | string;
+            billingMode?: string;
+            imageUrl?: string;
+            inventory?: number | string | null;
+          };
+          description = obj.description || '';
+          if (Array.isArray(obj.features)) features = obj.features;
+          else if (typeof obj.features === 'string') features = [obj.features];
+          billingMode = obj.billingMode === 'one_off' ? 'one_off' : 'subscription';
+          imageUrl = obj.imageUrl || null;
+          if (typeof obj.inventory === 'string') {
+            const parsedInventory = Number(obj.inventory);
+            inventory = Number.isNaN(parsedInventory) ? null : parsedInventory;
+          } else {
+            inventory = obj.inventory === undefined ? null : (obj.inventory as number | null);
+          }
+        } else if (typeof parsed === 'string') {
+          description = parsed;
+        }
+      } catch {
+        // Fallback: treat as comma-separated features
+        features = row.features.split(',').map((f) => f.trim()).filter(Boolean);
+      }
+    }
+
+    return {
+      id: row.name,
+      name: row.displayName || row.name,
+      displayName: row.displayName || row.name,
+      price: row.price,
+      limit: row.limit === null ? 'unlimited' : row.limit,
+      features,
+      description,
+      billingMode,
+      imageUrl,
+      inventory,
+      popular: !!row.popular,
+      stripePriceId: row.priceId,
+      priceId: row.priceId,
+      productId: row.productId,
+    };
+  });
 
   return { tiers };
 }
@@ -244,7 +281,14 @@ export async function getPriceIdMap(env: Env, platformId?: string): Promise<Reco
  */
 export async function getAllTiers(env: Env, platformId?: string): Promise<ConfigTier[]> {
   const config = await loadConfig(env, platformId);
-  return config.tiers;
+  return config.tiers.map((t) => ({
+    ...t,
+    billingMode: t.billingMode || 'subscription',
+    displayName: t.displayName || t.name,
+    description: t.description || (Array.isArray(t.features) ? '' : typeof t.features === 'string' ? t.features : ''),
+    imageUrl: t.imageUrl || null,
+    inventory: t.inventory ?? null,
+  }));
 }
 
 /**

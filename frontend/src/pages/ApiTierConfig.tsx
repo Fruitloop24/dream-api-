@@ -18,14 +18,16 @@ interface Tier {
   description?: string;
   imageUrl?: string;
   inventory?: number | null;
+  features?: string;
 }
 
 export default function ApiTierConfig() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const [sellingMode, setSellingMode] = useState<'subscription' | 'one_off'>('subscription');
   const [tiers, setTiers] = useState<Tier[]>([
-    { name: 'free', displayName: 'Free', price: 0, limit: 100, billingMode: 'subscription', description: 'Free plan', inventory: null },
-    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, billingMode: 'subscription', description: 'Pro plan', inventory: null },
+    { name: 'free', displayName: 'Free', price: 0, limit: 100, billingMode: 'subscription', description: 'Free plan', inventory: null, features: '' },
+    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, billingMode: 'subscription', description: 'Pro plan', inventory: null, features: '' },
   ]);
   const [loading, setLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
@@ -42,6 +44,18 @@ export default function ApiTierConfig() {
     const updated = [...tiers];
     updated[index] = { ...updated[index], [field]: value };
     setTiers(updated);
+  };
+
+  const handleSellingModeChange = (mode: 'subscription' | 'one_off') => {
+    setSellingMode(mode);
+    setTiers((prev) =>
+      prev.map((tier) => ({
+        ...tier,
+        billingMode: mode,
+        limit: mode === 'subscription' ? tier.limit || 100 : 0,
+        inventory: mode === 'one_off' ? tier.inventory ?? null : null,
+      }))
+    );
   };
 
   const handleSubmit = async () => {
@@ -86,6 +100,39 @@ export default function ApiTierConfig() {
         <div className="mb-12 text-center">
           <h1 className="text-4xl font-bold text-slate-900 mb-3">Configure Your Products</h1>
           <p className="text-xl text-slate-600">Subscription tiers or one-off products for your customers</p>
+        </div>
+
+        {/* Selling Mode Switch */}
+        <div className="mb-10 bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">What are you selling?</h2>
+          <p className="text-sm text-slate-600 mb-4">
+            Keep flows separate: subscriptions for SaaS/courses with usage limits; one-off for store/cart (no limits, cart checkout).
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleSellingModeChange('subscription')}
+              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
+                sellingMode === 'subscription'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
+              }`}
+            >
+              Subscriptions (recurring)
+            </button>
+            <button
+              onClick={() => handleSellingModeChange('one_off')}
+              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
+                sellingMode === 'one_off'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
+              }`}
+            >
+              One-off products (store/cart)
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            This sets all products below. Use separate keys/platforms if you want both flows.
+          </p>
         </div>
 
         {/* Stripe Connected Banner */}
@@ -161,7 +208,6 @@ export default function ApiTierConfig() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                   />
                 </label>
-
                 {tier.billingMode === 'subscription' && (
                   <label className="block">
                     <span className="text-slate-700 text-sm font-semibold mb-2 block">
@@ -182,19 +228,14 @@ export default function ApiTierConfig() {
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
-                <label className="block">
+                <div className="block">
                   <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Billing Type
+                    Selling mode
                   </span>
-                  <select
-                    value={tier.billingMode}
-                    onChange={(e) => updateTier(index, 'billingMode', e.target.value as 'subscription' | 'one_off')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                  >
-                    <option value="subscription">Subscription (recurring)</option>
-                    <option value="one_off">One-off (single payment)</option>
-                  </select>
-                </label>
+                  <div className="px-4 py-2 border border-gray-200 rounded-lg text-slate-800 bg-slate-50">
+                    {tier.billingMode === 'subscription' ? 'Subscription (recurring)' : 'One-off (single payment, cart)'}
+                  </div>
+                </div>
 
                 <label className="block">
                   <span className="text-slate-700 text-sm font-semibold mb-2 block">
@@ -206,6 +247,7 @@ export default function ApiTierConfig() {
                     onChange={(e) => updateTier(index, 'inventory', e.target.value === '' ? null : Number(e.target.value))}
                     placeholder="Leave blank for unlimited"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+                    disabled={tier.billingMode !== 'one_off'}
                   />
                 </label>
               </div>
@@ -219,6 +261,19 @@ export default function ApiTierConfig() {
                   value={tier.imageUrl || ''}
                   onChange={(e) => updateTier(index, 'imageUrl', e.target.value)}
                   placeholder="https://..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+                />
+              </label>
+
+              <label className="block mb-4">
+                <span className="text-slate-700 text-sm font-semibold mb-2 block">
+                  Highlights / badges (comma separated, optional)
+                </span>
+                <input
+                  type="text"
+                  value={tier.features || ''}
+                  onChange={(e) => updateTier(index, 'features', e.target.value)}
+                  placeholder="Fast support, Lifetime updates"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
                 />
               </label>
@@ -248,11 +303,12 @@ export default function ApiTierConfig() {
                   name: '',
                   displayName: '',
                   price: 0,
-                  limit: 0,
-                  billingMode: 'subscription',
+                  limit: sellingMode === 'subscription' ? 100 : 0,
+                  billingMode: sellingMode,
                   description: '',
                   imageUrl: '',
                   inventory: null,
+                  features: '',
                 },
               ])
             }

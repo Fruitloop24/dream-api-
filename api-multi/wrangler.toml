@@ -17,6 +17,12 @@ binding = "DB"
 database_name = "dream-api-ssot"
 database_id = "07e784d5-2c3f-4bb0-a79c-094c1d05410f"
 
+# Optional: R2 bucket for hosted product images
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "dream-api-assets"
+preview_bucket_name = "dream-api-assets"
+
 [vars]
 # Non-secret variables
 # Clerk JWT template name (create in Clerk dashboard)

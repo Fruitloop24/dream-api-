@@ -94,7 +94,7 @@ type TierInput = {
   description?: string;
   imageUrl?: string;
   inventory?: number | null;
-  features?: string;
+  features?: string | string[];
   popular?: boolean;
   priceId: string;
   productId: string;
@@ -105,10 +105,13 @@ async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
     'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   for (const tier of tiers) {
-    const featuresStr =
-      tier.description ||
-      tier.features ||
-      '';
+    const featuresStr = JSON.stringify({
+      description: tier.description || '',
+      features: tier.features || [],
+      billingMode: tier.billingMode || 'subscription',
+      imageUrl: tier.imageUrl || '',
+      inventory: tier.inventory ?? null,
+    });
     const popularFlag = tier.popular ? 1 : 0;
 
     await stmt
@@ -303,14 +306,19 @@ export default {
               'Authorization': `Bearer ${stripeData.accessToken}`,
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
-              name: tier.displayName,
-              description: tier.description || '',
-              'metadata[platformId]': platformId,
-              'metadata[tierName]': tier.name,
-              'metadata[limit]': tier.limit.toString(),
-              ...(tier.imageUrl ? { images: tier.imageUrl } : {}),
-            }),
+            body: (() => {
+              const params = new URLSearchParams({
+                name: tier.displayName,
+                description: tier.description || '',
+                'metadata[platformId]': platformId,
+                'metadata[tierName]': tier.name,
+                'metadata[limit]': tier.limit.toString(),
+              });
+              if (tier.imageUrl) {
+                params.append('images[]', tier.imageUrl);
+              }
+              return params;
+            })(),
           });
 
           if (!productResponse.ok) {

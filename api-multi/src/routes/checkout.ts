@@ -26,7 +26,7 @@ import type { ClerkClient } from '@clerk/backend';
 /**
  * Get dev's Stripe access token from KV
  */
-async function getDevStripeToken(platformId: string, env: Env): Promise<{ accessToken: string; stripeUserId: string } | null> {
+export async function getDevStripeToken(platformId: string, env: Env): Promise<{ accessToken: string; stripeUserId: string } | null> {
 	const stripeDataJson = await env.TOKENS_KV.get(`platform:${platformId}:stripeToken`);
 	if (!stripeDataJson) {
 		console.error(`[Checkout] No Stripe token found for platform: ${platformId}`);
@@ -41,7 +41,7 @@ async function getDevStripeToken(platformId: string, env: Env): Promise<{ access
  * - Prefer connected account OAuth access token (no Stripe-Account header)
  * - Fallback to platform secret + Stripe-Account when access token missing
  */
-function buildStripeHeaders(devStripeData: { accessToken: string; stripeUserId: string }, env: Env): Record<string, string> {
+export function buildStripeHeaders(devStripeData: { accessToken: string; stripeUserId: string }, env: Env): Record<string, string> {
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/x-www-form-urlencoded',
 	};
