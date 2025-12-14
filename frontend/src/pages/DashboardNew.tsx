@@ -141,11 +141,17 @@ export default function Dashboard() {
   const loadCredentials = async () => {
     try {
       const token = await getToken({ template: 'dream-api' });
+      console.log('[Dashboard] Fetching credentials...');
       const res = await fetch(`${FRONT_AUTH_API}/get-credentials`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
+        console.log('[Dashboard] Credentials loaded:', {
+          platformId: data.platformId,
+          hasTestSk: !!data.testSecretKey,
+          hasLiveSk: !!(data.liveSecretKey || data.secretKey),
+        });
         setCredentials({
           platformId: data.platformId,
           testPublishableKey: data.testPublishableKey,
@@ -155,6 +161,8 @@ export default function Dashboard() {
           testProducts: data.testProducts || [],
           liveProducts: data.liveProducts || data.products || [],
         });
+      } else {
+        console.error('[Dashboard] Credentials failed:', res.status, await res.text());
       }
     } catch (err) {
       console.error('[Dashboard] Credentials error:', err);
@@ -163,10 +171,14 @@ export default function Dashboard() {
 
   const loadDashboard = async (mode: ModeType) => {
     const sk = mode === 'test' ? credentials?.testSecretKey : credentials?.liveSecretKey;
-    if (!sk) return;
+    if (!sk) {
+      console.log(`[Dashboard] No ${mode} secret key, skipping dashboard load`);
+      return;
+    }
 
     try {
       setLoadingDashboard(true);
+      console.log(`[Dashboard] Fetching ${mode} dashboard with sk: ${sk.slice(0, 15)}...`);
       const res = await fetch(`${API_MULTI}/api/dashboard`, {
         headers: {
           'Authorization': `Bearer ${sk}`,
@@ -175,8 +187,15 @@ export default function Dashboard() {
       });
       if (res.ok) {
         const data = await res.json();
+        console.log(`[Dashboard] ${mode} data:`, {
+          customers: data.customers?.length || 0,
+          tiers: data.tiers?.length || 0,
+          metrics: data.metrics,
+        });
         if (mode === 'test') setTestDashboard(data);
         else setLiveDashboard(data);
+      } else {
+        console.error(`[Dashboard] ${mode} fetch failed:`, res.status, await res.text());
       }
     } catch (err) {
       console.error(`[Dashboard] Load ${mode} error:`, err);
