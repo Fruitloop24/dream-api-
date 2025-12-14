@@ -155,7 +155,7 @@ async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
   );
   for (const tier of tiers) {
     const featuresStr = JSON.stringify({
-      description: tier.description || '',
+      description: tier.description || undefined,
       features: tier.features || [],
       billingMode: tier.billingMode || 'subscription',
       imageUrl: tier.imageUrl || '',
@@ -363,7 +363,7 @@ export default {
             body: (() => {
               const params = new URLSearchParams({
                 name: tier.displayName,
-                description: tier.description || '',
+                description: tier.description || undefined,
                 'metadata[platformId]': platformId,
                 'metadata[tierName]': tier.name,
                 'metadata[limit]': tier.limit.toString(),
@@ -630,7 +630,7 @@ export default {
             body: (() => {
               const params = new URLSearchParams({
                 name: tier.displayName,
-                description: tier.description || '',
+                description: tier.description || undefined,
                 'metadata[platformId]': platformId,
                 'metadata[tierName]': tier.name,
                 'metadata[limit]': tier.limit?.toString() ?? '',
