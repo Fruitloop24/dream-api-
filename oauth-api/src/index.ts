@@ -363,11 +363,14 @@ export default {
             body: (() => {
               const params = new URLSearchParams({
                 name: tier.displayName,
-                description: tier.description || undefined,
                 'metadata[platformId]': platformId,
                 'metadata[tierName]': tier.name,
-                'metadata[limit]': tier.limit.toString(),
+                'metadata[limit]': String(tier.limit ?? 0),
               });
+              // Only add description for one-offs if provided
+              if (tier.description && tier.billingMode === 'one_off') {
+                params.append('description', tier.description);
+              }
               if (tier.imageUrl) {
                 params.append('images[]', tier.imageUrl);
               }
@@ -630,11 +633,13 @@ export default {
             body: (() => {
               const params = new URLSearchParams({
                 name: tier.displayName,
-                description: tier.description || undefined,
                 'metadata[platformId]': platformId,
                 'metadata[tierName]': tier.name,
-                'metadata[limit]': tier.limit?.toString() ?? '',
+                'metadata[limit]': String(tier.limit ?? 0),
               });
+              if (tier.description && tier.billingMode === 'one_off') {
+                params.append('description', tier.description);
+              }
               if (tier.imageUrl) params.append('images[]', tier.imageUrl);
               return params;
             })(),
