@@ -57,6 +57,13 @@ async function ensurePlatform(env: Env, platformId: string, userId: string) {
     .run();
 }
 
+async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
+    .bind(userId)
+    .first<{ platformId: string }>();
+  return row?.platformId || null;
+}
+
 async function saveStripeToken(
   env: Env,
   platformId: string,
@@ -79,13 +86,14 @@ async function upsertApiKey(
   platformId: string,
   publishableKey: string,
   secretKeyHash: string,
-  mode: 'live' | 'test' = 'live'
+  mode: 'live' | 'test' = 'live',
+  name?: string
 ) {
   await ensureApiKeySchema(env);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status, mode) VALUES (?, ?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status, mode, name) VALUES (?, ?, ?, ?, ?, ?)'
   )
-    .bind(platformId, publishableKey, secretKeyHash, 'active', mode)
+    .bind(platformId, publishableKey, secretKeyHash, 'active', mode, name || null)
     .run();
 }
 
@@ -132,6 +140,11 @@ async function ensureApiKeySchema(env: Env) {
   apiKeySchemaChecked = true;
   try {
     await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN mode TEXT DEFAULT \'live\'').run();
+  } catch (err) {
+    /* no-op */
+  }
+  try {
+    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN name TEXT').run();
   } catch (err) {
     /* no-op */
   }
@@ -313,6 +326,7 @@ export default {
     const body = await request.json() as {
       userId: string;
       mode?: 'live' | 'test';
+      projectName?: string;
       tiers: Array<{
         name: string;
         displayName: string;
@@ -325,7 +339,7 @@ export default {
       }>;
     };
 
-      const { userId, tiers } = body;
+      const { userId, tiers, projectName } = body;
       const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
 
       if (!userId || !tiers || tiers.length === 0) {
@@ -443,7 +457,7 @@ export default {
         // D1 SSOT: platform, keys, tiers
         // ===================================================================
         await ensurePlatform(env, platformId, userId);
-        await upsertApiKey(env, platformId, publishableKey, hashHex, mode);
+        await upsertApiKey(env, platformId, publishableKey, hashHex, mode, projectName);
         await upsertTiers(env, platformId, tierConfig.map((t) => ({ ...t, mode })) as TierInput[]);
 
         // ===================================================================
@@ -579,6 +593,283 @@ export default {
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    }
+
+    // =====================================================================
+    // GET /tiers - List existing tiers for a platform
+    // =====================================================================
+    if (url.pathname === '/tiers' && request.method === 'GET') {
+      const userId = url.searchParams.get('userId');
+      const mode = url.searchParams.get('mode') || 'test';
+
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const platformId =
+        (await getPlatformIdFromDb(userId, env)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
+
+      if (!platformId) {
+        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const tiers = await env.DB.prepare(
+        'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)'
+      ).bind(platformId, mode).all();
+
+      return new Response(JSON.stringify({ tiers: tiers.results || [], platformId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // =====================================================================
+    // PUT /tiers - Update an existing tier
+    // =====================================================================
+    if (url.pathname === '/tiers' && request.method === 'PUT') {
+      const body = await request.json() as {
+        userId: string;
+        tierName: string;
+        mode?: string;
+        updates: {
+          displayName?: string;
+          price?: number;
+          limit?: number | string;
+          features?: string;
+          popular?: boolean;
+          inventory?: number | null;
+          soldOut?: boolean;
+        };
+      };
+
+      const { userId, tierName, updates, mode = 'test' } = body;
+
+      if (!userId || !tierName) {
+        return new Response(JSON.stringify({ error: 'Missing userId or tierName' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const platformId =
+        (await getPlatformIdFromDb(userId, env)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
+
+      if (!platformId) {
+        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Build dynamic UPDATE query
+      const setClauses: string[] = [];
+      const values: any[] = [];
+
+      if (updates.displayName !== undefined) { setClauses.push('displayName = ?'); values.push(updates.displayName); }
+      if (updates.price !== undefined) { setClauses.push('price = ?'); values.push(updates.price); }
+      if (updates.limit !== undefined) { setClauses.push('"limit" = ?'); values.push(updates.limit === 'unlimited' ? null : updates.limit); }
+      if (updates.features !== undefined) { setClauses.push('features = ?'); values.push(updates.features); }
+      if (updates.popular !== undefined) { setClauses.push('popular = ?'); values.push(updates.popular ? 1 : 0); }
+      if (updates.inventory !== undefined) { setClauses.push('inventory = ?'); values.push(updates.inventory); }
+      if (updates.soldOut !== undefined) { setClauses.push('soldOut = ?'); values.push(updates.soldOut ? 1 : 0); }
+
+      if (setClauses.length === 0) {
+        return new Response(JSON.stringify({ error: 'No updates provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      values.push(platformId, tierName, mode);
+
+      await env.DB.prepare(
+        `UPDATE tiers SET ${setClauses.join(', ')} WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)`
+      ).bind(...values).run();
+
+      console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}`);
+
+      return new Response(JSON.stringify({ success: true, tierName, updates }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // =====================================================================
+    // POST /tiers/add - Add a new tier to existing platform (no new keys)
+    // =====================================================================
+    if (url.pathname === '/tiers/add' && request.method === 'POST') {
+      const body = await request.json() as {
+        userId: string;
+        mode?: string;
+        tier: {
+          name: string;
+          displayName: string;
+          price: number;
+          limit: number | string;
+          billingMode?: 'subscription' | 'one_off';
+          features?: string;
+          description?: string;
+          imageUrl?: string;
+          inventory?: number | null;
+          popular?: boolean;
+        };
+      };
+
+      const { userId, tier, mode = 'test' } = body;
+
+      if (!userId || !tier?.name || !tier?.displayName) {
+        return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const platformId =
+        (await getPlatformIdFromDb(userId, env)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
+
+      if (!platformId) {
+        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Get Stripe token to create product
+      const stripeDataJson =
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`));
+
+      if (!stripeDataJson) {
+        return new Response(JSON.stringify({ error: 'Stripe not connected' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+      const billingMode = tier.billingMode || 'subscription';
+
+      // Create Stripe product
+      const productRes = await fetch('https://api.stripe.com/v1/products', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Stripe-Account': stripeData.stripeUserId,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: (() => {
+          const params = new URLSearchParams({
+            name: tier.displayName,
+            'metadata[platformId]': platformId,
+            'metadata[tierName]': tier.name,
+          });
+          if (billingMode === 'one_off' && tier.description && tier.description.trim() !== '') {
+            params.append('description', tier.description);
+          }
+          if (tier.imageUrl && tier.imageUrl.trim() !== '') {
+            params.append('images[]', tier.imageUrl);
+          }
+          return params;
+        })(),
+      });
+
+      if (!productRes.ok) {
+        const err = await productRes.text();
+        return new Response(JSON.stringify({ error: `Failed to create Stripe product: ${err}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const product = await productRes.json() as { id: string };
+
+      // Create Stripe price
+      const priceRes = await fetch('https://api.stripe.com/v1/prices', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Stripe-Account': stripeData.stripeUserId,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          product: product.id,
+          currency: 'usd',
+          unit_amount: String(Math.round(tier.price * 100)),
+          ...(billingMode === 'subscription' ? { 'recurring[interval]': 'month' } : {}),
+        }),
+      });
+
+      if (!priceRes.ok) {
+        const err = await priceRes.text();
+        return new Response(JSON.stringify({ error: `Failed to create Stripe price: ${err}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const price = await priceRes.json() as { id: string };
+
+      // Insert into D1
+      const featuresJson = JSON.stringify({
+        features: tier.features ? tier.features.split(',').map(f => f.trim()) : [],
+        billingMode,
+        imageUrl: tier.imageUrl || '',
+        inventory: tier.inventory ?? null,
+      });
+
+      await env.DB.prepare(
+        'INSERT INTO tiers (platformId, name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        platformId,
+        tier.name.toLowerCase().replace(/\s+/g, '_'),
+        tier.displayName,
+        tier.price,
+        tier.limit === 'unlimited' ? null : tier.limit,
+        price.id,
+        product.id,
+        featuresJson,
+        tier.popular ? 1 : 0,
+        tier.inventory ?? null,
+        0,
+        mode,
+        new Date().toISOString().replace('T', ' ').slice(0, 19)
+      ).run();
+
+      console.log(`[Tiers] Added new tier ${tier.name} for platform ${platformId}`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        tier: { name: tier.name, priceId: price.id, productId: product.id }
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // =====================================================================
+    // DELETE /tiers - Delete a tier
+    // =====================================================================
+    if (url.pathname === '/tiers' && request.method === 'DELETE') {
+      const body = await request.json() as { userId: string; tierName: string; mode?: string };
+      const { userId, tierName, mode = 'test' } = body;
+
+      if (!userId || !tierName) {
+        return new Response(JSON.stringify({ error: 'Missing userId or tierName' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const platformId =
+        (await getPlatformIdFromDb(userId, env)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
+
+      if (!platformId) {
+        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Get the tier first to archive Stripe product
+      const tier = await env.DB.prepare(
+        'SELECT productId FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
+      ).bind(platformId, tierName, mode).first<{ productId: string }>();
+
+      if (!tier) {
+        return new Response(JSON.stringify({ error: 'Tier not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Archive Stripe product (don't delete - might have existing subscriptions)
+      const stripeDataJson =
+        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`)) ||
+        (await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`));
+
+      if (stripeDataJson && tier.productId) {
+        const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+        await fetch(`https://api.stripe.com/v1/products/${tier.productId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${stripeData.accessToken}`,
+            'Stripe-Account': stripeData.stripeUserId,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({ active: 'false' }),
+        });
+      }
+
+      // Delete from D1
+      await env.DB.prepare(
+        'DELETE FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
+      ).bind(platformId, tierName, mode).run();
+
+      console.log(`[Tiers] Deleted tier ${tierName} for platform ${platformId}`);
+
+      return new Response(JSON.stringify({ success: true, deleted: tierName }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Promote test config to live (reuse test tiers, create live prices/keys)

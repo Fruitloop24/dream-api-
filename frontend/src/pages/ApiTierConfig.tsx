@@ -42,6 +42,9 @@ export default function ApiTierConfig() {
   // Mode: test or live
   const [mode, setMode] = useState<ModeType>('test');
 
+  // Project name
+  const [projectName, setProjectName] = useState<string>('');
+
   // Tab: saas or store
   const [activeTab, setActiveTab] = useState<ConfigTab>('saas');
 
@@ -151,6 +154,12 @@ export default function ApiTierConfig() {
 
   // Submit handler
   const handleSubmit = async () => {
+    // Validate project name
+    if (!projectName.trim()) {
+      alert('Please enter a project name');
+      return;
+    }
+
     // Build tiers array based on active tab
     let tiers: any[] = [];
 
@@ -197,7 +206,7 @@ export default function ApiTierConfig() {
       const response = await fetch(`${OAUTH_API}/create-products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, tiers, mode }),
+        body: JSON.stringify({ userId: user?.id, tiers, mode, projectName: projectName.trim() }),
       });
 
       if (response.ok) {
@@ -247,6 +256,19 @@ export default function ApiTierConfig() {
             </div>
           </div>
         )}
+
+        {/* Project Name */}
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+          <label className="block font-semibold mb-2">Project Name</label>
+          <input
+            type="text"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            placeholder="e.g., My Chat API, My Store, Weather API"
+            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+          />
+          <p className="text-sm text-gray-500 mt-2">This name will identify your API keys in the dashboard</p>
+        </div>
 
         {/* Mode Toggle */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">

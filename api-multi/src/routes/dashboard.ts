@@ -94,40 +94,46 @@ export async function handleDashboard(
 			soldOut: !!t.soldOut || (typeof t.inventory === 'number' && t.inventory <= 0),
 		}));
 
-		// Subscriptions
+		// Subscriptions - filter by mode (pk_test_ vs pk_live_)
+		const keyPrefix = mode === 'test' ? 'pk_test_%' : 'pk_live_%';
 		let subsQuery =
-			'SELECT userId, plan, status, subscriptionId, stripeCustomerId, currentPeriodEnd, canceledAt, priceId, productId, amount, currency, publishableKey FROM subscriptions WHERE platformId = ?';
+			'SELECT userId, plan, status, subscriptionId, stripeCustomerId, currentPeriodEnd, canceledAt, priceId, productId, amount, currency, publishableKey FROM subscriptions WHERE platformId = ? AND (publishableKey LIKE ? OR publishableKey IS NULL)';
 		const subsResult = await env.DB.prepare(subsQuery)
-			.bind(platformId)
+			.bind(platformId, keyPrefix)
 			.all<SubscriptionRow & { publishableKey?: string | null }>();
 		const subscriptions = subsResult.results || [];
 
-		// Usage
-		const usageResult = await env.DB.prepare(
-			'SELECT userId, usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ?'
-		)
-			.bind(platformId)
-			.all<UsageRow>();
-		const usage = usageResult.results || [];
+		// Usage - filter by users who have subscriptions in this mode
+		const userIdsInMode = subscriptions.map(s => s.userId);
+		let usage: UsageRow[] = [];
+		if (userIdsInMode.length > 0) {
+			const usageResult = await env.DB.prepare(
+				'SELECT userId, usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ?'
+			)
+				.bind(platformId)
+				.all<UsageRow>();
+			// Filter to only users in this mode
+			usage = (usageResult.results || []).filter(u => userIdsInMode.includes(u.userId));
+		}
 
-		// End-users
+		// End-users - filter by mode
 		const usersResult = await env.DB.prepare(
-			'SELECT clerkUserId as userId, email, status, createdAt, publishableKey FROM end_users WHERE platformId = ?'
+			'SELECT clerkUserId as userId, email, status, createdAt, publishableKey FROM end_users WHERE platformId = ? AND (publishableKey LIKE ? OR publishableKey IS NULL)'
 		)
-			.bind(platformId)
+			.bind(platformId, keyPrefix)
 			.all<EndUserRow & { publishableKey?: string | null }>();
 		const users = usersResult.results || [];
 
-		// Latest API key (for pk)
+		// Latest API key (for pk) - filter by mode
 		const keyResult = await env.DB.prepare(
-			'SELECT publishableKey, secretKeyHash FROM api_keys WHERE platformId = ? ORDER BY createdAt DESC LIMIT 1'
+			'SELECT publishableKey, secretKeyHash FROM api_keys WHERE platformId = ? AND publishableKey LIKE ? ORDER BY createdAt DESC LIMIT 1'
 		)
-			.bind(platformId)
+			.bind(platformId, keyPrefix)
 			.first<ApiKeyRow>();
 		const allKeysResult = await env.DB.prepare(
-			'SELECT publishableKey, secretKeyHash, createdAt, status FROM api_keys WHERE platformId = ? ORDER BY createdAt DESC'
+			'SELECT publishableKey, secretKeyHash, createdAt, status FROM api_keys WHERE platformId = ? AND publishableKey LIKE ? ORDER BY createdAt DESC'
 		)
-			.bind(platformId)
+			.bind(platformId, keyPrefix)
 			.all<ApiKeyRow>();
 
 		// Stripe account info (no secrets)
