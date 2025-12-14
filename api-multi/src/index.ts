@@ -218,7 +218,7 @@ export default {
 
 			// If no plan specified, default to free tier from config
 			if (!plan || plan === 'free') {
-				const allTiers = await getAllTiers(env, platformId);
+				const allTiers = await getAllTiers(env, platformId, mode);
 				const freeTier = allTiers.find(t => t.price === 0) || allTiers[0];
 				plan = (freeTier?.id || 'free') as PlanTier;
 			}
