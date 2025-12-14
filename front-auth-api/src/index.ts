@@ -580,17 +580,27 @@ export default {
         }
 
       // Get publishableKey and secretKey (created by oauth-api after tier config)
-      // oauth-api writes these as user:{userId}:publishableKey and user:{userId}:secretKey
-        const publishableKey =
+      // oauth-api writes these as user:{userId}:publishableKey:mode and user:{userId}:secretKey:mode
+      // Live keys are also written without suffix for backwards compat
+        const livePublishableKey =
           (await getPublishableKeyFromDb(platformId, env)) ||
-          (await env.TOKENS_KV.get(`user:${userId}:publishableKey`));
-        const secretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey`);
+          (await env.TOKENS_KV.get(`user:${userId}:publishableKey`)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:publishableKey:live`));
+        const liveSecretKey =
+          (await env.TOKENS_KV.get(`user:${userId}:secretKey`)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:secretKey:live`));
         const testPublishableKey = await env.TOKENS_KV.get(`user:${userId}:publishableKey:test`);
         const testSecretKey = await env.TOKENS_KV.get(`user:${userId}:secretKey:test`);
-        const productsJson = await env.TOKENS_KV.get(`user:${userId}:products`);
+        const liveProductsJson =
+          (await env.TOKENS_KV.get(`user:${userId}:products`)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:products:live`));
         const testProductsJson = await env.TOKENS_KV.get(`user:${userId}:products:test`);
 
-        if (!publishableKey || !secretKey) {
+        // User needs at least test OR live keys to proceed
+        const hasTestKeys = testPublishableKey && testSecretKey;
+        const hasLiveKeys = livePublishableKey && liveSecretKey;
+
+        if (!hasTestKeys && !hasLiveKeys) {
           return new Response(
             JSON.stringify({
               error: 'API keys not generated yet. Please configure tiers first.',
@@ -600,17 +610,24 @@ export default {
           );
         }
 
-        const products = productsJson ? JSON.parse(productsJson) : [];
+        const liveProducts = liveProductsJson ? JSON.parse(liveProductsJson) : [];
+        const testProducts = testProductsJson ? JSON.parse(testProductsJson) : [];
 
         return new Response(
           JSON.stringify({
             platformId,
-            publishableKey,
-            secretKey,
-            testPublishableKey,
-            testSecretKey,
-            products,
-            testProducts: testProductsJson ? JSON.parse(testProductsJson) : []
+            // Live keys (backwards compat - these were the original fields)
+            publishableKey: livePublishableKey || null,
+            secretKey: liveSecretKey || null,
+            products: liveProducts,
+            // Test keys (explicit)
+            testPublishableKey: testPublishableKey || null,
+            testSecretKey: testSecretKey || null,
+            testProducts,
+            // Explicit live keys (new fields for clarity)
+            livePublishableKey: livePublishableKey || null,
+            liveSecretKey: liveSecretKey || null,
+            liveProducts,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
