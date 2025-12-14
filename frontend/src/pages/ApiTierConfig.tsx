@@ -2,11 +2,12 @@
  * API Product Configuration - dream-api
  *
  * Configure SaaS subscription tiers OR Store one-off products
+ * Handles both CREATE (new project) and EDIT (existing tiers) modes
  * Dark theme matching dashboard
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser, useAuth, UserButton } from '@clerk/clerk-react';
 
 const OAUTH_API = import.meta.env.VITE_OAUTH_API_URL || 'http://localhost:8789';
@@ -22,6 +23,8 @@ interface SaasTier {
   limit: number | 'unlimited';
   features: string;
   popular?: boolean;
+  priceId?: string;
+  productId?: string;
 }
 
 interface StoreProduct {
@@ -32,17 +35,24 @@ interface StoreProduct {
   imageUrl: string;
   inventory: number | null;
   features: string;
+  priceId?: string;
+  productId?: string;
 }
 
 export default function ApiTierConfig() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useUser();
   const { getToken } = useAuth();
 
-  // Mode: test or live
-  const [mode, setMode] = useState<ModeType>('test');
+  // Detect edit mode from URL params
+  const isEditMode = searchParams.get('edit') === 'true';
+  const editMode = (searchParams.get('mode') as ModeType) || 'test';
 
-  // Project name
+  // Mode: test or live
+  const [mode, setMode] = useState<ModeType>(editMode);
+
+  // Project name (only for new projects)
   const [projectName, setProjectName] = useState<string>('');
 
   // Tab: saas or store
@@ -59,7 +69,11 @@ export default function ApiTierConfig() {
     { name: 'product1', displayName: 'My Product', price: 49, description: '', imageUrl: '', inventory: null, features: '' },
   ]);
 
+  // Original tiers for comparison (edit mode)
+  const [originalTiers, setOriginalTiers] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(false);
+  const [loadingTiers, setLoadingTiers] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const [stripeConnected, setStripeConnected] = useState(false);
 
@@ -70,6 +84,81 @@ export default function ApiTierConfig() {
       setStripeConnected(true);
     }
   }, []);
+
+  // Load existing tiers when in edit mode
+  useEffect(() => {
+    if (isEditMode && user?.id) {
+      loadExistingTiers();
+    }
+  }, [isEditMode, user?.id, mode]);
+
+  const loadExistingTiers = async () => {
+    setLoadingTiers(true);
+    try {
+      const response = await fetch(`${OAUTH_API}/tiers?userId=${user?.id}&mode=${mode}`);
+      if (response.ok) {
+        const data = await response.json();
+        const tiers = data.tiers || [];
+        setOriginalTiers(tiers);
+
+        // Separate into SaaS and Store
+        const saasList: SaasTier[] = [];
+        const storeList: StoreProduct[] = [];
+
+        for (const tier of tiers) {
+          // Parse features JSON if present
+          let parsedFeatures: any = {};
+          if (tier.features) {
+            try {
+              parsedFeatures = typeof tier.features === 'string' ? JSON.parse(tier.features) : tier.features;
+            } catch {
+              parsedFeatures = { features: tier.features };
+            }
+          }
+
+          const billingMode = parsedFeatures.billingMode || 'subscription';
+
+          if (billingMode === 'one_off') {
+            storeList.push({
+              name: tier.name,
+              displayName: tier.displayName || tier.name,
+              price: tier.price || 0,
+              description: parsedFeatures.description || '',
+              imageUrl: parsedFeatures.imageUrl || '',
+              inventory: tier.inventory ?? null,
+              features: Array.isArray(parsedFeatures.features) ? parsedFeatures.features.join(', ') : '',
+              priceId: tier.priceId,
+              productId: tier.productId,
+            });
+          } else {
+            saasList.push({
+              name: tier.name,
+              displayName: tier.displayName || tier.name,
+              price: tier.price || 0,
+              limit: tier.limit === null ? 'unlimited' : tier.limit,
+              features: Array.isArray(parsedFeatures.features) ? parsedFeatures.features.join(', ') : '',
+              popular: !!tier.popular,
+              priceId: tier.priceId,
+              productId: tier.productId,
+            });
+          }
+        }
+
+        if (saasList.length > 0) {
+          setSaasTiers(saasList);
+          setActiveTab('saas');
+        }
+        if (storeList.length > 0) {
+          setStoreProducts(storeList);
+          if (saasList.length === 0) setActiveTab('store');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load tiers:', err);
+    } finally {
+      setLoadingTiers(false);
+    }
+  };
 
   // Image upload helper
   const fileToBase64 = (file: File): Promise<string> =>
@@ -152,22 +241,42 @@ export default function ApiTierConfig() {
     setStoreProducts(storeProducts.filter((_, i) => i !== index));
   };
 
-  // Submit handler
+  // Submit handler - handles both create and update
   const handleSubmit = async () => {
-    // Validate project name
-    if (!projectName.trim()) {
+    // Validate project name (only for new projects)
+    if (!isEditMode && !projectName.trim()) {
       alert('Please enter a project name');
       return;
     }
 
+    setLoading(true);
+
+    try {
+      if (isEditMode) {
+        // UPDATE MODE: Update existing tiers
+        await handleUpdate();
+      } else {
+        // CREATE MODE: Create new products and keys
+        await handleCreate();
+      }
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error saving config:', error);
+      alert('Failed to save configuration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle creating new project
+  const handleCreate = async () => {
     // Build tiers array based on active tab
     let tiers: any[] = [];
 
     if (activeTab === 'saas') {
       const incomplete = saasTiers.some(t => !t.name || !t.displayName);
       if (incomplete) {
-        alert('Please fill in all tier fields (name and display name required)');
-        return;
+        throw new Error('Please fill in all tier fields (name and display name required)');
       }
       tiers = saasTiers.map(t => ({
         name: t.name.toLowerCase().replace(/\s+/g, '_'),
@@ -184,8 +293,7 @@ export default function ApiTierConfig() {
     } else {
       const incomplete = storeProducts.some(p => !p.name || !p.displayName);
       if (incomplete) {
-        alert('Please fill in all product fields (name and display name required)');
-        return;
+        throw new Error('Please fill in all product fields (name and display name required)');
       }
       tiers = storeProducts.map(p => ({
         name: p.name.toLowerCase().replace(/\s+/g, '_'),
@@ -200,29 +308,106 @@ export default function ApiTierConfig() {
       }));
     }
 
-    setLoading(true);
+    const response = await fetch(`${OAUTH_API}/create-products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user?.id, tiers, mode, projectName: projectName.trim() }),
+    });
 
-    try {
-      const response = await fetch(`${OAUTH_API}/create-products`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, tiers, mode, projectName: projectName.trim() }),
-      });
-
-      if (response.ok) {
-        // Go straight to dashboard - keys will be loaded there
-        navigate('/dashboard');
-      } else {
-        const error = await response.text();
-        alert(`Failed to create products: ${error}`);
-      }
-    } catch (error) {
-      console.error('Error saving config:', error);
-      alert('Failed to save configuration');
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create products: ${error}`);
     }
   };
+
+  // Handle updating existing tiers
+  const handleUpdate = async () => {
+    const currentTiers = activeTab === 'saas' ? saasTiers : storeProducts;
+    const originalNames = new Set(originalTiers.map(t => t.name));
+    const currentNames = new Set(currentTiers.map(t => t.name));
+
+    // Find tiers to update (exist in both)
+    const toUpdate = currentTiers.filter(t => originalNames.has(t.name));
+
+    // Find tiers to add (new ones)
+    const toAdd = currentTiers.filter(t => !originalNames.has(t.name) && t.name && t.displayName);
+
+    // Find tiers to delete (removed ones)
+    const toDelete = originalTiers.filter(t => !currentNames.has(t.name));
+
+    // Update existing tiers
+    for (const tier of toUpdate) {
+      const featuresJson = JSON.stringify({
+        features: tier.features ? tier.features.split(',').map((f: string) => f.trim()) : [],
+        billingMode: activeTab === 'saas' ? 'subscription' : 'one_off',
+        imageUrl: 'imageUrl' in tier ? tier.imageUrl : '',
+        description: 'description' in tier ? tier.description : '',
+      });
+
+      await fetch(`${OAUTH_API}/tiers`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          tierName: tier.name,
+          mode,
+          updates: {
+            displayName: tier.displayName,
+            price: tier.price,
+            limit: 'limit' in tier ? (tier.limit === 'unlimited' ? 'unlimited' : tier.limit) : 0,
+            features: featuresJson,
+            popular: 'popular' in tier ? tier.popular : false,
+            inventory: 'inventory' in tier ? tier.inventory : null,
+          },
+        }),
+      });
+    }
+
+    // Add new tiers
+    for (const tier of toAdd) {
+      await fetch(`${OAUTH_API}/tiers/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          mode,
+          tier: {
+            name: tier.name.toLowerCase().replace(/\s+/g, '_'),
+            displayName: tier.displayName,
+            price: tier.price,
+            limit: 'limit' in tier ? tier.limit : 0,
+            billingMode: activeTab === 'saas' ? 'subscription' : 'one_off',
+            features: tier.features,
+            description: 'description' in tier ? tier.description : '',
+            imageUrl: 'imageUrl' in tier ? tier.imageUrl : '',
+            inventory: 'inventory' in tier ? tier.inventory : null,
+            popular: 'popular' in tier ? tier.popular : false,
+          },
+        }),
+      });
+    }
+
+    // Delete removed tiers
+    for (const tier of toDelete) {
+      await fetch(`${OAUTH_API}/tiers`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          tierName: tier.name,
+          mode,
+        }),
+      });
+    }
+  };
+
+  if (loadingTiers) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <p className="text-gray-400">Loading tiers...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -231,7 +416,7 @@ export default function ApiTierConfig() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold">dream-api</h1>
-            <span className="text-gray-500">/ Configure Products</span>
+            <span className="text-gray-500">/ {isEditMode ? 'Edit Products' : 'Configure Products'}</span>
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -257,18 +442,31 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Project Name */}
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-          <label className="block font-semibold mb-2">Project Name</label>
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            placeholder="e.g., My Chat API, My Store, Weather API"
-            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-          />
-          <p className="text-sm text-gray-500 mt-2">This name will identify your API keys in the dashboard</p>
-        </div>
+        {/* Edit Mode Banner */}
+        {isEditMode && (
+          <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6 flex items-center gap-3">
+            <span className="text-2xl">✎</span>
+            <div>
+              <p className="font-semibold text-blue-200">Edit Mode</p>
+              <p className="text-sm text-blue-300/70">Update your existing tiers. Changes will not generate new API keys.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Project Name - Only show for new projects */}
+        {!isEditMode && (
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+            <label className="block font-semibold mb-2">Project Name</label>
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="e.g., My Chat API, My Store, Weather API"
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="text-sm text-gray-500 mt-2">This name will identify your API keys in the dashboard</p>
+          </div>
+        )}
 
         {/* Mode Toggle */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
@@ -276,7 +474,7 @@ export default function ApiTierConfig() {
             <div>
               <h3 className="font-semibold mb-1">Environment Mode</h3>
               <p className="text-sm text-gray-400">
-                Start with Test mode. When ready, create Live products.
+                {isEditMode ? 'Editing tiers for this mode.' : 'Start with Test mode. When ready, create Live products.'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -340,7 +538,10 @@ export default function ApiTierConfig() {
             {saasTiers.map((tier, index) => (
               <div key={index} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Tier {index + 1}</h3>
+                  <h3 className="font-semibold">
+                    Tier {index + 1}
+                    {tier.priceId && <span className="ml-2 text-xs text-gray-500">(existing)</span>}
+                  </h3>
                   <button
                     onClick={() => removeSaasTier(index)}
                     disabled={saasTiers.length <= 1}
@@ -358,7 +559,8 @@ export default function ApiTierConfig() {
                       value={tier.name}
                       onChange={(e) => updateSaasTier(index, 'name', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
                       placeholder="free, pro, enterprise"
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                      disabled={!!tier.priceId} // Disable name change for existing tiers
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 disabled:opacity-50"
                     />
                   </div>
                   <div>
@@ -444,7 +646,10 @@ export default function ApiTierConfig() {
             {storeProducts.map((product, index) => (
               <div key={index} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Product {index + 1}</h3>
+                  <h3 className="font-semibold">
+                    Product {index + 1}
+                    {product.priceId && <span className="ml-2 text-xs text-gray-500">(existing)</span>}
+                  </h3>
                   <button
                     onClick={() => removeStoreProduct(index)}
                     disabled={storeProducts.length <= 1}
@@ -462,7 +667,8 @@ export default function ApiTierConfig() {
                       value={product.name}
                       onChange={(e) => updateStoreProduct(index, 'name', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
                       placeholder="product_1, template_pro"
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                      disabled={!!product.priceId}
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 disabled:opacity-50"
                     />
                   </div>
                   <div>
@@ -572,20 +778,27 @@ export default function ApiTierConfig() {
             className={`w-full py-4 rounded-lg font-bold text-lg transition-colors ${
               loading
                 ? 'bg-gray-700 cursor-not-allowed'
-                : mode === 'live'
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                : isEditMode
+                  ? 'bg-blue-600 hover:bg-blue-700'
+                  : mode === 'live'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
             {loading
-              ? 'Creating Products...'
-              : mode === 'live'
-                ? `Create Live ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
-                : `Create Test ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
+              ? (isEditMode ? 'Saving Changes...' : 'Creating Products...')
+              : isEditMode
+                ? 'Save Changes'
+                : mode === 'live'
+                  ? `Create Live ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
+                  : `Create Test ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
             }
           </button>
           <p className="text-center text-sm text-gray-500 mt-3">
-            This creates {mode} products on your Stripe account and generates {mode} API keys.
+            {isEditMode
+              ? 'Updates your existing tiers without creating new API keys.'
+              : `This creates ${mode} products on your Stripe account and generates ${mode} API keys.`
+            }
           </p>
         </div>
       </main>

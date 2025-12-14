@@ -557,7 +557,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-bold">Subscription Tiers</h3>
                 <button
-                  onClick={() => navigate('/api-tier-config')}
+                  onClick={() => navigate(`/api-tier-config?edit=true&mode=${viewMode}`)}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
                   Edit Tiers
@@ -680,10 +680,10 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">One-off Products</h3>
                 <button
-                  onClick={() => navigate('/api-tier-config')}
+                  onClick={() => navigate(`/api-tier-config?edit=true&mode=${viewMode}`)}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold"
                 >
-                  + Add Product
+                  Edit Products
                 </button>
               </div>
 
