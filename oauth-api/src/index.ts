@@ -367,11 +367,11 @@ export default {
                 'metadata[tierName]': tier.name,
                 'metadata[limit]': String(tier.limit ?? 0),
               });
-              // Only add description for one-offs if provided
-              if (tier.description && tier.billingMode === 'one_off') {
+              // Only add description for one-offs if provided and non-empty
+              if (tier.billingMode === 'one_off' && tier.description && tier.description.trim() !== '') {
                 params.append('description', tier.description);
               }
-              if (tier.imageUrl) {
+              if (tier.imageUrl && tier.imageUrl.trim() !== '') {
                 params.append('images[]', tier.imageUrl);
               }
               return params;
@@ -581,9 +581,6 @@ export default {
       }
     }
 
-    return new Response('Not Found', { status: 404 });
-  },
-};
     // Promote test config to live (reuse test tiers, create live prices/keys)
     if (url.pathname === '/promote-to-live' && request.method === 'POST') {
       const body = await request.json() as { userId: string };
@@ -637,10 +634,13 @@ export default {
                 'metadata[tierName]': tier.name,
                 'metadata[limit]': String(tier.limit ?? 0),
               });
-              if (tier.description && tier.billingMode === 'one_off') {
+              // Only add description for one-offs if provided and non-empty
+              if (tier.billingMode === 'one_off' && tier.description && tier.description.trim() !== '') {
                 params.append('description', tier.description);
               }
-              if (tier.imageUrl) params.append('images[]', tier.imageUrl);
+              if (tier.imageUrl && tier.imageUrl.trim() !== '') {
+                params.append('images[]', tier.imageUrl);
+              }
               return params;
             })(),
           });
@@ -742,3 +742,7 @@ export default {
         );
       }
     }
+
+    return new Response('Not Found', { status: 404 });
+  },
+};
