@@ -227,13 +227,28 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-port
 
 ---
 
+## UI (Dec 2024)
+
+**Dashboard** (`/dashboard`)
+- Dark theme (gray-900)
+- Tabs: SaaS/Subscriptions | Store/One-offs
+- Mode toggle: Test (amber) | Live (green)
+- Keys: Both test + live shown side-by-side
+- SaaS: MRR, customers, usage bars, tiers
+- Store: Product cards, inventory, sold-out
+
+**Config** (`/api-tier-config`)
+- Dark theme matching dashboard
+- Tabs: SaaS | Store
+- SaaS form: tier, price, limit, features
+- Store form: product, price, image, inventory
+
 ## Next Steps
 
-1. **Checkout redirect override** - allow success/cancel overrides everywhere
-2. **Hydrate tier config** - Ensure D1/KV have priceIds (used by checkout)
-3. **Dashboard polish** - Per-customer actions (portal/checkout/plan change), key management UI
-4. **SDK** - `npm install dream-api` for easy integration
-5. **AI Integration Helper** - Generate framework-specific code
+1. **API naming** - let devs name their projects
+2. **Key rotation** - rotate sk without recreating products
+3. **AI prompt generator** - load all config for scaffolding
+4. **SDK** - `npm install dream-api`
 
 ---
 

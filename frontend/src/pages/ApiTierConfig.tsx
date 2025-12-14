@@ -1,42 +1,66 @@
 /**
- * API Tier Configuration - Configure REAL tiers for production API
- * After Stripe OAuth, configure actual pricing tiers
+ * API Product Configuration - dream-api
+ *
+ * Configure SaaS subscription tiers OR Store one-off products
+ * Dark theme matching dashboard
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUser, useAuth } from '@clerk/clerk-react';
+import { useUser, useAuth, UserButton } from '@clerk/clerk-react';
 
 const OAUTH_API = import.meta.env.VITE_OAUTH_API_URL || 'http://localhost:8789';
 const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
 
-interface Tier {
+type ConfigTab = 'saas' | 'store';
+type ModeType = 'test' | 'live';
+
+interface SaasTier {
   name: string;
   displayName: string;
   price: number;
   limit: number | 'unlimited';
-  billingMode: 'subscription' | 'one_off';
-  description?: string;
-  imageUrl?: string;
-  inventory?: number | null;
-  features?: string;
+  features: string;
+  popular?: boolean;
+}
+
+interface StoreProduct {
+  name: string;
+  displayName: string;
+  price: number;
+  description: string;
+  imageUrl: string;
+  inventory: number | null;
+  features: string;
 }
 
 export default function ApiTierConfig() {
   const navigate = useNavigate();
   const { user } = useUser();
   const { getToken } = useAuth();
-  const [mode, setMode] = useState<'test' | 'live'>('test');
-  const [sellingMode, setSellingMode] = useState<'subscription' | 'one_off'>('subscription');
-  const [tiers, setTiers] = useState<Tier[]>([
-    { name: 'free', displayName: 'Free', price: 0, limit: 100, billingMode: 'subscription', description: 'Free plan', inventory: null, features: '' },
-    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, billingMode: 'subscription', description: 'Pro plan', inventory: null, features: '' },
-  ]);
-  const [loading, setLoading] = useState(false);
-  const [stripeConnected, setStripeConnected] = useState(false);
-  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
-  // Check if coming from Stripe OAuth
+  // Mode: test or live
+  const [mode, setMode] = useState<ModeType>('test');
+
+  // Tab: saas or store
+  const [activeTab, setActiveTab] = useState<ConfigTab>('saas');
+
+  // SaaS tiers
+  const [saasTiers, setSaasTiers] = useState<SaasTier[]>([
+    { name: 'free', displayName: 'Free', price: 0, limit: 100, features: '', popular: false },
+    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, features: '', popular: true },
+  ]);
+
+  // Store products
+  const [storeProducts, setStoreProducts] = useState<StoreProduct[]>([
+    { name: 'product1', displayName: 'My Product', price: 49, description: '', imageUrl: '', inventory: null, features: '' },
+  ]);
+
+  const [loading, setLoading] = useState(false);
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const [stripeConnected, setStripeConnected] = useState(false);
+
+  // Check URL params for stripe connected
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('stripe') === 'connected') {
@@ -44,31 +68,13 @@ export default function ApiTierConfig() {
     }
   }, []);
 
-  const updateTier = (index: number, field: keyof Tier, value: any) => {
-    const updated = [...tiers];
-    updated[index] = { ...updated[index], [field]: value };
-    setTiers(updated);
-  };
-
-  const handleSellingModeChange = (mode: 'subscription' | 'one_off') => {
-    setSellingMode(mode);
-    setTiers((prev) =>
-      prev.map((tier) => ({
-        ...tier,
-        billingMode: mode,
-        limit: mode === 'subscription' ? tier.limit || 100 : 0,
-        inventory: mode === 'one_off' ? tier.inventory ?? null : null,
-      }))
-    );
-  };
-
+  // Image upload helper
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        const base64 = result.split(',')[1] || '';
-        resolve(base64);
+        resolve(result.split(',')[1] || '');
       };
       reader.onerror = reject;
       reader.readAsDataURL(file);
@@ -79,9 +85,8 @@ export default function ApiTierConfig() {
       setUploadingIndex(index);
       const base64 = await fileToBase64(file);
       const token = await getToken({ template: 'dream-api' });
-      if (!token) {
-        throw new Error('Missing auth token');
-      }
+      if (!token) throw new Error('Missing auth token');
+
       const res = await fetch(`${FRONT_AUTH_API}/upload-asset`, {
         method: 'POST',
         headers: {
@@ -94,26 +99,96 @@ export default function ApiTierConfig() {
           data: base64,
         }),
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text);
-      }
+
+      if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      updateTier(index, 'imageUrl', data.url || '');
+      updateStoreProduct(index, 'imageUrl', data.url || '');
     } catch (err) {
       console.error('Upload failed', err);
-      alert('Upload failed. Check your secret key and try again.');
+      alert('Upload failed. Try again.');
     } finally {
       setUploadingIndex(null);
     }
   };
 
+  // SaaS tier helpers
+  const updateSaasTier = (index: number, field: keyof SaasTier, value: any) => {
+    const updated = [...saasTiers];
+    updated[index] = { ...updated[index], [field]: value };
+    setSaasTiers(updated);
+  };
+
+  const addSaasTier = () => {
+    setSaasTiers([
+      ...saasTiers,
+      { name: '', displayName: '', price: 0, limit: 100, features: '', popular: false },
+    ]);
+  };
+
+  const removeSaasTier = (index: number) => {
+    if (saasTiers.length <= 1) return;
+    setSaasTiers(saasTiers.filter((_, i) => i !== index));
+  };
+
+  // Store product helpers
+  const updateStoreProduct = (index: number, field: keyof StoreProduct, value: any) => {
+    const updated = [...storeProducts];
+    updated[index] = { ...updated[index], [field]: value };
+    setStoreProducts(updated);
+  };
+
+  const addStoreProduct = () => {
+    setStoreProducts([
+      ...storeProducts,
+      { name: '', displayName: '', price: 0, description: '', imageUrl: '', inventory: null, features: '' },
+    ]);
+  };
+
+  const removeStoreProduct = (index: number) => {
+    if (storeProducts.length <= 1) return;
+    setStoreProducts(storeProducts.filter((_, i) => i !== index));
+  };
+
+  // Submit handler
   const handleSubmit = async () => {
-    // Validate
-    const incomplete = tiers.some(t => !t.name || !t.displayName || !t.billingMode);
-    if (incomplete) {
-      alert('Please fill in all tier fields');
-      return;
+    // Build tiers array based on active tab
+    let tiers: any[] = [];
+
+    if (activeTab === 'saas') {
+      const incomplete = saasTiers.some(t => !t.name || !t.displayName);
+      if (incomplete) {
+        alert('Please fill in all tier fields (name and display name required)');
+        return;
+      }
+      tiers = saasTiers.map(t => ({
+        name: t.name.toLowerCase().replace(/\s+/g, '_'),
+        displayName: t.displayName,
+        price: t.price,
+        limit: t.limit,
+        billingMode: 'subscription',
+        features: t.features,
+        popular: t.popular,
+        description: '',
+        imageUrl: '',
+        inventory: null,
+      }));
+    } else {
+      const incomplete = storeProducts.some(p => !p.name || !p.displayName);
+      if (incomplete) {
+        alert('Please fill in all product fields (name and display name required)');
+        return;
+      }
+      tiers = storeProducts.map(p => ({
+        name: p.name.toLowerCase().replace(/\s+/g, '_'),
+        displayName: p.displayName,
+        price: p.price,
+        limit: 0,
+        billingMode: 'one_off',
+        features: p.features,
+        description: p.description,
+        imageUrl: p.imageUrl,
+        inventory: p.inventory,
+      }));
     }
 
     setLoading(true);
@@ -121,22 +196,19 @@ export default function ApiTierConfig() {
     try {
       const response = await fetch(`${OAUTH_API}/create-products`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id, tiers, mode }),
       });
 
       if (response.ok) {
-        // Backend creates products, generates publishableKey + secretKey
-        // Redirect to /credentials page to display them
-        navigate('/credentials?success=true');
+        // Go straight to dashboard - keys will be loaded there
+        navigate('/dashboard');
       } else {
         const error = await response.text();
         alert(`Failed to create products: ${error}`);
       }
     } catch (error) {
-      console.error('Error saving tier config:', error);
+      console.error('Error saving config:', error);
       alert('Failed to save configuration');
     } finally {
       setLoading(false);
@@ -144,292 +216,357 @@ export default function ApiTierConfig() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-4xl mx-auto px-8 py-16">
-        {/* Header */}
-        <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold text-slate-900 mb-3">Configure Your Products</h1>
-          <p className="text-xl text-slate-600">Subscription tiers or one-off products for your customers</p>
-        </div>
-
-        {/* Selling Mode Switch */}
-        <div className="mb-10 bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">What are you selling?</h2>
-          <p className="text-sm text-slate-600 mb-4">
-            Keep flows separate: subscriptions for SaaS/courses with usage limits; one-off for store/cart (no limits, cart checkout).
-          </p>
-          <div className="flex gap-3 mb-4">
-            <button
-              onClick={() => setMode('test')}
-              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
-                mode === 'test'
-                  ? 'bg-amber-100 text-amber-900 border-amber-500'
-                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
-              }`}
-            >
-              Test mode (recommended first)
-            </button>
-            <button
-              onClick={() => setMode('live')}
-              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
-                mode === 'live'
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
-              }`}
-            >
-              Live mode
-            </button>
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header */}
+      <header className="bg-gray-800 border-b border-gray-700">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold">dream-api</h1>
+            <span className="text-gray-500">/ Configure Products</span>
           </div>
-          <p className="text-xs text-slate-500 mb-3">
-            We’ll create {mode === 'test' ? 'test' : 'live'} Stripe products and {mode} API keys. Start in test, then rerun in live to ship.
-          </p>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => handleSellingModeChange('subscription')}
-              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
-                sellingMode === 'subscription'
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
-              }`}
+              onClick={() => navigate('/dashboard')}
+              className="text-sm text-gray-400 hover:text-white"
             >
-              Subscriptions (recurring)
+              Back to Dashboard
             </button>
-            <button
-              onClick={() => handleSellingModeChange('one_off')}
-              className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
-                sellingMode === 'one_off'
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white text-slate-700 border-gray-300 hover:border-slate-400'
-              }`}
-            >
-              One-off products (store/cart)
-            </button>
+            <UserButton />
           </div>
-          <p className="text-xs text-slate-500 mt-3">
-            This sets all products below. Use separate keys/platforms if you want both flows.
-          </p>
-          <p className="text-xs text-slate-500 mt-2">
-            Upload any product image right away; we’ll scope it to your platform automatically. Or paste an external URL if you prefer.
-          </p>
         </div>
+      </header>
 
+      <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Stripe Connected Banner */}
         {stripeConnected && (
-          <div className="bg-green-50 border-2 border-green-500 rounded-lg p-6 mb-8">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">✅</span>
-              <div>
-                <h3 className="text-lg font-bold text-green-900">Stripe Connected!</h3>
-                <p className="text-green-700 text-sm">
-                  Now configure your tiers. We'll create products on your Stripe account automatically.
-                </p>
-              </div>
+          <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6 flex items-center gap-3">
+            <span className="text-2xl">✓</span>
+            <div>
+              <p className="font-semibold text-green-200">Stripe Connected!</p>
+              <p className="text-sm text-green-300/70">Configure your products below.</p>
             </div>
           </div>
         )}
 
-        {/* Product Configuration */}
-        <div className="space-y-6 mb-12">
-          {tiers.map((tier, index) => (
-            <div key={index} className="bg-white p-8 rounded-xl border border-gray-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-slate-900">
-                  Product {index + 1}
-                </h3>
-                <button
-                  className="text-sm text-red-500"
-                  onClick={() => setTiers(tiers.filter((_, i) => i !== index))}
-                  disabled={tiers.length <= 1}
-                >
-                  Remove
-                </button>
-              </div>
+        {/* Mode Toggle */}
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold mb-1">Environment Mode</h3>
+              <p className="text-sm text-gray-400">
+                Start with Test mode. When ready, create Live products.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setMode('test')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  mode === 'test'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500'
+                    : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
+                }`}
+              >
+                Test Mode
+              </button>
+              <button
+                onClick={() => setMode('live')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  mode === 'live'
+                    ? 'bg-green-500/20 text-green-300 border border-green-500'
+                    : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
+                }`}
+              >
+                Live Mode
+              </button>
+            </div>
+          </div>
+        </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <label className="block">
-                  <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Product ID (lowercase, no spaces)
-                  </span>
-                  <input
-                    type="text"
-                    value={tier.name}
-                    onChange={(e) => updateTier(index, 'name', e.target.value.toLowerCase())}
-                    placeholder="free, pro, oneoff1"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                  />
-                </label>
+        {/* Tab Selection */}
+        <div className="flex items-center gap-4 mb-6 border-b border-gray-700 pb-4">
+          <button
+            onClick={() => setActiveTab('saas')}
+            className={`px-4 py-2 rounded-t font-semibold transition-colors ${
+              activeTab === 'saas'
+                ? 'bg-gray-800 text-white border-b-2 border-blue-500'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            SaaS / Subscriptions
+          </button>
+          <button
+            onClick={() => setActiveTab('store')}
+            className={`px-4 py-2 rounded-t font-semibold transition-colors ${
+              activeTab === 'store'
+                ? 'bg-gray-800 text-white border-b-2 border-blue-500'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            Store / One-offs
+          </button>
+        </div>
 
-                <label className="block">
-                  <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Display Name
-                  </span>
-                  <input
-                    type="text"
-                    value={tier.displayName}
-                    onChange={(e) => updateTier(index, 'displayName', e.target.value)}
-                    placeholder="Free, Pro, One-time Template"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                  />
-                </label>
-              </div>
+        {/* SaaS Tab Content */}
+        {activeTab === 'saas' && (
+          <div className="space-y-4">
+            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-4">
+              <p className="text-sm text-gray-400">
+                Configure subscription tiers with monthly limits. Customers subscribe and get usage-tracked API access.
+              </p>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <label className="block">
-                  <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Price ({tier.billingMode === 'one_off' ? 'one-time $' : '$/month'})
-                  </span>
-                  <input
-                    type="text"
-                    value={tier.price}
-                    onChange={(e) => updateTier(index, 'price', Number(e.target.value) || 0)}
-                    placeholder="0, 29, 99"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                  />
-                </label>
-                {tier.billingMode === 'subscription' && (
-                  <label className="block">
-                    <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                      Monthly Limit
-                    </span>
+            {saasTiers.map((tier, index) => (
+              <div key={index} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Tier {index + 1}</h3>
+                  <button
+                    onClick={() => removeSaasTier(index)}
+                    disabled={saasTiers.length <= 1}
+                    className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Tier ID (lowercase)</label>
+                    <input
+                      type="text"
+                      value={tier.name}
+                      onChange={(e) => updateSaasTier(index, 'name', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                      placeholder="free, pro, enterprise"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Display Name</label>
+                    <input
+                      type="text"
+                      value={tier.displayName}
+                      onChange={(e) => updateSaasTier(index, 'displayName', e.target.value)}
+                      placeholder="Free, Pro, Enterprise"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Price ($/month)</label>
+                    <input
+                      type="number"
+                      value={tier.price}
+                      onChange={(e) => updateSaasTier(index, 'price', Number(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Monthly Limit</label>
                     <input
                       type="text"
                       value={tier.limit}
                       onChange={(e) => {
                         const val = e.target.value;
-                        updateTier(index, 'limit', val === 'unlimited' ? 'unlimited' : Number(val) || val);
+                        updateSaasTier(index, 'limit', val === 'unlimited' ? 'unlimited' : Number(val) || 0);
                       }}
                       placeholder="100, 1000, unlimited"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
                     />
-                  </label>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="block">
-                  <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Selling mode
-                  </span>
-                  <div className="px-4 py-2 border border-gray-200 rounded-lg text-slate-800 bg-slate-50">
-                    {tier.billingMode === 'subscription' ? 'Subscription (recurring)' : 'One-off (single payment, cart)'}
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tier.popular || false}
+                        onChange={(e) => updateSaasTier(index, 'popular', e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-600 bg-gray-900"
+                      />
+                      <span className="text-sm text-gray-400">Popular badge</span>
+                    </label>
                   </div>
                 </div>
 
-                <label className="block">
-                  <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                    Inventory (one-off only)
-                  </span>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Features (comma separated)</label>
                   <input
-                    type="number"
-                    value={tier.inventory ?? ''}
-                    onChange={(e) => updateTier(index, 'inventory', e.target.value === '' ? null : Number(e.target.value))}
-                    placeholder="Leave blank for unlimited"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                    disabled={tier.billingMode !== 'one_off'}
+                    type="text"
+                    value={tier.features}
+                    onChange={(e) => updateSaasTier(index, 'features', e.target.value)}
+                    placeholder="API access, Email support, Priority support"
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
                   />
-                </label>
+                </div>
               </div>
+            ))}
 
-              <label className="block mb-4">
-                <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                  Image URL (optional)
-                </span>
-                <input
-                  type="text"
-                  value={tier.imageUrl || ''}
-                  onChange={(e) => updateTier(index, 'imageUrl', e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                />
-                <div className="mt-2 flex items-center gap-3 text-sm text-slate-600">
-                  <label className="flex items-center gap-2">
-                    <span className="px-2 py-1 bg-slate-100 rounded border border-slate-200 text-xs">Upload</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleImageUpload(file, index);
-                      }}
-                      disabled={uploadingIndex !== null}
-                    />
-                  </label>
-                  {uploadingIndex === index && <span className="text-xs text-blue-600">Uploading...</span>}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Paste a hosted image URL or upload to our CDN (requires secret key above). Shown on product cards.
-                </div>
-              </label>
+            <button
+              onClick={addSaasTier}
+              className="w-full py-3 border-2 border-dashed border-gray-700 rounded-lg text-gray-400 hover:border-gray-600 hover:text-gray-300"
+            >
+              + Add Tier
+            </button>
+          </div>
+        )}
 
-              <label className="block mb-4">
-                <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                  Highlights / badges (comma separated, optional)
-                </span>
-                <input
-                  type="text"
-                  value={tier.features || ''}
-                  onChange={(e) => updateTier(index, 'features', e.target.value)}
-                  placeholder="Fast support, Lifetime updates"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                />
-              </label>
-
-              <label className="block mb-4">
-                <span className="text-slate-700 text-sm font-semibold mb-2 block">
-                  Description
-                </span>
-                <textarea
-                  value={tier.description || ''}
-                  onChange={(e) => updateTier(index, 'description', e.target.value)}
-                  placeholder="What does this include?"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-slate-900"
-                  rows={3}
-                />
-              </label>
+        {/* Store Tab Content */}
+        {activeTab === 'store' && (
+          <div className="space-y-4">
+            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-4">
+              <p className="text-sm text-gray-400">
+                Configure one-off products for your store. Customers pay once, inventory decrements automatically.
+              </p>
             </div>
-          ))}
-        </div>
 
-        <div className="mb-12">
-          <button
-            onClick={() =>
-              setTiers([
-                ...tiers,
-                {
-                  name: '',
-                  displayName: '',
-                  price: 0,
-                  limit: sellingMode === 'subscription' ? 100 : 0,
-                  billingMode: sellingMode,
-                  description: '',
-                  imageUrl: '',
-                  inventory: null,
-                  features: '',
-                },
-              ])
-            }
-            className="px-4 py-2 bg-slate-900 text-white rounded-lg font-semibold"
-          >
-            + Add Product
-          </button>
-        </div>
+            {storeProducts.map((product, index) => (
+              <div key={index} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Product {index + 1}</h3>
+                  <button
+                    onClick={() => removeStoreProduct(index)}
+                    disabled={storeProducts.length <= 1}
+                    className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Remove
+                  </button>
+                </div>
 
-        {/* Submit */}
-        <div className="text-center">
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Product ID (lowercase)</label>
+                    <input
+                      type="text"
+                      value={product.name}
+                      onChange={(e) => updateStoreProduct(index, 'name', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                      placeholder="product_1, template_pro"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Display Name</label>
+                    <input
+                      type="text"
+                      value={product.displayName}
+                      onChange={(e) => updateStoreProduct(index, 'displayName', e.target.value)}
+                      placeholder="My Product"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Price ($)</label>
+                    <input
+                      type="number"
+                      value={product.price}
+                      onChange={(e) => updateStoreProduct(index, 'price', Number(e.target.value) || 0)}
+                      placeholder="49"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Inventory (blank = unlimited)</label>
+                    <input
+                      type="number"
+                      value={product.inventory ?? ''}
+                      onChange={(e) => updateStoreProduct(index, 'inventory', e.target.value === '' ? null : Number(e.target.value))}
+                      placeholder="100"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <textarea
+                    value={product.description}
+                    onChange={(e) => updateStoreProduct(index, 'description', e.target.value)}
+                    placeholder="What does this product include?"
+                    rows={2}
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-1">Image URL</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={product.imageUrl}
+                      onChange={(e) => updateStoreProduct(index, 'imageUrl', e.target.value)}
+                      placeholder="https://... or upload below"
+                      className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                    <label className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg cursor-pointer text-sm">
+                      {uploadingIndex === index ? 'Uploading...' : 'Upload'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImageUpload(file, index);
+                        }}
+                        disabled={uploadingIndex !== null}
+                      />
+                    </label>
+                  </div>
+                  {product.imageUrl && (
+                    <div className="mt-2">
+                      <img src={product.imageUrl} alt="Preview" className="h-20 w-20 object-cover rounded border border-gray-700" />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Features/Badges (comma separated)</label>
+                  <input
+                    type="text"
+                    value={product.features}
+                    onChange={(e) => updateStoreProduct(index, 'features', e.target.value)}
+                    placeholder="Lifetime access, Free updates, Source code"
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                  />
+                </div>
+              </div>
+            ))}
+
+            <button
+              onClick={addStoreProduct}
+              className="w-full py-3 border-2 border-dashed border-gray-700 rounded-lg text-gray-400 hover:border-gray-600 hover:text-gray-300"
+            >
+              + Add Product
+            </button>
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <div className="mt-8 pt-6 border-t border-gray-700">
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className={`px-12 py-4 text-white rounded-lg font-bold text-lg transition-colors ${
-              loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'
+            className={`w-full py-4 rounded-lg font-bold text-lg transition-colors ${
+              loading
+                ? 'bg-gray-700 cursor-not-allowed'
+                : mode === 'live'
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {loading ? 'Creating Products...' : 'Create Stripe Products & Get API Key →'}
+            {loading
+              ? 'Creating Products...'
+              : mode === 'live'
+                ? `Create Live ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
+                : `Create Test ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
+            }
           </button>
-          <p className="mt-4 text-slate-500 text-sm">
-            We'll create these products on your Stripe account and generate your API credentials
+          <p className="text-center text-sm text-gray-500 mt-3">
+            This creates {mode} products on your Stripe account and generates {mode} API keys.
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
