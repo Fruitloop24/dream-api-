@@ -97,7 +97,7 @@ export function getCorsHeaders(request: Request, env: Env): Record<string, strin
 		// If origin allowed, echo it back. Otherwise, use first allowed origin as safe fallback
 		'Access-Control-Allow-Origin': finalAllowOrigin,
 		'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-		'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform-User-Id',
+		'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform-User-Id, X-User-Id, X-User-Plan, X-Env',
 		'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
 		...getSecurityHeaders(), // Add security headers to all responses
 	};
