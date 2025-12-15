@@ -29,6 +29,8 @@ export interface ApiKeyVerifyResult {
 	platformId: string;
 	publishableKey: string;
 	mode?: string;
+	projectId?: string | null;
+	projectType?: string | null;
 }
 
 /**
@@ -57,12 +59,14 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		const pk = fromDb.publishableKey;
 		const platformId = fromDb.platformId;
 		const mode = fromDb.mode || (pk.startsWith('pk_test_') ? 'test' : 'live');
+		const projectId = fromDb.projectId || null;
+		const projectType = fromDb.projectType || null;
 		// Best-effort rehydrate KV cache
 		await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
 		await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
 
-		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${pk}, Mode: ${mode}`);
-		return { platformId, publishableKey: pk, mode };
+		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, Project: ${projectId || 'default'}, PublishableKey: ${pk}, Mode: ${mode}`);
+		return { platformId, publishableKey: pk, mode, projectId, projectType };
 	} catch (error) {
 		console.error('[API Key] Verification error:', error);
 		return null;

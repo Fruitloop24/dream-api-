@@ -116,7 +116,8 @@ export async function handleCreateCheckout(
 	corsHeaders: Record<string, string>,
 	origin: string,
 	request: Request,
-	mode: string = 'live'
+	mode: string = 'live',
+	projectId: string | null = null
 ): Promise<Response> {
 	try {
 		// Get target tier and price ID from request body
@@ -138,7 +139,7 @@ export async function handleCreateCheckout(
 		// If no priceId provided, load from config (multi-tenant using platformId)
 		if (!priceId) {
 			console.log(`🔍 Loading price ID from config for tier: ${targetTier}, platformId: ${platformId}`);
-			const priceIdMap = await getPriceIdMap(env, platformId, mode);
+			const priceIdMap = await getPriceIdMap(env, platformId, projectId || undefined, mode);
 			console.log(`[Checkout] Price ID Map from KV: ${JSON.stringify(priceIdMap)}`);
 			priceId = priceIdMap[targetTier] || '';
 			console.log(`💳 Loaded price ID: ${priceId}`);

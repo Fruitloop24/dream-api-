@@ -45,18 +45,20 @@ export default function ApiTierConfig() {
   const { user } = useUser();
   const { getToken } = useAuth();
 
-  // Detect edit mode from URL params
+  // Detect edit mode and project info from URL params
   const isEditMode = searchParams.get('edit') === 'true';
   const editMode = (searchParams.get('mode') as ModeType) || 'test';
+  const projectNameParam = searchParams.get('projectName') || '';
+  const projectTypeParam = (searchParams.get('projectType') as ConfigTab) || 'saas';
 
   // Mode: test or live
   const [mode, setMode] = useState<ModeType>(editMode);
 
   // Project name (only for new projects)
-  const [projectName, setProjectName] = useState<string>('');
+  const [projectName, setProjectName] = useState<string>(projectNameParam);
 
   // Tab: saas or store
-  const [activeTab, setActiveTab] = useState<ConfigTab>('saas');
+  const [activeTab, setActiveTab] = useState<ConfigTab>(projectTypeParam);
 
   // SaaS tiers
   const [saasTiers, setSaasTiers] = useState<SaasTier[]>([
@@ -88,14 +90,21 @@ export default function ApiTierConfig() {
   // Load existing tiers when in edit mode
   useEffect(() => {
     if (isEditMode && user?.id) {
+      setActiveTab(projectTypeParam);
       loadExistingTiers();
     }
-  }, [isEditMode, user?.id, mode]);
+  }, [isEditMode, user?.id, mode, projectTypeParam]);
 
   const loadExistingTiers = async () => {
     setLoadingTiers(true);
     try {
-      const response = await fetch(`${OAUTH_API}/tiers?userId=${user?.id}&mode=${mode}`);
+      const params = new URLSearchParams({
+        userId: user?.id || '',
+        mode,
+        ...(projectNameParam ? { projectName: projectNameParam } : {}),
+        ...(projectTypeParam ? { projectType: projectTypeParam } : {}),
+      });
+      const response = await fetch(`${OAUTH_API}/tiers?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         const tiers = data.tiers || [];
@@ -311,7 +320,13 @@ export default function ApiTierConfig() {
     const response = await fetch(`${OAUTH_API}/create-products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user?.id, tiers, mode, projectName: projectName.trim() }),
+      body: JSON.stringify({
+        userId: user?.id,
+        tiers,
+        mode,
+        projectName: projectName.trim(),
+        projectType: activeTab,
+      }),
     });
 
     if (!response.ok) {
@@ -351,6 +366,8 @@ export default function ApiTierConfig() {
           userId: user?.id,
           tierName: tier.name,
           mode,
+          projectName: projectName || projectNameParam,
+          projectType: activeTab,
           updates: {
             displayName: tier.displayName,
             price: tier.price,
@@ -371,6 +388,8 @@ export default function ApiTierConfig() {
         body: JSON.stringify({
           userId: user?.id,
           mode,
+          projectName: projectName || projectNameParam,
+          projectType: activeTab,
           tier: {
             name: tier.name.toLowerCase().replace(/\s+/g, '_'),
             displayName: tier.displayName,
@@ -396,6 +415,8 @@ export default function ApiTierConfig() {
           userId: user?.id,
           tierName: tier.name,
           mode,
+          projectName: projectName || projectNameParam,
+          projectType: activeTab,
         }),
       });
     }
@@ -453,7 +474,7 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Project Name - Only show for new projects */}
+        {/* Project Name */}
         {!isEditMode && (
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
             <label className="block font-semibold mb-2">Project Name</label>
@@ -465,6 +486,12 @@ export default function ApiTierConfig() {
               className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
             />
             <p className="text-sm text-gray-500 mt-2">This name will identify your API keys in the dashboard</p>
+          </div>
+        )}
+        {isEditMode && projectNameParam && (
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+            <p className="text-sm text-gray-400">Project</p>
+            <p className="font-semibold">{projectNameParam}</p>
           </div>
         )}
 
@@ -511,6 +538,7 @@ export default function ApiTierConfig() {
                 ? 'bg-gray-800 text-white border-b-2 border-blue-500'
                 : 'text-gray-400 hover:text-gray-200'
             }`}
+            disabled={isEditMode && projectTypeParam !== 'saas'}
           >
             SaaS / Subscriptions
           </button>
@@ -521,6 +549,7 @@ export default function ApiTierConfig() {
                 ? 'bg-gray-800 text-white border-b-2 border-blue-500'
                 : 'text-gray-400 hover:text-gray-200'
             }`}
+            disabled={isEditMode && projectTypeParam !== 'store'}
           >
             Store / One-offs
           </button>

@@ -51,6 +51,9 @@ type ApiKeyRow = {
 	secretKeyHash: string;
 	createdAt?: string;
 	status?: string | null;
+	name?: string | null;
+	projectId?: string | null;
+	projectType?: string | null;
 };
 
 type EventRow = {
@@ -66,16 +69,24 @@ export async function handleDashboard(
 	env: Env,
 	platformId: string,
 	corsHeaders: Record<string, string>,
-	mode: string = 'live'
+	mode: string = 'live',
+	projectId: string | null = null,
+	currentPublishableKey: string | null = null
 ): Promise<Response> {
 	try {
 		await ensureSubscriptionSchema(env);
 		await ensureTierSchema(env);
 		// Tiers (for limits and display)
-		const tiersResult = await env.DB.prepare(
-			'SELECT name, displayName, price, "limit", priceId, productId, popular, inventory, soldOut FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)'
-		)
-			.bind(platformId, mode)
+		const tierQuery = [
+			'SELECT name, displayName, price, "limit", priceId, productId, popular, inventory, soldOut FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)',
+		];
+		const tierParams: any[] = [platformId, mode];
+		if (projectId) {
+			tierQuery.push('AND (projectId = ? OR projectId IS NULL)');
+			tierParams.push(projectId);
+		}
+		const tiersResult = await env.DB.prepare(tierQuery.join(' '))
+			.bind(...tierParams)
 			.all<TierRow>();
 		const tierInfoByName: Record<string, TierRow> = {};
 		(tiersResult.results || []).forEach((t) => {
@@ -98,8 +109,13 @@ export async function handleDashboard(
 		const keyPrefix = mode === 'test' ? 'pk_test_%' : 'pk_live_%';
 		let subsQuery =
 			'SELECT userId, plan, status, subscriptionId, stripeCustomerId, currentPeriodEnd, canceledAt, priceId, productId, amount, currency, publishableKey FROM subscriptions WHERE platformId = ? AND (publishableKey LIKE ? OR publishableKey IS NULL)';
+		const subsParams: any[] = [platformId, keyPrefix];
+		if (currentPublishableKey) {
+			subsQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+			subsParams.push(currentPublishableKey);
+		}
 		const subsResult = await env.DB.prepare(subsQuery)
-			.bind(platformId, keyPrefix)
+			.bind(...subsParams)
 			.all<SubscriptionRow & { publishableKey?: string | null }>();
 		const subscriptions = subsResult.results || [];
 
@@ -107,33 +123,55 @@ export async function handleDashboard(
 		const userIdsInMode = subscriptions.map(s => s.userId);
 		let usage: UsageRow[] = [];
 		if (userIdsInMode.length > 0) {
-			const usageResult = await env.DB.prepare(
-				'SELECT userId, usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ?'
-			)
-				.bind(platformId)
+			const usageQuery = projectId
+				? 'SELECT userId, usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND (projectId = ? OR projectId IS NULL)'
+				: 'SELECT userId, usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ?';
+			const usageResult = await env.DB.prepare(usageQuery)
+				.bind(...(projectId ? [platformId, projectId] : [platformId]))
 				.all<UsageRow>();
 			// Filter to only users in this mode
 			usage = (usageResult.results || []).filter(u => userIdsInMode.includes(u.userId));
 		}
 
 		// End-users - filter by mode
-		const usersResult = await env.DB.prepare(
-			'SELECT clerkUserId as userId, email, status, createdAt, publishableKey FROM end_users WHERE platformId = ? AND (publishableKey LIKE ? OR publishableKey IS NULL)'
-		)
-			.bind(platformId, keyPrefix)
+		let usersQuery =
+			'SELECT clerkUserId as userId, email, status, createdAt, publishableKey FROM end_users WHERE platformId = ? AND (publishableKey LIKE ? OR publishableKey IS NULL)';
+		const usersParams: any[] = [platformId, keyPrefix];
+		if (currentPublishableKey) {
+			usersQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+			usersParams.push(currentPublishableKey);
+		}
+		const usersResult = await env.DB.prepare(usersQuery)
+			.bind(...usersParams)
 			.all<EndUserRow & { publishableKey?: string | null }>();
 		const users = usersResult.results || [];
 
 		// Latest API key (for pk) - filter by mode
-		const keyResult = await env.DB.prepare(
-			'SELECT publishableKey, secretKeyHash FROM api_keys WHERE platformId = ? AND publishableKey LIKE ? ORDER BY createdAt DESC LIMIT 1'
-		)
-			.bind(platformId, keyPrefix)
+		const keyQuery = [
+			'SELECT publishableKey, secretKeyHash, name, projectId, projectType FROM api_keys WHERE platformId = ? AND publishableKey LIKE ?',
+		];
+		const keyParams: any[] = [platformId, keyPrefix];
+		if (projectId) {
+			keyQuery.push('AND (projectId = ? OR projectId IS NULL)');
+			keyParams.push(projectId);
+		}
+		keyQuery.push('ORDER BY createdAt DESC LIMIT 1');
+
+		const keyResult = await env.DB.prepare(keyQuery.join(' '))
+			.bind(...keyParams)
 			.first<ApiKeyRow>();
-		const allKeysResult = await env.DB.prepare(
-			'SELECT publishableKey, secretKeyHash, createdAt, status FROM api_keys WHERE platformId = ? AND publishableKey LIKE ? ORDER BY createdAt DESC'
-		)
-			.bind(platformId, keyPrefix)
+		const allKeysQuery = [
+			'SELECT publishableKey, secretKeyHash, createdAt, status, name, projectId, projectType FROM api_keys WHERE platformId = ? AND publishableKey LIKE ?',
+		];
+		const allKeysParams: any[] = [platformId, keyPrefix];
+		if (projectId) {
+			allKeysQuery.push('AND (projectId = ? OR projectId IS NULL)');
+			allKeysParams.push(projectId);
+		}
+		allKeysQuery.push('ORDER BY createdAt DESC');
+
+		const allKeysResult = await env.DB.prepare(allKeysQuery.join(' '))
+			.bind(...allKeysParams)
 			.all<ApiKeyRow>();
 
 		// Stripe account info (no secrets)
@@ -282,6 +320,9 @@ export async function handleDashboard(
 					createdAt: k.createdAt || null,
 					label: null,
 					status: k.status || null,
+					name: k.name || null,
+					projectId: (k as any).projectId || null,
+					projectType: (k as any).projectType || null,
 				})),
 				stripeAccountId: stripeResult?.stripeUserId || null,
 			},

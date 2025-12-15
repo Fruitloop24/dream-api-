@@ -17,10 +17,11 @@ export async function handleGetProducts(
   env: Env,
   platformId: string,
   corsHeaders: Record<string, string>,
-  mode: string = 'live'
+  mode: string = 'live',
+  projectId: string | null = null
 ): Promise<Response> {
   await ensureTierSchema(env);
-  const tiers = await getAllTiers(env, platformId, mode);
+  const tiers = await getAllTiers(env, platformId, projectId || undefined, mode);
   const products = tiers
     .filter((t) => (t.billingMode || 'subscription') === 'one_off')
     .map((t) => ({
@@ -55,7 +56,8 @@ export async function handleCartCheckout(
   corsHeaders: Record<string, string>,
   origin: string,
   request: Request,
-  mode: string = 'live'
+  mode: string = 'live',
+  projectId: string | null = null
 ): Promise<Response> {
   try {
     await ensureTierSchema(env);
@@ -74,7 +76,7 @@ export async function handleCartCheckout(
       );
     }
 
-    const tiers = await getAllTiers(env, platformId, mode);
+    const tiers = await getAllTiers(env, platformId, projectId || undefined, mode);
     const oneOffs = tiers.filter((t) => (t.billingMode || 'subscription') === 'one_off');
 
     const indexByKey = new Map<string, typeof oneOffs[number]>();

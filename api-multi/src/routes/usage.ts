@@ -34,6 +34,7 @@
 import { Env, PlanTier } from '../types';
 import { getTierConfig } from '../config/configLoader';
 import { getCurrentPeriod } from '../services/kv';
+import { ensureUsageSchema } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -66,10 +67,13 @@ export async function handleDataRequest(
 	plan: PlanTier,
 	env: Env,
 	corsHeaders: Record<string, string>,
+	projectId: string | null = null,
 	mode: string = 'live'
 ): Promise<Response> {
+	await ensureUsageSchema(env);
+
 	// Get tier limit from config (using platformId for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId, mode);
+	const tierConfigs = await getTierConfig(env, platformId, projectId, mode);
 	const tierLimit = tierConfigs[plan]?.limit ?? 0;
 	const isUnlimited = tierLimit === Infinity;
 	const limitNumber = isUnlimited ? Number.MAX_SAFE_INTEGER : tierLimit;
@@ -78,17 +82,19 @@ export async function handleDataRequest(
 
 	// Ensure a row exists in usage_counts
 	await env.DB.prepare(
-		`INSERT OR IGNORE INTO usage_counts (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
-     VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`
+		`INSERT OR IGNORE INTO usage_counts (platformId, projectId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`
 	)
-		.bind(platformId, userId, plan, currentPeriod.start, currentPeriod.end)
+		.bind(platformId, projectId, userId, plan, currentPeriod.start, currentPeriod.end)
 		.run();
 
 	// Load current usage
 	let row = await env.DB.prepare(
-		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
+		projectId
+			? 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL)'
+			: 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
 	)
-		.bind(platformId, userId)
+		.bind(...(projectId ? [platformId, userId, projectId] : [platformId, userId]))
 		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
 
 	let usageCount = row?.usageCount ?? 0;
@@ -103,9 +109,11 @@ export async function handleDataRequest(
 		periodStart = currentPeriod.start;
 		periodEnd = currentPeriod.end;
 		await env.DB.prepare(
-			'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
+			projectId
+				? 'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL)'
+				: 'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
 		)
-			.bind(periodStart, periodEnd, platformId, userId)
+			.bind(...(projectId ? [periodStart, periodEnd, platformId, userId, projectId] : [periodStart, periodEnd, platformId, userId]))
 			.run();
 	}
 
@@ -127,9 +135,11 @@ export async function handleDataRequest(
 
 	// Increment in D1
 	const updated = await env.DB.prepare(
-		'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? RETURNING usageCount'
+		projectId
+			? 'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL) RETURNING usageCount'
+			: 'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? RETURNING usageCount'
 	)
-		.bind(plan, periodStart, periodEnd, platformId, userId)
+		.bind(...(projectId ? [plan, periodStart, periodEnd, platformId, userId, projectId] : [plan, periodStart, periodEnd, platformId, userId]))
 		.first<{ usageCount: number }>();
 
 	usageCount = updated?.usageCount ?? usageCount + 1;
@@ -176,14 +186,18 @@ export async function handleUsageCheck(
 	plan: PlanTier,
 	env: Env,
 	corsHeaders: Record<string, string>,
+	projectId: string | null = null,
 	mode: string = 'live'
 ): Promise<Response> {
+	await ensureUsageSchema(env);
 	const currentPeriod = getCurrentPeriod();
 
 	const fromDb = await env.DB.prepare(
-		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
+		projectId
+			? 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL)'
+			: 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
 	)
-		.bind(platformId, userId)
+		.bind(...(projectId ? [platformId, userId, projectId] : [platformId, userId]))
 		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
 
 	const usageCount = fromDb?.usageCount ?? 0;
@@ -191,7 +205,7 @@ export async function handleUsageCheck(
 	const periodEnd = fromDb?.periodEnd || currentPeriod.end;
 
 	// Get tier limit from config (using platformId for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId, mode);
+	const tierConfigs = await getTierConfig(env, platformId, projectId, mode);
 	const tierLimit = tierConfigs[plan]?.limit || 0;
 
 	return new Response(

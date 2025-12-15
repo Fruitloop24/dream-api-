@@ -28,6 +28,21 @@ interface Credentials {
   liveProducts: any[];
 }
 
+type ProjectType = 'saas' | 'store';
+
+interface Project {
+  projectId: string;
+  name: string;
+  type: ProjectType;
+  keys: {
+    publishableKey: string;
+    mode: ModeType;
+    status: string;
+    projectType: string | null;
+    name: string | null;
+  }[];
+}
+
 export default function Dashboard() {
   const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
@@ -38,8 +53,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [platformIdGenerated, setPlatformIdGenerated] = useState(false);
 
-  // Credentials
+  // Credentials (legacy single-project) + projects
   const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Dashboard data (separate for test/live)
   const [testDashboard, setTestDashboard] = useState<any>(null);
@@ -57,6 +74,7 @@ export default function Dashboard() {
   const [showTestSecret, setShowTestSecret] = useState(false);
   const [showLiveSecret, setShowLiveSecret] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const project = projects.find((p) => p.projectId === selectedProjectId) || null;
 
   // Redirect if not signed in
   useEffect(() => {
@@ -85,25 +103,29 @@ export default function Dashboard() {
     if (hasPaid && !credentials) {
       loadCredentials();
     }
+    if (hasPaid && projects.length === 0) {
+      loadProjects();
+    }
   }, [hasPaid, credentials]);
 
   // Load dashboard data once we have credentials
   useEffect(() => {
-    if (credentials) {
-      if (credentials.testSecretKey) {
-        loadDashboard('test');
-        loadProducts('test');
-      }
-      if (credentials.liveSecretKey) {
-        loadDashboard('live');
-        loadProducts('live');
-      }
-      // Default to live view if we have live keys
-      if (credentials.liveSecretKey && !credentials.testSecretKey) {
-        setViewMode('live');
-      }
+    const project = projects.find((p) => p.projectId === selectedProjectId);
+    const testKey = project?.keys.find((k) => k.mode === 'test')?.publishableKey || credentials?.testSecretKey;
+    const liveKey = project?.keys.find((k) => k.mode === 'live')?.publishableKey || credentials?.liveSecretKey;
+
+    if (testKey) {
+      loadDashboard('test', project, testKey);
+      loadProducts('test', project, testKey);
     }
-  }, [credentials]);
+    if (liveKey) {
+      loadDashboard('live', project, liveKey);
+      loadProducts('live', project, liveKey);
+    }
+    if (liveKey && !testKey) {
+      setViewMode('live');
+    }
+  }, [projects, selectedProjectId, credentials]);
 
   const generatePlatformId = async () => {
     try {
@@ -169,20 +191,43 @@ export default function Dashboard() {
     }
   };
 
-  const loadDashboard = async (mode: ModeType) => {
-    const sk = mode === 'test' ? credentials?.testSecretKey : credentials?.liveSecretKey;
-    if (!sk) {
-      console.log(`[Dashboard] No ${mode} secret key, skipping dashboard load`);
-      return;
+  const loadProjects = async () => {
+    try {
+      const token = await getToken({ template: 'dream-api' });
+      const res = await fetch(`${FRONT_AUTH_API}/projects`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        console.error('[Dashboard] Projects failed:', res.status, await res.text());
+        return;
+      }
+      const data = await res.json();
+      const list: Project[] = data.projects || [];
+      setProjects(list);
+      if (!selectedProjectId && list.length > 0) {
+        setSelectedProjectId(list[0].projectId);
+      }
+    } catch (err) {
+      console.error('[Dashboard] Projects error:', err);
     }
+  };
+
+  const loadDashboard = async (mode: ModeType, project?: Project, overrideSk?: string) => {
+    const sk =
+      overrideSk ||
+      (mode === 'test'
+        ? project?.keys.find((k) => k.mode === 'test')?.publishableKey || credentials?.testSecretKey
+        : project?.keys.find((k) => k.mode === 'live')?.publishableKey || credentials?.liveSecretKey);
+    if (!sk) return;
 
     try {
       setLoadingDashboard(true);
       console.log(`[Dashboard] Fetching ${mode} dashboard with sk: ${sk.slice(0, 15)}...`);
-      const res = await fetch(`${API_MULTI}/api/dashboard`, {
-        headers: {
-          'Authorization': `Bearer ${sk}`,
-          'X-Env': mode,
+     const res = await fetch(`${API_MULTI}/api/dashboard`, {
+       headers: {
+         'Authorization': `Bearer ${sk}`,
+         'X-Env': mode,
+          ...(project?.projectId ? { 'X-Project-Id': project.projectId } : {}),
         },
       });
       if (res.ok) {
@@ -204,8 +249,12 @@ export default function Dashboard() {
     }
   };
 
-  const loadProducts = async (mode: ModeType) => {
-    const sk = mode === 'test' ? credentials?.testSecretKey : credentials?.liveSecretKey;
+  const loadProducts = async (mode: ModeType, project?: Project, overrideSk?: string) => {
+    const sk =
+      overrideSk ||
+      (mode === 'test'
+        ? project?.keys.find((k) => k.mode === 'test')?.publishableKey || credentials?.testSecretKey
+        : project?.keys.find((k) => k.mode === 'live')?.publishableKey || credentials?.liveSecretKey);
     if (!sk) return;
 
     try {
@@ -213,6 +262,7 @@ export default function Dashboard() {
         headers: {
           'Authorization': `Bearer ${sk}`,
           'X-Env': mode,
+          ...(project?.projectId ? { 'X-Project-Id': project.projectId } : {}),
         },
       });
       if (res.ok) {
@@ -278,7 +328,7 @@ export default function Dashboard() {
   }
 
   // No credentials yet - show connect Stripe
-  const hasAnyKeys = credentials?.testSecretKey || credentials?.liveSecretKey;
+  const hasAnyKeys = credentials?.testSecretKey || credentials?.liveSecretKey || (projects.length > 0 && projects.some(p => p.keys.length > 0));
 
   if (!hasAnyKeys) {
     return (
@@ -348,6 +398,22 @@ export default function Dashboard() {
           {credentials?.platformId && (
             <PlatformIdBadge platformId={credentials.platformId} onCopy={copyToClipboard} />
           )}
+          {projects.length > 0 && (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-sm text-gray-400">Project</span>
+              <select
+                value={selectedProjectId || ''}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              >
+                {projects.map((p) => (
+                  <option key={p.projectId} value={p.projectId}>
+                    {p.name} ({p.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Main Tabs: SaaS | Store */}
@@ -359,6 +425,7 @@ export default function Dashboard() {
                 ? 'bg-gray-800 text-white border-b-2 border-blue-500'
                 : 'text-gray-400 hover:text-gray-200'
             }`}
+            disabled={project ? project.type !== 'saas' : false}
           >
             SaaS / Subscriptions
           </button>
@@ -369,6 +436,7 @@ export default function Dashboard() {
                 ? 'bg-gray-800 text-white border-b-2 border-blue-500'
                 : 'text-gray-400 hover:text-gray-200'
             }`}
+            disabled={project ? project.type !== 'store' : false}
           >
             Store / One-offs
           </button>

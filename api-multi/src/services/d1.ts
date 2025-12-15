@@ -21,10 +21,21 @@ type SubscriptionInput = {
 let tierSchemaChecked = false;
 let apiKeySchemaChecked = false;
 let stripeTokenSchemaChecked = false;
+let usageSchemaChecked = false;
 
 export async function ensureApiKeySchema(env: Env) {
 	if (apiKeySchemaChecked) return;
 	apiKeySchemaChecked = true;
+	try {
+		await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectId TEXT').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+	try {
+		await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectType TEXT').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
 	try {
 		await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN mode TEXT DEFAULT \'live\'').run();
 	} catch (err) {
@@ -46,6 +57,16 @@ export async function ensureTierSchema(env: Env) {
 	if (tierSchemaChecked) return;
 	tierSchemaChecked = true;
 	try {
+		await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectId TEXT').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+	try {
+		await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectType TEXT').run();
+	} catch (err) {
+		/* no-op if exists */
+	}
+	try {
 		await env.DB.prepare('ALTER TABLE tiers ADD COLUMN inventory INTEGER').run();
 	} catch (err) {
 		/* no-op if exists */
@@ -62,16 +83,26 @@ export async function ensureTierSchema(env: Env) {
 	}
 }
 
+export async function ensureUsageSchema(env: Env) {
+	if (usageSchemaChecked) return;
+	usageSchemaChecked = true;
+	try {
+		await env.DB.prepare('ALTER TABLE usage_counts ADD COLUMN projectId TEXT').run();
+	} catch (err) {
+		/* no-op */
+	}
+}
+
 export async function getPlatformFromSecretHash(
 	env: Env,
 	secretKeyHash: string
-): Promise<{ platformId: string; publishableKey: string; mode?: string } | null> {
+): Promise<{ platformId: string; publishableKey: string; mode?: string; projectId?: string | null; projectType?: string | null } | null> {
 	await ensureApiKeySchema(env);
 	const row = await env.DB.prepare(
-		'SELECT platformId, publishableKey, mode FROM api_keys WHERE secretKeyHash = ? LIMIT 1'
+		'SELECT platformId, publishableKey, mode, projectId, projectType FROM api_keys WHERE secretKeyHash = ? LIMIT 1'
 	)
 		.bind(secretKeyHash)
-		.first<{ platformId: string; publishableKey: string; mode?: string }>();
+		.first<{ platformId: string; publishableKey: string; mode?: string; projectId?: string | null; projectType?: string | null }>();
 	return row ?? null;
 }
 

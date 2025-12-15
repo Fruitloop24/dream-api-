@@ -32,30 +32,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { createClerkClient } from '@clerk/backend';
-
-interface Env {
-  // KV Bindings (must be configured in wrangler.toml)
-  PLATFORM_TOKENS_KV: KVNamespace;
-  CUSTOMER_TOKENS_KV: KVNamespace;
-  DB: D1Database;
-
-  // Stripe Connect OAuth App credentials
-  STRIPE_CLIENT_ID: string;
-  STRIPE_CLIENT_SECRET: string;
-
-  // Clerk credentials (for updating user metadata)
-  CLERK_SECRET_KEY: string;
-  CLERK_PUBLISHABLE_KEY: string;
-
-  // URL to redirect back to after success/failure
-  FRONTEND_URL: string;
-}
-
-async function ensurePlatform(env: Env, platformId: string, userId: string) {
-  await env.DB.prepare('INSERT OR IGNORE INTO platforms (platformId, clerkUserId) VALUES (?, ?)')
-    .bind(platformId, userId)
-    .run();
-}
+import { Env, ProjectType } from './types';
+import { ensurePlatform, ensureApiKeySchema, ensureTierSchema, ensureStripeTokenSchema, ensureProjectSchema } from './lib/schema';
+import { saveStripeToken } from './lib/stripe';
+import { upsertApiKey } from './lib/keys';
+import { TierInput, upsertTiers } from './lib/tiers';
+import { findProjectId, getOrCreateProject } from './lib/projects';
 
 async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
   const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
@@ -87,13 +69,15 @@ async function upsertApiKey(
   publishableKey: string,
   secretKeyHash: string,
   mode: 'live' | 'test' = 'live',
-  name?: string
+  name?: string,
+  projectId?: string | null,
+  projectType?: ProjectType
 ) {
   await ensureApiKeySchema(env);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO api_keys (platformId, publishableKey, secretKeyHash, status, mode, name) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO api_keys (platformId, projectId, projectType, publishableKey, secretKeyHash, status, mode, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   )
-    .bind(platformId, publishableKey, secretKeyHash, 'active', mode, name || null)
+    .bind(platformId, projectId || null, projectType || null, publishableKey, secretKeyHash, 'active', mode, name || null)
     .run();
 }
 
@@ -103,6 +87,8 @@ type TierInput = {
   price: number;
   limit: number | 'unlimited';
   billingMode?: 'subscription' | 'one_off';
+  projectId?: string | null;
+  projectType?: 'saas' | 'store';
   description?: string;
   imageUrl?: string;
   inventory?: number | null;
@@ -113,87 +99,10 @@ type TierInput = {
   mode?: 'live' | 'test';
 };
 
-let tierSchemaChecked = false;
-async function ensureTierSchema(env: Env) {
-  if (tierSchemaChecked) return;
-  tierSchemaChecked = true;
-  try {
-    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN inventory INTEGER').run();
-  } catch (err) {
-    /* no-op */
-  }
-  try {
-    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN soldOut INTEGER DEFAULT 0').run();
-  } catch (err) {
-    /* no-op */
-  }
-  try {
-    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN mode TEXT DEFAULT \'live\'').run();
-  } catch (err) {
-    /* no-op */
-  }
-}
+type ProjectType = 'saas' | 'store';
 
-let apiKeySchemaChecked = false;
-async function ensureApiKeySchema(env: Env) {
-  if (apiKeySchemaChecked) return;
-  apiKeySchemaChecked = true;
-  try {
-    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN mode TEXT DEFAULT \'live\'').run();
-  } catch (err) {
-    /* no-op */
-  }
-  try {
-    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN name TEXT').run();
-  } catch (err) {
-    /* no-op */
-  }
-}
 
-let stripeTokenSchemaChecked = false;
-async function ensureStripeTokenSchema(env: Env) {
-  if (stripeTokenSchemaChecked) return;
-  stripeTokenSchemaChecked = true;
-  try {
-    await env.DB.prepare('ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT \'live\'').run();
-  } catch (err) {
-    /* no-op */
-  }
-}
 
-async function upsertTiers(env: Env, platformId: string, tiers: TierInput[]) {
-  await ensureTierSchema(env);
-  const stmt = env.DB.prepare(
-    'INSERT OR REPLACE INTO tiers (platformId, name, displayName, price, "limit", features, popular, priceId, productId, inventory, soldOut, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  );
-  for (const tier of tiers) {
-    const featuresStr = JSON.stringify({
-      description: tier.description || undefined,
-      features: tier.features || [],
-      billingMode: tier.billingMode || 'subscription',
-      imageUrl: tier.imageUrl || '',
-      inventory: tier.inventory ?? null,
-    });
-    const popularFlag = tier.popular ? 1 : 0;
-
-    await stmt
-      .bind(
-        platformId,
-        tier.name,
-        tier.displayName,
-        tier.price,
-        tier.limit === 'unlimited' ? null : tier.limit,
-        featuresStr,
-        popularFlag,
-        tier.priceId,
-        tier.productId,
-        tier.inventory ?? null,
-        tier.inventory !== null && tier.inventory !== undefined ? (tier.inventory <= 0 ? 1 : 0) : 0,
-        tier.mode || 'live'
-      )
-      .run();
-  }
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -328,6 +237,7 @@ export default {
       userId: string;
       mode?: 'live' | 'test';
       projectName?: string;
+      projectType?: 'saas' | 'store';
       tiers: Array<{
         name: string;
         displayName: string;
@@ -342,6 +252,7 @@ export default {
 
       const { userId, tiers, projectName } = body;
       const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
+      const projectType: ProjectType = body.projectType === 'store' ? 'store' : 'saas';
 
       if (!userId || !tiers || tiers.length === 0) {
         return new Response('Missing userId or tiers', { status: 400 });
@@ -360,6 +271,7 @@ export default {
       }
 
       const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
+      const projectId = await getOrCreateProject(env, platformId, projectName || 'Default Project', projectType);
 
       // Create Stripe products on THEIR account
       const priceIds: Array<{ tier: string; priceId: string; productId: string }> = [];
@@ -450,6 +362,8 @@ export default {
         // Build tier config with product IDs
         const tierConfig = tiers.map((tier, i) => ({
           ...tier,
+          projectId,
+          projectType,
           priceId: priceIds[i].priceId,
           productId: priceIds[i].productId,
         }));
@@ -458,7 +372,7 @@ export default {
         // D1 SSOT: platform, keys, tiers
         // ===================================================================
         await ensurePlatform(env, platformId, userId);
-        await upsertApiKey(env, platformId, publishableKey, hashHex, mode, projectName);
+        await upsertApiKey(env, platformId, publishableKey, hashHex, mode, projectName, projectId, projectType);
         await upsertTiers(env, platformId, tierConfig.map((t) => ({ ...t, mode })) as TierInput[]);
 
         // ===================================================================
@@ -602,6 +516,11 @@ export default {
     if (url.pathname === '/tiers' && request.method === 'GET') {
       const userId = url.searchParams.get('userId');
       const mode = url.searchParams.get('mode') || 'test';
+      const projectIdParam = url.searchParams.get('projectId');
+      const projectNameParam = url.searchParams.get('projectName');
+      const projectTypeRaw = url.searchParams.get('projectType');
+      const projectTypeParam: ProjectType | null =
+        projectTypeRaw === 'store' ? 'store' : projectTypeRaw === 'saas' ? 'saas' : null;
 
       if (!userId) {
         return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -615,11 +534,29 @@ export default {
         return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const tiers = await env.DB.prepare(
-        'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)'
-      ).bind(platformId, mode).all();
+      const resolvedProjectId = await findProjectId(env, platformId, {
+        projectId: projectIdParam,
+        projectName: projectNameParam,
+        projectType: projectTypeParam || null,
+      });
 
-      return new Response(JSON.stringify({ tiers: tiers.results || [], platformId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const tiersQuery = [
+        'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode, projectId, projectType',
+        'FROM tiers',
+        'WHERE platformId = ?',
+        'AND (mode = ? OR mode IS NULL)',
+      ];
+      const params: any[] = [platformId, mode];
+      if (resolvedProjectId) {
+        tiersQuery.push('AND (projectId = ? OR projectId IS NULL)');
+        params.push(resolvedProjectId);
+      }
+
+      const tiers = await env.DB.prepare(tiersQuery.join(' '))
+        .bind(...params)
+        .all();
+
+      return new Response(JSON.stringify({ tiers: tiers.results || [], platformId, projectId: resolvedProjectId || null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // =====================================================================
@@ -630,6 +567,9 @@ export default {
         userId: string;
         tierName: string;
         mode?: string;
+        projectId?: string;
+        projectName?: string;
+        projectType?: ProjectType;
         updates: {
           displayName?: string;
           price?: number;
@@ -655,6 +595,12 @@ export default {
         return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      const resolvedProjectId = await findProjectId(env, platformId, {
+        projectId: body.projectId,
+        projectName: body.projectName,
+        projectType: body.projectType || null,
+      });
+
       // Build dynamic UPDATE query
       const setClauses: string[] = [];
       const values: any[] = [];
@@ -672,9 +618,14 @@ export default {
       }
 
       values.push(platformId, tierName, mode);
+      const whereFragments = ['platformId = ?', 'name = ?', '(mode = ? OR mode IS NULL)'];
+      if (resolvedProjectId) {
+        whereFragments.push('(projectId = ? OR projectId IS NULL)');
+        values.push(resolvedProjectId);
+      }
 
       await env.DB.prepare(
-        `UPDATE tiers SET ${setClauses.join(', ')} WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)`
+        `UPDATE tiers SET ${setClauses.join(', ')} WHERE ${whereFragments.join(' AND ')}`
       ).bind(...values).run();
 
       console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}`);
@@ -689,6 +640,9 @@ export default {
       const body = await request.json() as {
         userId: string;
         mode?: string;
+        projectId?: string;
+        projectName?: string;
+        projectType?: ProjectType;
         tier: {
           name: string;
           displayName: string;
@@ -716,6 +670,11 @@ export default {
       if (!platformId) {
         return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
+
+      const projectType = body.projectType || (tier.billingMode === 'one_off' ? 'store' as ProjectType : 'saas');
+      const projectId =
+        (await findProjectId(env, platformId, { projectId: body.projectId, projectName: body.projectName, projectType })) ||
+        (await getOrCreateProject(env, platformId, body.projectName || 'Default Project', projectType));
 
       // Get Stripe token to create product
       const stripeDataJson =
@@ -792,9 +751,11 @@ export default {
       });
 
       await env.DB.prepare(
-        'INSERT INTO tiers (platformId, name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO tiers (platformId, projectId, projectType, name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
         platformId,
+        projectId,
+        projectType,
         tier.name.toLowerCase().replace(/\s+/g, '_'),
         tier.displayName,
         tier.price,
@@ -821,7 +782,7 @@ export default {
     // DELETE /tiers - Delete a tier
     // =====================================================================
     if (url.pathname === '/tiers' && request.method === 'DELETE') {
-      const body = await request.json() as { userId: string; tierName: string; mode?: string };
+      const body = await request.json() as { userId: string; tierName: string; mode?: string; projectId?: string; projectName?: string; projectType?: ProjectType };
       const { userId, tierName, mode = 'test' } = body;
 
       if (!userId || !tierName) {
@@ -836,10 +797,20 @@ export default {
         return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      const resolvedProjectId = await findProjectId(env, platformId, {
+        projectId: body.projectId,
+        projectName: body.projectName,
+        projectType: body.projectType || null,
+      });
+
       // Get the tier first to archive Stripe product
       const tier = await env.DB.prepare(
-        'SELECT productId FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
-      ).bind(platformId, tierName, mode).first<{ productId: string }>();
+        resolvedProjectId
+          ? 'SELECT productId FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL) AND (projectId = ? OR projectId IS NULL)'
+          : 'SELECT productId FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
+      ).bind(
+        ...(resolvedProjectId ? [platformId, tierName, mode, resolvedProjectId] : [platformId, tierName, mode])
+      ).first<{ productId: string }>();
 
       if (!tier) {
         return new Response(JSON.stringify({ error: 'Tier not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -865,8 +836,12 @@ export default {
 
       // Delete from D1
       await env.DB.prepare(
-        'DELETE FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
-      ).bind(platformId, tierName, mode).run();
+        resolvedProjectId
+          ? 'DELETE FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL) AND (projectId = ? OR projectId IS NULL)'
+          : 'DELETE FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
+      ).bind(
+        ...(resolvedProjectId ? [platformId, tierName, mode, resolvedProjectId] : [platformId, tierName, mode])
+      ).run();
 
       console.log(`[Tiers] Deleted tier ${tierName} for platform ${platformId}`);
 

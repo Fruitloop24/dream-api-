@@ -107,15 +107,22 @@ interface ConfigModule {
   config: Config;
 }
 
-async function loadTiersFromDb(env: Env, platformId?: string, mode: string = 'live'): Promise<Config | null> {
+async function loadTiersFromDb(env: Env, platformId?: string, projectId?: string | null, mode: string = 'live'): Promise<Config | null> {
   if (!platformId || !env.DB) return null;
 
   await ensureTierSchema(env);
 
-  const rows = await env.DB.prepare(
-    'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)'
-  )
-    .bind(platformId, mode)
+  const clauses = [
+    'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, projectId, projectType FROM tiers WHERE platformId = ? AND (mode = ? OR mode IS NULL)',
+  ];
+  const params: any[] = [platformId, mode];
+  if (projectId) {
+    clauses.push('AND (projectId = ? OR projectId IS NULL)');
+    params.push(projectId);
+  }
+
+  const rows = await env.DB.prepare(clauses.join(' '))
+    .bind(...params)
     .all<{
       name: string;
       displayName: string | null;
@@ -127,6 +134,8 @@ async function loadTiersFromDb(env: Env, platformId?: string, mode: string = 'li
       popular: number | null;
       inventory?: number | null;
       soldOut?: number | null;
+      projectId?: string | null;
+      projectType?: string | null;
     }>();
 
   if (!rows.results || rows.results.length === 0) return null;
@@ -207,10 +216,10 @@ async function loadTiersFromDb(env: Env, platformId?: string, mode: string = 'li
   return { tiers };
 }
 
-async function loadConfig(env: Env, platformId?: string, mode: string = 'live'): Promise<Config> {
+async function loadConfig(env: Env, platformId?: string, projectId?: string | null, mode: string = 'live'): Promise<Config> {
   try {
     // Prefer D1 tiers if available
-    const dbConfig = await loadTiersFromDb(env, platformId, mode);
+    const dbConfig = await loadTiersFromDb(env, platformId, projectId, mode);
     if (dbConfig) {
       return dbConfig;
     }
@@ -274,16 +283,16 @@ function transformTiers(tiers: ConfigTier[]): Record<string, TierConfig> {
 /**
  * Get tier configuration (multi-tenant)
  */
-export async function getTierConfig(env: Env, platformId?: string, mode: string = 'live'): Promise<Record<string, TierConfig>> {
-  const config = await loadConfig(env, platformId, mode);
+export async function getTierConfig(env: Env, platformId?: string, projectId?: string | null, mode: string = 'live'): Promise<Record<string, TierConfig>> {
+  const config = await loadConfig(env, platformId, projectId, mode);
   return transformTiers(config.tiers);
 }
 
 /**
  * Get Stripe Price ID map (multi-tenant)
  */
-export async function getPriceIdMap(env: Env, platformId?: string, mode: string = 'live'): Promise<Record<string, string>> {
-  const config = await loadConfig(env, platformId, mode);
+export async function getPriceIdMap(env: Env, platformId?: string, projectId?: string | null, mode: string = 'live'): Promise<Record<string, string>> {
+  const config = await loadConfig(env, platformId, projectId, mode);
   const priceIdMap: Record<string, string> = {};
 
   for (const tier of config.tiers) {
@@ -302,8 +311,8 @@ export async function getPriceIdMap(env: Env, platformId?: string, mode: string 
 /**
  * Get all tiers (multi-tenant)
  */
-export async function getAllTiers(env: Env, platformId?: string, mode: string = 'live'): Promise<ConfigTier[]> {
-  const config = await loadConfig(env, platformId, mode);
+export async function getAllTiers(env: Env, platformId?: string, projectId?: string | null, mode: string = 'live'): Promise<ConfigTier[]> {
+  const config = await loadConfig(env, platformId, projectId, mode);
   return config.tiers.map((t) => ({
     ...t,
     billingMode: t.billingMode || 'subscription',
