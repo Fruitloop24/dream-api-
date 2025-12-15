@@ -218,7 +218,7 @@ export default {
 
 			// If no plan specified, default to free tier from config
 			if (!plan || plan === 'free') {
-				const allTiers = await getAllTiers(env, platformId, projectId || undefined, mode);
+				const allTiers = await getAllTiers(env, platformId, projectId || undefined, mode, publishableKey || undefined);
 				const freeTier = allTiers.find(t => t.price === 0) || allTiers[0];
 				plan = (freeTier?.id || 'free') as PlanTier;
 			}
@@ -262,7 +262,9 @@ export default {
 			// Process request and track usage
 			if (url.pathname === '/api/data' && request.method === 'POST') {
 				try {
-					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, projectId || null, mode);
+					const overridePk = request.headers.get('X-Publishable-Key');
+					const pkForFilter = overridePk || publishableKey || null;
+					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, projectId || null, mode, pkForFilter);
 				} catch (err) {
 					console.error('[Data] Handler error:', err);
 					return new Response(
@@ -274,13 +276,17 @@ export default {
 
 			// Get current usage and limits
 			if (url.pathname === '/api/usage' && request.method === 'GET') {
-				return await handleUsageCheck(userId, platformId, plan, env, corsHeaders, projectId || null, mode);
+				const overridePk = request.headers.get('X-Publishable-Key');
+				const pkForFilter = overridePk || publishableKey || null;
+				return await handleUsageCheck(userId, platformId, plan, env, corsHeaders, projectId || null, mode, pkForFilter);
 			}
 
 			// Dashboard aggregate (customers, tiers, metrics)
 			// Filter by platformId, then optionally by publishableKey
 			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
-				return await handleDashboard(env, platformId, corsHeaders, mode, publishableKey || null);
+				const overridePk = request.headers.get('X-Publishable-Key');
+				const pkForFilter = overridePk || publishableKey || null;
+				return await handleDashboard(env, platformId, corsHeaders, mode, pkForFilter);
 			}
 
 			// All-live totals (aggregate across all live projects)
@@ -296,7 +302,9 @@ export default {
 
 			// List one-off products (for cart/catalog rendering)
 			if (url.pathname === '/api/products' && request.method === 'GET') {
-				return await handleGetProducts(env, platformId, corsHeaders, mode, projectId || null);
+				const overridePk = request.headers.get('X-Publishable-Key');
+				const pkForFilter = overridePk || publishableKey || null;
+				return await handleGetProducts(env, platformId, corsHeaders, mode, projectId || null, pkForFilter);
 			}
 
 			// Upload product assets (base64 body → R2)
@@ -312,7 +320,9 @@ export default {
 			// Cart checkout for one-off items
 			if (url.pathname === '/api/cart/checkout' && request.method === 'POST') {
 				const origin = request.headers.get('Origin') || '';
-				return await handleCartCheckout(platformId, publishableKey, env, corsHeaders, origin, request, mode, projectId || null);
+				const overridePk = request.headers.get('X-Publishable-Key');
+				const pkForFilter = overridePk || publishableKey || null;
+				return await handleCartCheckout(platformId, pkForFilter || publishableKey, env, corsHeaders, origin, request, mode, projectId || null, pkForFilter);
 			}
 
 			// Create Stripe Customer Portal session (manage subscription)

@@ -23,7 +23,13 @@ export async function handleListProjects(env: Env, userId: string): Promise<Resp
 
   const projects = await listProjects(env, platformId);
 
-  return new Response(JSON.stringify({ platformId, projects }), {
+  // Attach per-project secret keys from KV (only stored in KV at creation time)
+  const projectsWithSecrets = await Promise.all(projects.map(async (project) => {
+    const secretKey = await env.TOKENS_KV.get(`pk:${project.publishableKey}:secretKey`);
+    return { ...project, secretKey: secretKey || null };
+  }));
+
+  return new Response(JSON.stringify({ platformId, projects: projectsWithSecrets }), {
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });

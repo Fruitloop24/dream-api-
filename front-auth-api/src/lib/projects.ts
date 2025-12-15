@@ -14,6 +14,7 @@ export interface Project {
   type: ProjectType;
   mode: 'test' | 'live';
   status: string;
+  secretKey?: string | null;
 }
 
 /**

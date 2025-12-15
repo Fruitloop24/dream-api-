@@ -23,6 +23,7 @@ interface Project {
   type: ProjectType;
   mode: ModeType;
   status: string;
+  secretKey?: string | null;
 }
 
 interface Credentials {
@@ -95,15 +96,19 @@ export default function Dashboard() {
   // Load dashboard when project selected
   useEffect(() => {
     if (selectedProject) {
-      const sk = selectedProject.mode === 'test' ? credentials.testSecretKey : credentials.liveSecretKey;
-      if (sk) {
-        loadDashboard(selectedProject, sk);
-        if (selectedProject.type === 'store') {
-          loadProducts(selectedProject, sk);
-        }
+      const sk = selectedProject.secretKey || null;
+      if (!sk) {
+        console.warn('[Dashboard] No secret key found for selected project; skipping fetch to avoid mixing data');
+        setDashboard(null);
+        setProducts([]);
+        return;
+      }
+      loadDashboard(selectedProject, sk);
+      if (selectedProject.type === 'store') {
+        loadProducts(selectedProject, sk);
       }
     }
-  }, [selectedPk, credentials]);
+  }, [selectedPk, selectedProject?.secretKey]);
 
   const generatePlatformId = async () => {
     try {
@@ -179,18 +184,19 @@ export default function Dashboard() {
     }
   };
 
-  const loadDashboard = async (project: Project, sk: string) => {
-    try {
-      setLoadingDashboard(true);
-      const res = await fetch(`${API_MULTI}/api/dashboard`, {
-        headers: {
-          'Authorization': `Bearer ${sk}`,
-          'X-Env': project.mode,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDashboard(data);
+const loadDashboard = async (project: Project, sk: string) => {
+  try {
+    setLoadingDashboard(true);
+    const res = await fetch(`${API_MULTI}/api/dashboard`, {
+      headers: {
+        'Authorization': `Bearer ${sk}`,
+        'X-Env': project.mode,
+        'X-Publishable-Key': project.publishableKey,
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setDashboard(data);
       }
     } catch (err) {
       console.error('[Dashboard] Load error:', err);
@@ -199,17 +205,18 @@ export default function Dashboard() {
     }
   };
 
-  const loadProducts = async (project: Project, sk: string) => {
-    try {
-      const res = await fetch(`${API_MULTI}/api/products`, {
-        headers: {
-          'Authorization': `Bearer ${sk}`,
-          'X-Env': project.mode,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data.products || []);
+const loadProducts = async (project: Project, sk: string) => {
+  try {
+    const res = await fetch(`${API_MULTI}/api/products`, {
+      headers: {
+        'Authorization': `Bearer ${sk}`,
+        'X-Env': project.mode,
+        'X-Publishable-Key': project.publishableKey,
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setProducts(data.products || []);
       }
     } catch (err) {
       console.error('[Dashboard] Products error:', err);

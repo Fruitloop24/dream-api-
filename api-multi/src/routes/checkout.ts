@@ -139,7 +139,7 @@ export async function handleCreateCheckout(
 		// If no priceId provided, load from config (multi-tenant using platformId)
 		if (!priceId) {
 			console.log(`🔍 Loading price ID from config for tier: ${targetTier}, platformId: ${platformId}`);
-			const priceIdMap = await getPriceIdMap(env, platformId, projectId || undefined, mode);
+			const priceIdMap = await getPriceIdMap(env, platformId, projectId || undefined, mode, publishableKey);
 			console.log(`[Checkout] Price ID Map from KV: ${JSON.stringify(priceIdMap)}`);
 			priceId = priceIdMap[targetTier] || '';
 			console.log(`💳 Loaded price ID: ${priceId}`);
