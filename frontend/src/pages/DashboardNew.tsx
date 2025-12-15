@@ -63,6 +63,13 @@ export default function Dashboard() {
   // Selected project
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
 
+  // Clear scoped state on project switch
+  useEffect(() => {
+    setDashboard(null);
+    setProducts([]);
+    setSelectedCustomer(null);
+  }, [selectedPk]);
+
   // Redirect if not signed in
   useEffect(() => {
     if (!isSignedIn) navigate('/');
