@@ -190,6 +190,10 @@ cd api-multi && npm run deploy
 - OAuth API: https://oauth-api.k-c-sheffield012376.workers.dev
 - Customer API: https://api-multi.k-c-sheffield012376.workers.dev
 
+## Storage Schemas
+- See `docs/STORAGE.md` for D1 and KV layout.
+- Projects/keys model: `docs/PROJECTS.md` (projects are typed saas/store; keys/products per project).
+
 ## API Examples
 
 ### Usage tracking (SaaS)

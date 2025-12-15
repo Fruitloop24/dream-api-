@@ -1,1015 +1,139 @@
 /**
  * ============================================================================
- * OAUTH-API - Stripe Connect Handler for dream-api
+ * OAUTH-API - Main Router
  * ============================================================================
  *
- * PURPOSE:
- * Securely handle the Stripe Connect OAuth flow. This worker acts as a bridge
- * between the developer platform and the multi-tenant customer API.
+ * This worker handles:
+ * 1. Stripe Connect OAuth flow (connect developer's Stripe account)
+ * 2. Product/tier creation (create Stripe products, generate API keys)
+ * 3. Tier management (update/add/delete tiers without changing keys)
+ * 4. Test-to-live promotion (create live products from test config)
  *
  * ARCHITECTURE:
- * This worker requires access to TWO separate KV namespaces to maintain the
- * strict data isolation of the platform.
+ * This worker sits between the frontend and Stripe. It needs access to:
  *
- * 1. PLATFORM_TOKENS_KV: The TOKENS_KV from `front-auth-api`.
- *    - It WRITES the generated `platformId` here: `user:{userId}:platformId`
+ * - PLATFORM_TOKENS_KV: Developer data (keys, tokens, etc.)
+ *   This is the TOKENS_KV from front-auth-api
  *
- * 2. CUSTOMER_TOKENS_KV: The TOKENS_KV from `api-multi`.
- *    - It WRITES the Stripe credentials here: `platform:{platformId}:stripe`
+ * - CUSTOMER_TOKENS_KV: Customer-facing data (tier configs for api-multi)
+ *   This is the TOKENS_KV from api-multi
  *
- * DATA FLOW:
- * 1. Frontend calls `/authorize` with the developer's `userId`.
- * 2. Worker stores `userId` in a temporary state key and redirects to Stripe.
- * 3. User authorizes on Stripe and is redirected to `/callback`.
- * 4. Worker verifies state, retrieves `userId`, and generates `platformId` (pk_live_xxx).
- * 5. Worker exchanges code for Stripe token.
- * 6. Worker saves `platformId` to PLATFORM_TOKENS_KV and Stripe token to CUSTOMER_TOKENS_KV.
- * 7. Worker redirects to `/api-tier-config?stripe=connected`.
+ * - DB: D1 database (source of truth for all data)
+ *
+ * ROUTES:
+ *
+ * OAuth Flow:
+ *   GET  /authorize     - Start Stripe Connect OAuth
+ *   GET  /callback      - Handle Stripe OAuth callback
+ *
+ * Product Creation:
+ *   POST /create-products - Create Stripe products + generate keys
+ *
+ * Tier Management (no new keys):
+ *   GET    /tiers       - List tiers for a platform
+ *   PUT    /tiers       - Update tier properties
+ *   POST   /tiers/add   - Add new tier to existing project
+ *   DELETE /tiers       - Remove a tier
+ *
+ * Promotion:
+ *   POST /promote-to-live - Create live products from test config
  *
  * ============================================================================
  */
 
 /// <reference types="@cloudflare/workers-types" />
 
-import { createClerkClient } from '@clerk/backend';
-import { Env, ProjectType } from './types';
-import { ensurePlatform, ensureApiKeySchema, ensureTierSchema, ensureStripeTokenSchema, ensureProjectSchema } from './lib/schema';
-import { saveStripeToken } from './lib/stripe';
-import { upsertApiKey } from './lib/keys';
-import { TierInput, upsertTiers } from './lib/tiers';
-import { findProjectId, getOrCreateProject } from './lib/projects';
+import { Env } from './types';
 
-async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
-  const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
-    .bind(userId)
-    .first<{ platformId: string }>();
-  return row?.platformId || null;
-}
-
-async function saveStripeToken(
-  env: Env,
-  platformId: string,
-  stripeUserId: string,
-  accessToken: string,
-  refreshToken?: string,
-  scope?: string,
-  mode: 'live' | 'test' = 'live'
-) {
-  await ensureStripeTokenSchema(env);
-  await env.DB.prepare(
-    'INSERT OR REPLACE INTO stripe_tokens (platformId, stripeUserId, accessToken, refreshToken, scope, mode) VALUES (?, ?, ?, ?, ?, ?)'
-  )
-    .bind(platformId, stripeUserId, accessToken, refreshToken ?? null, scope ?? null, mode)
-    .run();
-}
-
-async function upsertApiKey(
-  env: Env,
-  platformId: string,
-  publishableKey: string,
-  secretKeyHash: string,
-  mode: 'live' | 'test' = 'live',
-  name?: string,
-  projectId?: string | null,
-  projectType?: ProjectType
-) {
-  await ensureApiKeySchema(env);
-  await env.DB.prepare(
-    'INSERT OR REPLACE INTO api_keys (platformId, projectId, projectType, publishableKey, secretKeyHash, status, mode, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  )
-    .bind(platformId, projectId || null, projectType || null, publishableKey, secretKeyHash, 'active', mode, name || null)
-    .run();
-}
-
-type TierInput = {
-  name: string;
-  displayName: string;
-  price: number;
-  limit: number | 'unlimited';
-  billingMode?: 'subscription' | 'one_off';
-  projectId?: string | null;
-  projectType?: 'saas' | 'store';
-  description?: string;
-  imageUrl?: string;
-  inventory?: number | null;
-  features?: string | string[];
-  popular?: boolean;
-  priceId: string;
-  productId: string;
-  mode?: 'live' | 'test';
-};
-
-type ProjectType = 'saas' | 'store';
-
-
-
+// Import route handlers
+import { handleAuthorize, handleCallback, getCorsHeaders } from './routes/oauth';
+import { handleCreateProducts } from './routes/products';
+import { handleGetTiers, handleUpdateTier, handleAddTier, handleDeleteTier } from './routes/tiers';
+import { handlePromoteToLive } from './routes/promote';
 
 export default {
+  /**
+   * Main request handler
+   * Routes requests to appropriate handler based on path and method
+   */
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const corsHeaders = getCorsHeaders();
 
-    // CORS headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      // Allow tier edit endpoints that use PUT/DELETE from the frontend config UI
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
-
-    // Handle OPTIONS preflight
+    // =========================================================================
+    // CORS PREFLIGHT
+    // All routes need CORS headers for frontend access
+    // =========================================================================
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Handle Stripe Connect authorization request
-    if (url.pathname === '/authorize') {
-      const userId = url.searchParams.get('userId');
-      if (!userId) {
-        return new Response('Missing userId parameter', { status: 400 });
-      }
+    // =========================================================================
+    // OAUTH ROUTES
+    // Handle Stripe Connect authorization flow
+    // =========================================================================
 
-      const state = crypto.randomUUID(); // CSRF protection
-      const stripeUrl = new URL('https://connect.stripe.com/oauth/authorize');
-      stripeUrl.searchParams.set('response_type', 'code');
-      stripeUrl.searchParams.set('client_id', env.STRIPE_CLIENT_ID);
-      stripeUrl.searchParams.set('scope', 'read_write');
-      stripeUrl.searchParams.set('redirect_uri', `${url.origin}/callback`);
-      stripeUrl.searchParams.set('state', state);
-
-      // Store the userId in state (we'll generate platformId in callback)
-      await env.PLATFORM_TOKENS_KV.put(`oauth:state:${state}`, userId, { expirationTtl: 600 }); // 10-minute expiry
-
-      return Response.redirect(stripeUrl.toString(), 302);
+    // GET /authorize - Start OAuth flow
+    if (url.pathname === '/authorize' && request.method === 'GET') {
+      return handleAuthorize(request, env, url);
     }
 
-    // Handle Stripe Connect callback
-    if (url.pathname === '/callback') {
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
-
-      if (!code || !state) {
-        return new Response('Missing code or state parameter', { status: 400 });
-      }
-
-      // Verify the state and retrieve the userId
-      const userId = await env.PLATFORM_TOKENS_KV.get(`oauth:state:${state}`);
-      if (!userId) {
-        return new Response('Invalid or expired state. Please try again.', { status: 400 });
-      }
-      // Delete the state key now that it has been used
-      await env.PLATFORM_TOKENS_KV.delete(`oauth:state:${state}`);
-
-      // READ platformId (should already exist - created IMMEDIATELY after login)
-      const platformId = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`);
-      if (!platformId) {
-        console.error(`[OAuth] No platformId found for user ${userId} - this should have been created at login!`);
-        return new Response('Platform ID not found. Please log out and back in.', { status: 500 });
-      }
-
-      console.log(`[OAuth] Found platformId for user ${userId}: ${platformId}`);
-
-      // Exchange the authorization code for a Stripe access token
-      try {
-        const tokenResponse = await fetch('https://connect.stripe.com/oauth/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_secret: env.STRIPE_CLIENT_SECRET,
-            code,
-            grant_type: 'authorization_code',
-          }),
-        });
-
-        const tokenData = await tokenResponse.json() as {
-          access_token?: string;
-          stripe_user_id?: string;
-          error?: string;
-          error_description?: string;
-        };
-
-        if (tokenData.error || !tokenData.access_token || !tokenData.stripe_user_id) {
-          console.error('Stripe OAuth Error:', tokenData.error_description);
-          return Response.redirect(`${env.FRONTEND_URL}/dashboard?stripe=error`, 302);
-        }
-
-        // Ensure platform exists in D1 and store Stripe token (SSOT)
-        await ensurePlatform(env, platformId, userId);
-        await saveStripeToken(
-          env,
-          platformId,
-          tokenData.stripe_user_id,
-          tokenData.access_token,
-          (tokenData as any).refresh_token,
-          (tokenData as any).scope
-        );
-
-        // Store Stripe credentials in PLATFORM_TOKENS_KV (front-auth-api namespace)
-        // This is the MAIN namespace for dev data
-        const stripeCredentials = {
-          accessToken: tokenData.access_token,
-          stripeUserId: tokenData.stripe_user_id,
-        };
-
-        // Save under BOTH userId and platformId for easy lookup
-        await env.PLATFORM_TOKENS_KV.put(
-          `user:${userId}:stripeToken`,
-          JSON.stringify(stripeCredentials)
-        );
-        await env.PLATFORM_TOKENS_KV.put(
-          `platform:${platformId}:stripeToken`,
-          JSON.stringify(stripeCredentials)
-        );
-
-        console.log(`[OAuth] Saved Stripe token for platformId: ${platformId}`);
-
-        // Redirect back to the frontend tier config page after successful OAuth
-        return Response.redirect(`${env.FRONTEND_URL}/api-tier-config?stripe=connected`, 302);
-
-      } catch (error) {
-        console.error('Failed to exchange Stripe token:', error);
-        return new Response('An internal error occurred.', { status: 500 });
-      }
+    // GET /callback - Stripe redirects here after authorization
+    if (url.pathname === '/callback' && request.method === 'GET') {
+      return handleCallback(request, env, url);
     }
 
-    // Create Stripe products on developer's connected account
+    // =========================================================================
+    // PRODUCT CREATION
+    // Create Stripe products and generate API keys
+    // =========================================================================
+
+    // POST /create-products - Create new project with products and keys
     if (url.pathname === '/create-products' && request.method === 'POST') {
-    const body = await request.json() as {
-      userId: string;
-      mode?: 'live' | 'test';
-      projectName?: string;
-      projectType?: 'saas' | 'store';
-      tiers: Array<{
-        name: string;
-        displayName: string;
-        price: number;
-        limit: number | 'unlimited';
-        billingMode?: 'subscription' | 'one_off';
-        description?: string;
-        imageUrl?: string;
-        inventory?: number | null;
-      }>;
-    };
-
-      const { userId, tiers, projectName } = body;
-      const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
-      const projectType: ProjectType = body.projectType === 'store' ? 'store' : 'saas';
-
-      if (!userId || !tiers || tiers.length === 0) {
-        return new Response('Missing userId or tiers', { status: 400 });
-      }
-
-      // Get platformId (created during OAuth callback)
-      const platformId = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`);
-      if (!platformId) {
-        return new Response('Platform ID not found. Please connect Stripe first.', { status: 404 });
-      }
-
-      // Get Stripe credentials from PLATFORM_TOKENS_KV (front-auth-api namespace)
-      const stripeDataJson = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`);
-      if (!stripeDataJson) {
-        return new Response('Stripe credentials not found. Please connect Stripe first.', { status: 404 });
-      }
-
-      const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
-      const projectId = await getOrCreateProject(env, platformId, projectName || 'Default Project', projectType);
-
-      // Create Stripe products on THEIR account
-      const priceIds: Array<{ tier: string; priceId: string; productId: string }> = [];
-
-      try {
-        for (const tier of tiers) {
-          const billingMode = tier.billingMode || 'subscription'; // fallback to recurring
-
-          // Create product
-          const productResponse = await fetch('https://api.stripe.com/v1/products', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${stripeData.accessToken}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: (() => {
-              const params = new URLSearchParams({
-                name: tier.displayName,
-                'metadata[platformId]': platformId,
-                'metadata[tierName]': tier.name,
-                'metadata[limit]': String(tier.limit ?? 0),
-              });
-              // Only add description for one-offs if provided and non-empty
-              if (tier.billingMode === 'one_off' && tier.description && tier.description.trim() !== '') {
-                params.append('description', tier.description);
-              }
-              if (tier.imageUrl && tier.imageUrl.trim() !== '') {
-                params.append('images[]', tier.imageUrl);
-              }
-              return params;
-            })(),
-          });
-
-          if (!productResponse.ok) {
-            const error = await productResponse.text();
-            throw new Error(`Failed to create product: ${error}`);
-          }
-
-          const product = await productResponse.json() as { id: string };
-
-          const params = new URLSearchParams({
-            product: product.id,
-            unit_amount: (tier.price * 100).toString(),
-            currency: 'usd',
-            'metadata[platformId]': platformId,
-            'metadata[tierName]': tier.name,
-            'metadata[limit]': tier.limit.toString(),
-          });
-
-          if (billingMode === 'subscription') {
-            params.set('recurring[interval]', 'month');
-          }
-
-          const priceResponse = await fetch('https://api.stripe.com/v1/prices', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${stripeData.accessToken}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: params,
-          });
-
-          if (!priceResponse.ok) {
-            const error = await priceResponse.text();
-            throw new Error(`Failed to create price: ${error}`);
-          }
-
-          const price = await priceResponse.json() as { id: string };
-
-          priceIds.push({
-            tier: tier.name,
-            priceId: price.id,
-            productId: product.id,
-          });
-        }
-
-        // ===================================================================
-        // GENERATE KEYS (publishableKey + secretKey)
-        // ===================================================================
-        const keyPrefix = mode === 'test' ? 'test' : 'live';
-        const publishableKey = `pk_${keyPrefix}_${crypto.randomUUID().replace(/-/g, '')}`;
-        const secretKey = `sk_${keyPrefix}_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
-
-        // Hash secretKey for secure storage
-        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secretKey));
-        const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-        // Build tier config with product IDs
-        const tierConfig = tiers.map((tier, i) => ({
-          ...tier,
-          projectId,
-          projectType,
-          priceId: priceIds[i].priceId,
-          productId: priceIds[i].productId,
-        }));
-
-        // ===================================================================
-        // D1 SSOT: platform, keys, tiers
-        // ===================================================================
-        await ensurePlatform(env, platformId, userId);
-        await upsertApiKey(env, platformId, publishableKey, hashHex, mode, projectName, projectId, projectType);
-        await upsertTiers(env, platformId, tierConfig.map((t) => ({ ...t, mode })) as TierInput[]);
-
-        // ===================================================================
-        // SAVE TO PLATFORM_TOKENS_KV (front-auth-api namespace)
-        // This is the MAIN namespace - stores EVERYTHING about the dev
-        // ===================================================================
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey:${mode}`, publishableKey);
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey:${mode}`, secretKey);
-        if (mode === 'live') {
-          await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey`, publishableKey);
-          await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
-        }
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:products`, JSON.stringify(priceIds));
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:products:${mode}`, JSON.stringify(priceIds));
-
-        // Reverse lookups
-        await env.PLATFORM_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
-        await env.PLATFORM_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
-
-        // ===================================================================
-        // COPY TO CUSTOMER_TOKENS_KV (api-multi namespace)
-        // Only copy what api-multi needs for fast tier limit lookups
-        // ===================================================================
-        await env.CUSTOMER_TOKENS_KV.put(
-          `platform:${platformId}:tierConfig:${mode}`,
-          JSON.stringify({ tiers: tierConfig })
-        );
-        if (mode === 'live') {
-          await env.CUSTOMER_TOKENS_KV.put(
-            `platform:${platformId}:tierConfig`,
-            JSON.stringify({ tiers: tierConfig })
-          );
-        }
-        await env.CUSTOMER_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
-        await env.CUSTOMER_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
-        // Copy Stripe token (needed for checkout/portal)
-        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken:${mode}`, stripeDataJson);
-        if (mode === 'live') {
-          await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
-        }
-
-        console.log(`[Products] Created ${priceIds.length} products for platform ${platformId}`);
-        console.log(`[Keys] Generated publishableKey: ${publishableKey}`);
-
-        // ===================================================================
-        // CONFIGURE STRIPE CUSTOMER PORTAL (CRITICAL FOR CHECKOUT + SUBSCRIPTIONS)
-        // ===================================================================
-        // WHY THIS IS NEEDED:
-        // - Stripe REQUIRES Customer Portal to be configured before checkout works properly
-        // - Even if you never use /api/customer-portal endpoint, this config must exist
-        // - Without this, checkout sessions may fail with "missing API key" errors
-        // - This is a ONE-TIME setup per connected Stripe account
-        //
-        // WHAT THIS DOES:
-        // - Creates default portal configuration on the connected account
-        // - Allows customers to update email/address
-        // - Allows customers to cancel subscriptions
-        // - Enables invoice history viewing
-        //
-        // STRIPE CONNECT PATTERN:
-        // - Uses OAuth access token (not platform secret key)
-        // - Uses Stripe-Account header to target connected account
-        // - Portal lives on THEIR Stripe account, not yours
-        console.log(`[Portal] Configuring Customer Portal for connected account ${stripeData.stripeUserId}`);
-
-        // Build portal config params (need to append array values separately)
-        const portalParams = new URLSearchParams({
-          // Business branding
-          'business_profile[headline]': 'Manage your subscription',
-          // Allow customers to update their info
-          'features[customer_update][enabled]': 'true',
-          // Allow customers to view invoice history
-          'features[invoice_history][enabled]': 'true',
-          // Allow customers to cancel subscriptions
-          'features[subscription_cancel][enabled]': 'true',
-          'features[subscription_cancel][mode]': 'at_period_end',
-          // Disable pause (optional - can enable later)
-          'features[subscription_pause][enabled]': 'false',
-        });
-        // Append array values for allowed updates (can't use object syntax for duplicate keys)
-        portalParams.append('features[customer_update][allowed_updates][]', 'email');
-        portalParams.append('features[customer_update][allowed_updates][]', 'address');
-
-        const portalConfig = await fetch('https://api.stripe.com/v1/billing_portal/configurations', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.STRIPE_CLIENT_SECRET}`,
-            'Stripe-Account': stripeData.stripeUserId,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: portalParams.toString(),
-        });
-
-        const portalResult = await portalConfig.json() as { id?: string; error?: { message: string } };
-
-        if (!portalConfig.ok) {
-          // Portal config failed - log but don't block (might already exist)
-          console.error(`[Portal] Failed to configure portal: ${portalResult.error?.message}`);
-          console.error('[Portal] This may cause checkout issues - developer needs to manually configure portal in Stripe dashboard');
-        } else {
-          console.log(`[Portal] ✅ Customer Portal configured successfully (ID: ${portalResult.id})`);
-        }
-
-        // ===================================================================
-        // UPDATE CLERK METADATA (add publishableKey to JWT)
-        // ===================================================================
-        const clerkClient = createClerkClient({
-          secretKey: env.CLERK_SECRET_KEY,
-          publishableKey: env.CLERK_PUBLISHABLE_KEY,
-        });
-
-        await clerkClient.users.updateUserMetadata(userId, {
-          publicMetadata: { publishableKey }
-        });
-
-        console.log(`[Clerk] Updated user ${userId} with publishableKey in metadata`);
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            publishableKey,
-            secretKey,
-            products: priceIds,
-            mode,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-
-      } catch (error) {
-        console.error('[Products] Error:', error);
-        return new Response(
-          JSON.stringify({ error: error instanceof Error ? error.message : 'Failed to create products' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      return handleCreateProducts(request, env);
     }
 
-    // =====================================================================
-    // GET /tiers - List existing tiers for a platform
-    // =====================================================================
+    // =========================================================================
+    // TIER MANAGEMENT
+    // CRUD operations on tiers (no key changes)
+    // =========================================================================
+
+    // GET /tiers - List tiers for a platform
     if (url.pathname === '/tiers' && request.method === 'GET') {
-      const userId = url.searchParams.get('userId');
-      const mode = url.searchParams.get('mode') || 'test';
-      const projectIdParam = url.searchParams.get('projectId');
-      const projectNameParam = url.searchParams.get('projectName');
-      const projectTypeRaw = url.searchParams.get('projectType');
-      const projectTypeParam: ProjectType | null =
-        projectTypeRaw === 'store' ? 'store' : projectTypeRaw === 'saas' ? 'saas' : null;
-
-      if (!userId) {
-        return new Response(JSON.stringify({ error: 'Missing userId' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const platformId =
-        (await getPlatformIdFromDb(userId, env)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
-
-      if (!platformId) {
-        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const resolvedProjectId = await findProjectId(env, platformId, {
-        projectId: projectIdParam,
-        projectName: projectNameParam,
-        projectType: projectTypeParam || null,
-      });
-
-      const tiersQuery = [
-        'SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode, projectId, projectType',
-        'FROM tiers',
-        'WHERE platformId = ?',
-        'AND (mode = ? OR mode IS NULL)',
-      ];
-      const params: any[] = [platformId, mode];
-      if (resolvedProjectId) {
-        tiersQuery.push('AND (projectId = ? OR projectId IS NULL)');
-        params.push(resolvedProjectId);
-      }
-
-      const tiers = await env.DB.prepare(tiersQuery.join(' '))
-        .bind(...params)
-        .all();
-
-      return new Response(JSON.stringify({ tiers: tiers.results || [], platformId, projectId: resolvedProjectId || null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return handleGetTiers(request, env, url);
     }
 
-    // =====================================================================
-    // PUT /tiers - Update an existing tier
-    // =====================================================================
+    // PUT /tiers - Update tier properties
     if (url.pathname === '/tiers' && request.method === 'PUT') {
-      const body = await request.json() as {
-        userId: string;
-        tierName: string;
-        mode?: string;
-        projectId?: string;
-        projectName?: string;
-        projectType?: ProjectType;
-        updates: {
-          displayName?: string;
-          price?: number;
-          limit?: number | string;
-          features?: string;
-          popular?: boolean;
-          inventory?: number | null;
-          soldOut?: boolean;
-        };
-      };
-
-      const { userId, tierName, updates, mode = 'test' } = body;
-
-      if (!userId || !tierName) {
-        return new Response(JSON.stringify({ error: 'Missing userId or tierName' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const platformId =
-        (await getPlatformIdFromDb(userId, env)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
-
-      if (!platformId) {
-        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const resolvedProjectId = await findProjectId(env, platformId, {
-        projectId: body.projectId,
-        projectName: body.projectName,
-        projectType: body.projectType || null,
-      });
-
-      // Build dynamic UPDATE query
-      const setClauses: string[] = [];
-      const values: any[] = [];
-
-      if (updates.displayName !== undefined) { setClauses.push('displayName = ?'); values.push(updates.displayName); }
-      if (updates.price !== undefined) { setClauses.push('price = ?'); values.push(updates.price); }
-      if (updates.limit !== undefined) { setClauses.push('"limit" = ?'); values.push(updates.limit === 'unlimited' ? null : updates.limit); }
-      if (updates.features !== undefined) { setClauses.push('features = ?'); values.push(updates.features); }
-      if (updates.popular !== undefined) { setClauses.push('popular = ?'); values.push(updates.popular ? 1 : 0); }
-      if (updates.inventory !== undefined) { setClauses.push('inventory = ?'); values.push(updates.inventory); }
-      if (updates.soldOut !== undefined) { setClauses.push('soldOut = ?'); values.push(updates.soldOut ? 1 : 0); }
-
-      if (setClauses.length === 0) {
-        return new Response(JSON.stringify({ error: 'No updates provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      values.push(platformId, tierName, mode);
-      const whereFragments = ['platformId = ?', 'name = ?', '(mode = ? OR mode IS NULL)'];
-      if (resolvedProjectId) {
-        whereFragments.push('(projectId = ? OR projectId IS NULL)');
-        values.push(resolvedProjectId);
-      }
-
-      await env.DB.prepare(
-        `UPDATE tiers SET ${setClauses.join(', ')} WHERE ${whereFragments.join(' AND ')}`
-      ).bind(...values).run();
-
-      console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}`);
-
-      return new Response(JSON.stringify({ success: true, tierName, updates }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return handleUpdateTier(request, env);
     }
 
-    // =====================================================================
-    // POST /tiers/add - Add a new tier to existing platform (no new keys)
-    // =====================================================================
+    // POST /tiers/add - Add new tier to existing project
     if (url.pathname === '/tiers/add' && request.method === 'POST') {
-      const body = await request.json() as {
-        userId: string;
-        mode?: string;
-        projectId?: string;
-        projectName?: string;
-        projectType?: ProjectType;
-        tier: {
-          name: string;
-          displayName: string;
-          price: number;
-          limit: number | string;
-          billingMode?: 'subscription' | 'one_off';
-          features?: string;
-          description?: string;
-          imageUrl?: string;
-          inventory?: number | null;
-          popular?: boolean;
-        };
-      };
-
-      const { userId, tier, mode = 'test' } = body;
-
-      if (!userId || !tier?.name || !tier?.displayName) {
-        return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const platformId =
-        (await getPlatformIdFromDb(userId, env)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
-
-      if (!platformId) {
-        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const projectType = body.projectType || (tier.billingMode === 'one_off' ? 'store' as ProjectType : 'saas');
-      const projectId =
-        (await findProjectId(env, platformId, { projectId: body.projectId, projectName: body.projectName, projectType })) ||
-        (await getOrCreateProject(env, platformId, body.projectName || 'Default Project', projectType));
-
-      // Get Stripe token to create product
-      const stripeDataJson =
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`));
-
-      if (!stripeDataJson) {
-        return new Response(JSON.stringify({ error: 'Stripe not connected' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
-      const billingMode = tier.billingMode || 'subscription';
-
-      // Create Stripe product
-      const productRes = await fetch('https://api.stripe.com/v1/products', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${stripeData.accessToken}`,
-          'Stripe-Account': stripeData.stripeUserId,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: (() => {
-          const params = new URLSearchParams({
-            name: tier.displayName,
-            'metadata[platformId]': platformId,
-            'metadata[tierName]': tier.name,
-          });
-          if (billingMode === 'one_off' && tier.description && tier.description.trim() !== '') {
-            params.append('description', tier.description);
-          }
-          if (tier.imageUrl && tier.imageUrl.trim() !== '') {
-            params.append('images[]', tier.imageUrl);
-          }
-          return params;
-        })(),
-      });
-
-      if (!productRes.ok) {
-        const err = await productRes.text();
-        return new Response(JSON.stringify({ error: `Failed to create Stripe product: ${err}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const product = await productRes.json() as { id: string };
-
-      // Create Stripe price
-      const priceRes = await fetch('https://api.stripe.com/v1/prices', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${stripeData.accessToken}`,
-          'Stripe-Account': stripeData.stripeUserId,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          product: product.id,
-          currency: 'usd',
-          unit_amount: String(Math.round(tier.price * 100)),
-          ...(billingMode === 'subscription' ? { 'recurring[interval]': 'month' } : {}),
-        }),
-      });
-
-      if (!priceRes.ok) {
-        const err = await priceRes.text();
-        return new Response(JSON.stringify({ error: `Failed to create Stripe price: ${err}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const price = await priceRes.json() as { id: string };
-
-      // Insert into D1
-      const featuresJson = JSON.stringify({
-        features: tier.features ? tier.features.split(',').map(f => f.trim()) : [],
-        billingMode,
-        imageUrl: tier.imageUrl || '',
-        inventory: tier.inventory ?? null,
-      });
-
-      await env.DB.prepare(
-        'INSERT INTO tiers (platformId, projectId, projectType, name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, mode, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(
-        platformId,
-        projectId,
-        projectType,
-        tier.name.toLowerCase().replace(/\s+/g, '_'),
-        tier.displayName,
-        tier.price,
-        tier.limit === 'unlimited' ? null : tier.limit,
-        price.id,
-        product.id,
-        featuresJson,
-        tier.popular ? 1 : 0,
-        tier.inventory ?? null,
-        0,
-        mode,
-        new Date().toISOString().replace('T', ' ').slice(0, 19)
-      ).run();
-
-      console.log(`[Tiers] Added new tier ${tier.name} for platform ${platformId}`);
-
-      return new Response(JSON.stringify({
-        success: true,
-        tier: { name: tier.name, priceId: price.id, productId: product.id }
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return handleAddTier(request, env);
     }
 
-    // =====================================================================
-    // DELETE /tiers - Delete a tier
-    // =====================================================================
+    // DELETE /tiers - Remove a tier
     if (url.pathname === '/tiers' && request.method === 'DELETE') {
-      const body = await request.json() as { userId: string; tierName: string; mode?: string; projectId?: string; projectName?: string; projectType?: ProjectType };
-      const { userId, tierName, mode = 'test' } = body;
-
-      if (!userId || !tierName) {
-        return new Response(JSON.stringify({ error: 'Missing userId or tierName' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const platformId =
-        (await getPlatformIdFromDb(userId, env)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`));
-
-      if (!platformId) {
-        return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const resolvedProjectId = await findProjectId(env, platformId, {
-        projectId: body.projectId,
-        projectName: body.projectName,
-        projectType: body.projectType || null,
-      });
-
-      // Get the tier first to archive Stripe product
-      const tier = await env.DB.prepare(
-        resolvedProjectId
-          ? 'SELECT productId FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL) AND (projectId = ? OR projectId IS NULL)'
-          : 'SELECT productId FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
-      ).bind(
-        ...(resolvedProjectId ? [platformId, tierName, mode, resolvedProjectId] : [platformId, tierName, mode])
-      ).first<{ productId: string }>();
-
-      if (!tier) {
-        return new Response(JSON.stringify({ error: 'Tier not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Archive Stripe product (don't delete - might have existing subscriptions)
-      const stripeDataJson =
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`));
-
-      if (stripeDataJson && tier.productId) {
-        const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
-        await fetch(`https://api.stripe.com/v1/products/${tier.productId}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${stripeData.accessToken}`,
-            'Stripe-Account': stripeData.stripeUserId,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({ active: 'false' }),
-        });
-      }
-
-      // Delete from D1
-      await env.DB.prepare(
-        resolvedProjectId
-          ? 'DELETE FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL) AND (projectId = ? OR projectId IS NULL)'
-          : 'DELETE FROM tiers WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)'
-      ).bind(
-        ...(resolvedProjectId ? [platformId, tierName, mode, resolvedProjectId] : [platformId, tierName, mode])
-      ).run();
-
-      console.log(`[Tiers] Deleted tier ${tierName} for platform ${platformId}`);
-
-      return new Response(JSON.stringify({ success: true, deleted: tierName }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return handleDeleteTier(request, env);
     }
 
-    // Promote test config to live (reuse test tiers, create live prices/keys)
+    // =========================================================================
+    // PROMOTION
+    // Take test products live
+    // =========================================================================
+
+    // POST /promote-to-live - Create live products from test config
     if (url.pathname === '/promote-to-live' && request.method === 'POST') {
-      const body = await request.json() as { userId: string };
-      const { userId } = body;
-      if (!userId) {
-        return new Response('Missing userId', { status: 400 });
-      }
-
-      // Get platformId (created during OAuth callback)
-      const platformId = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`);
-      if (!platformId) {
-        return new Response('Platform ID not found. Please connect Stripe first.', { status: 404 });
-      }
-
-      // Load test tier config from KV
-      const tierConfigJson = await env.CUSTOMER_TOKENS_KV.get(`platform:${platformId}:tierConfig:test`);
-      if (!tierConfigJson) {
-        return new Response('No test tier config found. Create test products first.', { status: 404 });
-      }
-      const tierConfig = JSON.parse(tierConfigJson) as { tiers: any[] };
-      if (!tierConfig.tiers || tierConfig.tiers.length === 0) {
-        return new Response('No test tiers found.', { status: 400 });
-      }
-
-      // Get Stripe credentials from PLATFORM_TOKENS_KV (front-auth-api namespace)
-      const stripeDataJson =
-        (await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`)) ||
-        (await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`));
-      if (!stripeDataJson) {
-        return new Response('Stripe credentials not found. Please connect Stripe first.', { status: 404 });
-      }
-      const stripeData = JSON.parse(stripeDataJson) as { accessToken: string; stripeUserId: string };
-
-      // Create Stripe products/prices in live mode
-      try {
-        const priceIds: Array<{ tier: string; priceId: string; productId: string }> = [];
-        for (const tier of tierConfig.tiers) {
-          const billingMode = tier.billingMode || 'subscription';
-
-          // Create product
-          const productResponse = await fetch('https://api.stripe.com/v1/products', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${stripeData.accessToken}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: (() => {
-              const params = new URLSearchParams({
-                name: tier.displayName,
-                'metadata[platformId]': platformId,
-                'metadata[tierName]': tier.name,
-                'metadata[limit]': String(tier.limit ?? 0),
-              });
-              // Only add description for one-offs if provided and non-empty
-              if (tier.billingMode === 'one_off' && tier.description && tier.description.trim() !== '') {
-                params.append('description', tier.description);
-              }
-              if (tier.imageUrl && tier.imageUrl.trim() !== '') {
-                params.append('images[]', tier.imageUrl);
-              }
-              return params;
-            })(),
-          });
-
-          if (!productResponse.ok) {
-            const error = await productResponse.text();
-            throw new Error(`Failed to create product: ${error}`);
-          }
-
-          const product = await productResponse.json() as { id: string };
-
-          const params = new URLSearchParams({
-            product: product.id,
-            unit_amount: (tier.price * 100).toString(),
-            currency: 'usd',
-            'metadata[platformId]': platformId,
-            'metadata[tierName]': tier.name,
-            'metadata[limit]': tier.limit?.toString() ?? '',
-          });
-
-          if (billingMode === 'subscription') {
-            params.set('recurring[interval]', 'month');
-          }
-
-          const priceResponse = await fetch('https://api.stripe.com/v1/prices', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${stripeData.accessToken}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: params,
-          });
-
-          if (!priceResponse.ok) {
-            const error = await priceResponse.text();
-            throw new Error(`Failed to create price: ${error}`);
-          }
-
-          const price = await priceResponse.json() as { id: string };
-
-          priceIds.push({
-            tier: tier.name,
-            priceId: price.id,
-            productId: product.id,
-          });
-        }
-
-        // Generate live keys
-        const publishableKey = `pk_live_${crypto.randomUUID().replace(/-/g, '')}`;
-        const secretKey = `sk_live_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
-        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secretKey));
-        const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-        // Build live tier config with product IDs
-        const liveTierConfig = tierConfig.tiers.map((tier, i) => ({
-          ...tier,
-          priceId: priceIds[i].priceId,
-          productId: priceIds[i].productId,
-          mode: 'live',
-        }));
-
-        // Persist in D1 and KV
-        await ensurePlatform(env, platformId, userId);
-        await upsertApiKey(env, platformId, publishableKey, hashHex, 'live');
-        await upsertTiers(env, platformId, liveTierConfig as TierInput[]);
-
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey`, publishableKey);
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey`, secretKey);
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:publishableKey:live`, publishableKey);
-        await env.PLATFORM_TOKENS_KV.put(`user:${userId}:secretKey:live`, secretKey);
-
-        await env.PLATFORM_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
-        await env.PLATFORM_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
-
-        await env.CUSTOMER_TOKENS_KV.put(
-          `platform:${platformId}:tierConfig:live`,
-          JSON.stringify({ tiers: liveTierConfig })
-        );
-        await env.CUSTOMER_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
-        await env.CUSTOMER_TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, publishableKey);
-        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken:live`, stripeDataJson);
-        await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            publishableKey,
-            secretKey,
-            products: priceIds,
-            mode: 'live',
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } catch (error) {
-        console.error('[PromoteLive] Error:', error);
-        return new Response(
-          JSON.stringify({ error: error instanceof Error ? error.message : 'Failed to promote to live' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      return handlePromoteToLive(request, env);
     }
 
-    return new Response('Not Found', { status: 404 });
+    // =========================================================================
+    // 404 - Route not found
+    // =========================================================================
+    return new Response(
+      JSON.stringify({ error: 'Not Found', path: url.pathname }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   },
 };

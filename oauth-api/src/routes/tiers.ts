@@ -1,0 +1,587 @@
+/**
+ * ============================================================================
+ * TIERS ROUTES - Manage Product Tiers (CRUD)
+ * ============================================================================
+ *
+ * These routes allow developers to manage their tiers/products AFTER initial
+ * creation. The key difference from /create-products:
+ *
+ *   - /create-products: Creates NEW project with NEW keys
+ *   - /tiers routes: Modify EXISTING project, SAME keys
+ *
+ * USE CASES:
+ *   - GET /tiers: List existing tiers for a project
+ *   - PUT /tiers: Update tier properties (price, limit, etc.)
+ *   - POST /tiers/add: Add a new tier to existing project
+ *   - DELETE /tiers: Remove a tier (archives Stripe product)
+ *
+ * KEY CONCEPT:
+ * All operations are scoped by publishableKey (the project identifier).
+ * The projectType (saas|store) is LOCKED - you can't switch.
+ *
+ * ============================================================================
+ */
+
+import { Env, ProjectType } from '../types';
+import { ensureTierSchema } from '../lib/schema';
+import { getCorsHeaders } from './oauth';
+
+/**
+ * Helper: Get platformId from D1 or KV
+ * Tries D1 first (source of truth), falls back to KV cache
+ */
+async function getPlatformId(userId: string, env: Env): Promise<string | null> {
+  // Try D1 first
+  const row = await env.DB.prepare(
+    'SELECT platformId FROM platforms WHERE clerkUserId = ?'
+  )
+    .bind(userId)
+    .first<{ platformId: string }>();
+
+  if (row?.platformId) return row.platformId;
+
+  // Fall back to KV
+  return await env.PLATFORM_TOKENS_KV.get(`user:${userId}:platformId`);
+}
+
+/**
+ * Helper: Get Stripe credentials for a platform
+ * Needed to create/archive products on their Stripe account
+ */
+async function getStripeCredentials(
+  userId: string,
+  platformId: string,
+  env: Env
+): Promise<{ accessToken: string; stripeUserId: string } | null> {
+  const json =
+    await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`) ||
+    await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+
+  if (!json) return null;
+  return JSON.parse(json);
+}
+
+/**
+ * GET /tiers
+ *
+ * List existing tiers for a platform, optionally filtered by publishableKey.
+ *
+ * Query params:
+ *   - userId: Clerk user ID (required)
+ *   - mode: 'test' | 'live' (default: 'test')
+ *   - publishableKey: Filter to specific project (optional)
+ *
+ * Returns:
+ *   - tiers: Array of tier objects
+ *   - platformId: The platform these belong to
+ */
+export async function handleGetTiers(
+  request: Request,
+  env: Env,
+  url: URL
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders();
+
+  const userId = url.searchParams.get('userId');
+  const mode = url.searchParams.get('mode') || 'test';
+  const publishableKey = url.searchParams.get('publishableKey');
+
+  if (!userId) {
+    return new Response(
+      JSON.stringify({ error: 'Missing userId' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const platformId = await getPlatformId(userId, env);
+  if (!platformId) {
+    return new Response(
+      JSON.stringify({ error: 'Platform not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Ensure schema is up to date
+  await ensureTierSchema(env);
+
+  // Build query - filter by platformId, mode, and optionally publishableKey
+  let query = `
+    SELECT name, displayName, price, "limit", priceId, productId,
+           features, popular, inventory, soldOut, mode,
+           publishableKey, projectType
+    FROM tiers
+    WHERE platformId = ?
+      AND (mode = ? OR mode IS NULL)
+  `;
+  const params: any[] = [platformId, mode];
+
+  // If publishableKey provided, filter to that specific project
+  if (publishableKey) {
+    query += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+    params.push(publishableKey);
+  }
+
+  const result = await env.DB.prepare(query).bind(...params).all();
+
+  return new Response(
+    JSON.stringify({
+      tiers: result.results || [],
+      platformId,
+      publishableKey: publishableKey || null,
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * PUT /tiers
+ *
+ * Update an existing tier's properties.
+ * Does NOT change API keys or create new Stripe products.
+ *
+ * Request body:
+ *   - userId: Clerk user ID
+ *   - tierName: Name of tier to update
+ *   - mode: 'test' | 'live'
+ *   - publishableKey: The project this tier belongs to
+ *   - updates: Object with properties to change
+ *
+ * Updatable properties:
+ *   - displayName: Display name shown to customers
+ *   - price: Price in dollars
+ *   - limit: Usage limit (number or 'unlimited')
+ *   - features: JSON string of features
+ *   - popular: Boolean flag for UI highlighting
+ *   - inventory: Stock count (for store products)
+ *   - soldOut: Boolean sold out flag
+ *
+ * Note: Changing price here does NOT update Stripe price.
+ * For price changes, dev should create new tier and archive old one.
+ */
+export async function handleUpdateTier(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders();
+
+  const body = await request.json() as {
+    userId: string;
+    tierName: string;
+    mode?: string;
+    publishableKey?: string;
+    updates: {
+      displayName?: string;
+      price?: number;
+      limit?: number | string;
+      features?: string;
+      popular?: boolean;
+      inventory?: number | null;
+      soldOut?: boolean;
+    };
+  };
+
+  const { userId, tierName, updates, mode = 'test', publishableKey } = body;
+
+  // Validate required fields
+  if (!userId || !tierName) {
+    return new Response(
+      JSON.stringify({ error: 'Missing userId or tierName' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const platformId = await getPlatformId(userId, env);
+  if (!platformId) {
+    return new Response(
+      JSON.stringify({ error: 'Platform not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Build dynamic UPDATE query based on what fields were provided
+  const setClauses: string[] = [];
+  const values: any[] = [];
+
+  if (updates.displayName !== undefined) {
+    setClauses.push('displayName = ?');
+    values.push(updates.displayName);
+  }
+  if (updates.price !== undefined) {
+    setClauses.push('price = ?');
+    values.push(updates.price);
+  }
+  if (updates.limit !== undefined) {
+    setClauses.push('"limit" = ?');
+    values.push(updates.limit === 'unlimited' ? null : updates.limit);
+  }
+  if (updates.features !== undefined) {
+    setClauses.push('features = ?');
+    values.push(updates.features);
+  }
+  if (updates.popular !== undefined) {
+    setClauses.push('popular = ?');
+    values.push(updates.popular ? 1 : 0);
+  }
+  if (updates.inventory !== undefined) {
+    setClauses.push('inventory = ?');
+    values.push(updates.inventory);
+  }
+  if (updates.soldOut !== undefined) {
+    setClauses.push('soldOut = ?');
+    values.push(updates.soldOut ? 1 : 0);
+  }
+
+  if (setClauses.length === 0) {
+    return new Response(
+      JSON.stringify({ error: 'No updates provided' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Build WHERE clause
+  values.push(platformId, tierName, mode);
+  let whereClause = 'platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)';
+
+  if (publishableKey) {
+    whereClause += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+    values.push(publishableKey);
+  }
+
+  await env.DB.prepare(
+    `UPDATE tiers SET ${setClauses.join(', ')} WHERE ${whereClause}`
+  ).bind(...values).run();
+
+  console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}`);
+
+  return new Response(
+    JSON.stringify({ success: true, tierName, updates }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * POST /tiers/add
+ *
+ * Add a NEW tier to an EXISTING project.
+ * Creates new Stripe product/price but does NOT generate new API keys.
+ *
+ * Request body:
+ *   - userId: Clerk user ID
+ *   - mode: 'test' | 'live'
+ *   - publishableKey: The project to add tier to (required)
+ *   - tier: Tier definition object
+ *
+ * The tier's type (subscription vs one_off) must match the project's type.
+ * You can't add a store product to a SaaS project.
+ */
+export async function handleAddTier(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders();
+
+  const body = await request.json() as {
+    userId: string;
+    mode?: string;
+    publishableKey: string;
+    tier: {
+      name: string;
+      displayName: string;
+      price: number;
+      limit: number | string;
+      billingMode?: 'subscription' | 'one_off';
+      features?: string;
+      description?: string;
+      imageUrl?: string;
+      inventory?: number | null;
+      popular?: boolean;
+    };
+  };
+
+  const { userId, tier, mode = 'test', publishableKey } = body;
+
+  // Validate required fields
+  if (!userId || !tier?.name || !tier?.displayName || !publishableKey) {
+    return new Response(
+      JSON.stringify({ error: 'Missing required fields (userId, tier.name, tier.displayName, publishableKey)' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const platformId = await getPlatformId(userId, env);
+  if (!platformId) {
+    return new Response(
+      JSON.stringify({ error: 'Platform not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Get the project type from the existing key to enforce type locking
+  const existingKey = await env.DB.prepare(
+    'SELECT projectType FROM api_keys WHERE platformId = ? AND publishableKey = ? LIMIT 1'
+  )
+    .bind(platformId, publishableKey)
+    .first<{ projectType: string }>();
+
+  if (!existingKey) {
+    return new Response(
+      JSON.stringify({ error: 'Project not found for this publishableKey' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const projectType = existingKey.projectType as ProjectType;
+
+  // Validate tier type matches project type
+  const tierBillingMode = tier.billingMode || 'subscription';
+  const tierType = tierBillingMode === 'one_off' ? 'store' : 'saas';
+
+  if (tierType !== projectType) {
+    return new Response(
+      JSON.stringify({
+        error: `Cannot add ${tierType} tier to ${projectType} project. Project type is locked.`
+      }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Get Stripe credentials
+  const stripeData = await getStripeCredentials(userId, platformId, env);
+  if (!stripeData) {
+    return new Response(
+      JSON.stringify({ error: 'Stripe not connected' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // =========================================================================
+  // CREATE STRIPE PRODUCT
+  // =========================================================================
+
+  const productParams = new URLSearchParams({
+    name: tier.displayName,
+    'metadata[platformId]': platformId,
+    'metadata[tierName]': tier.name,
+  });
+
+  if (tierBillingMode === 'one_off' && tier.description?.trim()) {
+    productParams.append('description', tier.description);
+  }
+  if (tier.imageUrl?.trim()) {
+    productParams.append('images[]', tier.imageUrl);
+  }
+
+  const productRes = await fetch('https://api.stripe.com/v1/products', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${stripeData.accessToken}`,
+      'Stripe-Account': stripeData.stripeUserId,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: productParams,
+  });
+
+  if (!productRes.ok) {
+    const err = await productRes.text();
+    return new Response(
+      JSON.stringify({ error: `Failed to create Stripe product: ${err}` }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const product = await productRes.json() as { id: string };
+
+  // =========================================================================
+  // CREATE STRIPE PRICE
+  // =========================================================================
+
+  const priceParams = new URLSearchParams({
+    product: product.id,
+    currency: 'usd',
+    unit_amount: String(Math.round(tier.price * 100)),
+  });
+
+  if (tierBillingMode === 'subscription') {
+    priceParams.set('recurring[interval]', 'month');
+  }
+
+  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${stripeData.accessToken}`,
+      'Stripe-Account': stripeData.stripeUserId,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: priceParams,
+  });
+
+  if (!priceRes.ok) {
+    const err = await priceRes.text();
+    return new Response(
+      JSON.stringify({ error: `Failed to create Stripe price: ${err}` }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const price = await priceRes.json() as { id: string };
+
+  // =========================================================================
+  // INSERT INTO D1
+  // =========================================================================
+
+  await ensureTierSchema(env);
+
+  const featuresJson = JSON.stringify({
+    features: tier.features ? tier.features.split(',').map(f => f.trim()) : [],
+    billingMode: tierBillingMode,
+    imageUrl: tier.imageUrl || '',
+    inventory: tier.inventory ?? null,
+  });
+
+  const tierNameSlug = tier.name.toLowerCase().replace(/\s+/g, '_');
+
+  await env.DB.prepare(`
+    INSERT INTO tiers (
+      platformId, publishableKey, projectType, name, displayName,
+      price, "limit", priceId, productId, features, popular,
+      inventory, soldOut, mode, createdAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    platformId,
+    publishableKey,
+    projectType,
+    tierNameSlug,
+    tier.displayName,
+    tier.price,
+    tier.limit === 'unlimited' ? null : tier.limit,
+    price.id,
+    product.id,
+    featuresJson,
+    tier.popular ? 1 : 0,
+    tier.inventory ?? null,
+    0, // soldOut starts false
+    mode,
+    new Date().toISOString().replace('T', ' ').slice(0, 19)
+  ).run();
+
+  console.log(`[Tiers] Added new tier ${tierNameSlug} to project ${publishableKey}`);
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      tier: {
+        name: tierNameSlug,
+        priceId: price.id,
+        productId: product.id,
+      }
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * DELETE /tiers
+ *
+ * Remove a tier from a project.
+ * Archives the Stripe product (doesn't delete - might have existing subs).
+ *
+ * Request body:
+ *   - userId: Clerk user ID
+ *   - tierName: Name of tier to delete
+ *   - mode: 'test' | 'live'
+ *   - publishableKey: The project this tier belongs to
+ */
+export async function handleDeleteTier(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders();
+
+  const body = await request.json() as {
+    userId: string;
+    tierName: string;
+    mode?: string;
+    publishableKey?: string;
+  };
+
+  const { userId, tierName, mode = 'test', publishableKey } = body;
+
+  if (!userId || !tierName) {
+    return new Response(
+      JSON.stringify({ error: 'Missing userId or tierName' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const platformId = await getPlatformId(userId, env);
+  if (!platformId) {
+    return new Response(
+      JSON.stringify({ error: 'Platform not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Get the tier to find productId for Stripe archival
+  let tierQuery = `
+    SELECT productId FROM tiers
+    WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)
+  `;
+  const tierParams: any[] = [platformId, tierName, mode];
+
+  if (publishableKey) {
+    tierQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+    tierParams.push(publishableKey);
+  }
+
+  const tier = await env.DB.prepare(tierQuery)
+    .bind(...tierParams)
+    .first<{ productId: string }>();
+
+  if (!tier) {
+    return new Response(
+      JSON.stringify({ error: 'Tier not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Archive Stripe product (don't delete - might have existing subscriptions)
+  const stripeData = await getStripeCredentials(userId, platformId, env);
+  if (stripeData && tier.productId) {
+    try {
+      await fetch(`https://api.stripe.com/v1/products/${tier.productId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Stripe-Account': stripeData.stripeUserId,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ active: 'false' }),
+      });
+      console.log(`[Tiers] Archived Stripe product ${tier.productId}`);
+    } catch (err) {
+      console.warn(`[Tiers] Failed to archive Stripe product: ${err}`);
+      // Continue with D1 deletion even if Stripe fails
+    }
+  }
+
+  // Delete from D1
+  let deleteQuery = `
+    DELETE FROM tiers
+    WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)
+  `;
+  const deleteParams: any[] = [platformId, tierName, mode];
+
+  if (publishableKey) {
+    deleteQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+    deleteParams.push(publishableKey);
+  }
+
+  await env.DB.prepare(deleteQuery).bind(...deleteParams).run();
+
+  console.log(`[Tiers] Deleted tier ${tierName} from platform ${platformId}`);
+
+  return new Response(
+    JSON.stringify({ success: true, deleted: tierName }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}

@@ -1,71 +1,146 @@
+/**
+ * ============================================================================
+ * SCHEMA HELPERS - D1 Database Schema Management
+ * ============================================================================
+ *
+ * These functions ensure the D1 database schema is up to date.
+ * They add columns if missing (safe to run multiple times).
+ *
+ * WHY THIS EXISTS:
+ * Cloudflare D1 doesn't have migration tools like traditional databases.
+ * So we use ALTER TABLE with try/catch - if column exists, it fails silently.
+ * This lets us evolve the schema without manual migrations.
+ *
+ * SCHEMA OVERVIEW:
+ *
+ * platforms
+ *   - platformId: Unique ID for the developer (plt_xxx)
+ *   - clerkUserId: Links to Clerk authentication
+ *
+ * api_keys
+ *   - platformId: Which developer owns this key
+ *   - publishableKey: The public key (pk_test_xxx or pk_live_xxx)
+ *   - secretKeyHash: SHA-256 hash of secret key (never store plain!)
+ *   - projectType: 'saas' or 'store' - LOCKED after creation
+ *   - mode: 'test' or 'live'
+ *   - name: Display name for dashboard
+ *
+ * tiers
+ *   - platformId: Which developer owns this
+ *   - publishableKey: Which project this tier belongs to (NEW!)
+ *   - projectType: 'saas' or 'store'
+ *   - name, displayName, price, limit: Tier properties
+ *   - priceId, productId: Stripe IDs
+ *   - mode: 'test' or 'live'
+ *   - inventory, soldOut: For store products
+ *
+ * stripe_tokens
+ *   - platformId: Which developer
+ *   - accessToken: Stripe Connect OAuth token
+ *   - stripeUserId: Connected account ID
+ *   - mode: 'test' or 'live'
+ *
+ * ============================================================================
+ */
+
 import { Env } from '../types';
 
+// Track which schemas we've already checked this request
+// Prevents redundant ALTER TABLE calls
 let tierSchemaChecked = false;
 let apiKeySchemaChecked = false;
 let stripeTokenSchemaChecked = false;
-let projectSchemaChecked = false;
 
+/**
+ * Ensure platform exists in D1
+ * Called when we need to associate data with a platform
+ */
 export async function ensurePlatform(env: Env, platformId: string, userId: string) {
-  await env.DB.prepare('INSERT OR IGNORE INTO platforms (platformId, clerkUserId) VALUES (?, ?)')
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO platforms (platformId, clerkUserId) VALUES (?, ?)'
+  )
     .bind(platformId, userId)
     .run();
 }
 
+/**
+ * Ensure tiers table has all required columns
+ *
+ * Key column: publishableKey
+ * This links each tier to a specific project (identified by its key)
+ */
 export async function ensureTierSchema(env: Env) {
   if (tierSchemaChecked) return;
   tierSchemaChecked = true;
+
+  // publishableKey - THE KEY COLUMN - links tier to project
   try {
-    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectId TEXT').run();
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN publishableKey TEXT').run();
   } catch {}
+
+  // projectType - saas or store
   try {
     await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectType TEXT').run();
   } catch {}
+
+  // inventory - stock count for store products
   try {
     await env.DB.prepare('ALTER TABLE tiers ADD COLUMN inventory INTEGER').run();
   } catch {}
+
+  // soldOut - flag when inventory hits 0
   try {
     await env.DB.prepare('ALTER TABLE tiers ADD COLUMN soldOut INTEGER DEFAULT 0').run();
   } catch {}
+
+  // mode - test or live
   try {
     await env.DB.prepare("ALTER TABLE tiers ADD COLUMN mode TEXT DEFAULT 'live'").run();
   } catch {}
+
+  // Legacy: projectId (keeping for backwards compat, but publishableKey is preferred)
+  try {
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectId TEXT').run();
+  } catch {}
 }
 
+/**
+ * Ensure api_keys table has all required columns
+ */
 export async function ensureApiKeySchema(env: Env) {
   if (apiKeySchemaChecked) return;
   apiKeySchemaChecked = true;
-  try {
-    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectId TEXT').run();
-  } catch {}
+
+  // projectType - saas or store (LOCKED after creation)
   try {
     await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectType TEXT').run();
   } catch {}
+
+  // mode - test or live
   try {
     await env.DB.prepare("ALTER TABLE api_keys ADD COLUMN mode TEXT DEFAULT 'live'").run();
   } catch {}
+
+  // name - display name for dashboard
   try {
     await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN name TEXT').run();
   } catch {}
-}
 
-export async function ensureStripeTokenSchema(env: Env) {
-  if (stripeTokenSchemaChecked) return;
-  stripeTokenSchemaChecked = true;
+  // Legacy: projectId (keeping for backwards compat)
   try {
-    await env.DB.prepare("ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT 'live'").run();
+    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectId TEXT').run();
   } catch {}
 }
 
-export async function ensureProjectSchema(env: Env) {
-  if (projectSchemaChecked) return;
-  projectSchemaChecked = true;
-  await env.DB.prepare(
-    `CREATE TABLE IF NOT EXISTS projects (
-      projectId TEXT PRIMARY KEY,
-      platformId TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-    )`
-  ).run();
+/**
+ * Ensure stripe_tokens table has all required columns
+ */
+export async function ensureStripeTokenSchema(env: Env) {
+  if (stripeTokenSchemaChecked) return;
+  stripeTokenSchemaChecked = true;
+
+  // mode - test or live
+  try {
+    await env.DB.prepare("ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT 'live'").run();
+  } catch {}
 }

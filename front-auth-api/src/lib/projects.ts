@@ -36,19 +36,22 @@ export async function listProjects(env: Env, platformId: string) {
   (projects.results || []).forEach((p) => {
     byProject.set(p.projectId, { projectId: p.projectId, name: p.name, type: p.type as ProjectType, keys: [] });
   });
-  (keys.results || []).forEach((k) => {
+  for (const k of keys.results || []) {
     const projectId = k.projectId || 'legacy';
     if (!byProject.has(projectId)) {
       byProject.set(projectId, { projectId, name: k.name || 'Legacy', type: (k.projectType as ProjectType) || 'saas', keys: [] });
     }
+    const mode = (k.mode as 'test' | 'live') || (k.publishableKey.startsWith('pk_test_') ? 'test' : 'live');
+    const secretKey = await env.TOKENS_KV.get(`project:${projectId}:${mode}:secretKey`);
     byProject.get(projectId).keys.push({
       publishableKey: k.publishableKey,
-      mode: k.mode || (k.publishableKey.startsWith('pk_test_') ? 'test' : 'live'),
+      secretKey: secretKey || null,
+      mode,
       status: k.status || 'active',
       projectType: k.projectType || 'saas',
       name: k.name || null,
     });
-  });
+  }
 
   return Array.from(byProject.values());
 }

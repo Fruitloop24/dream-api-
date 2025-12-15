@@ -21,7 +21,6 @@ interface SaasTier {
   displayName: string;
   price: number;
   limit: number | 'unlimited';
-  features: string;
   popular?: boolean;
   priceId?: string;
   productId?: string;
@@ -60,10 +59,13 @@ export default function ApiTierConfig() {
   // Tab: saas or store
   const [activeTab, setActiveTab] = useState<ConfigTab>(projectTypeParam);
 
+  // For new projects: track if user has chosen a type yet
+  const [hasChosenType, setHasChosenType] = useState<boolean>(isEditMode || !!projectTypeParam);
+
   // SaaS tiers
   const [saasTiers, setSaasTiers] = useState<SaasTier[]>([
-    { name: 'free', displayName: 'Free', price: 0, limit: 100, features: '', popular: false },
-    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, features: '', popular: true },
+    { name: 'free', displayName: 'Free', price: 0, limit: 100, popular: false },
+    { name: 'pro', displayName: 'Pro', price: 29, limit: 1000, popular: true },
   ]);
 
   // Store products
@@ -145,7 +147,6 @@ export default function ApiTierConfig() {
               displayName: tier.displayName || tier.name,
               price: tier.price || 0,
               limit: tier.limit === null ? 'unlimited' : tier.limit,
-              features: Array.isArray(parsedFeatures.features) ? parsedFeatures.features.join(', ') : '',
               popular: !!tier.popular,
               priceId: tier.priceId,
               productId: tier.productId,
@@ -222,13 +223,19 @@ export default function ApiTierConfig() {
   const addSaasTier = () => {
     setSaasTiers([
       ...saasTiers,
-      { name: '', displayName: '', price: 0, limit: 100, features: '', popular: false },
+      { name: '', displayName: '', price: 0, limit: 100, popular: false },
     ]);
   };
 
   const removeSaasTier = (index: number) => {
     if (saasTiers.length <= 1) return;
     setSaasTiers(saasTiers.filter((_, i) => i !== index));
+  };
+
+  // Handle type selection for new projects
+  const handleChooseType = (type: ConfigTab) => {
+    setActiveTab(type);
+    setHasChosenType(true);
   };
 
   // Store product helpers
@@ -293,11 +300,7 @@ export default function ApiTierConfig() {
         price: t.price,
         limit: t.limit,
         billingMode: 'subscription',
-        features: t.features,
         popular: t.popular,
-        description: '',
-        imageUrl: '',
-        inventory: null,
       }));
     } else {
       const incomplete = storeProducts.some(p => !p.name || !p.displayName);
@@ -352,12 +355,25 @@ export default function ApiTierConfig() {
 
     // Update existing tiers
     for (const tier of toUpdate) {
-      const featuresJson = JSON.stringify({
-        features: tier.features ? tier.features.split(',').map((f: string) => f.trim()) : [],
-        billingMode: activeTab === 'saas' ? 'subscription' : 'one_off',
-        imageUrl: 'imageUrl' in tier ? tier.imageUrl : '',
-        description: 'description' in tier ? tier.description : '',
-      });
+      const updates: any = {
+        displayName: tier.displayName,
+        price: tier.price,
+        popular: 'popular' in tier ? tier.popular : false,
+      };
+
+      if (activeTab === 'saas') {
+        updates.limit = 'limit' in tier ? (tier.limit === 'unlimited' ? 'unlimited' : tier.limit) : 0;
+      } else {
+        // Store products - cast to StoreProduct for type safety
+        const storeProduct = tier as StoreProduct;
+        updates.inventory = storeProduct.inventory ?? null;
+        updates.features = JSON.stringify({
+          features: storeProduct.features ? storeProduct.features.split(',').map((f: string) => f.trim()) : [],
+          billingMode: 'one_off',
+          imageUrl: storeProduct.imageUrl || '',
+          description: storeProduct.description || '',
+        });
+      }
 
       await fetch(`${OAUTH_API}/tiers`, {
         method: 'PUT',
@@ -368,14 +384,7 @@ export default function ApiTierConfig() {
           mode,
           projectName: projectName || projectNameParam,
           projectType: activeTab,
-          updates: {
-            displayName: tier.displayName,
-            price: tier.price,
-            limit: 'limit' in tier ? (tier.limit === 'unlimited' ? 'unlimited' : tier.limit) : 0,
-            features: featuresJson,
-            popular: 'popular' in tier ? tier.popular : false,
-            inventory: 'inventory' in tier ? tier.inventory : null,
-          },
+          updates,
         }),
       });
     }
@@ -394,12 +403,12 @@ export default function ApiTierConfig() {
             name: tier.name.toLowerCase().replace(/\s+/g, '_'),
             displayName: tier.displayName,
             price: tier.price,
-            limit: 'limit' in tier ? tier.limit : 0,
+            limit: 'limit' in tier ? (tier as SaasTier).limit : 0,
             billingMode: activeTab === 'saas' ? 'subscription' : 'one_off',
-            features: tier.features,
-            description: 'description' in tier ? tier.description : '',
-            imageUrl: 'imageUrl' in tier ? tier.imageUrl : '',
-            inventory: 'inventory' in tier ? tier.inventory : null,
+            features: 'features' in tier ? (tier as StoreProduct).features : '',
+            description: 'description' in tier ? (tier as StoreProduct).description : '',
+            imageUrl: 'imageUrl' in tier ? (tier as StoreProduct).imageUrl : '',
+            inventory: 'inventory' in tier ? (tier as StoreProduct).inventory : null,
             popular: 'popular' in tier ? tier.popular : false,
           },
         }),
@@ -529,34 +538,88 @@ export default function ApiTierConfig() {
           </div>
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex items-center gap-4 mb-6 border-b border-gray-700 pb-4">
-          <button
-            onClick={() => setActiveTab('saas')}
-            className={`px-4 py-2 rounded-t font-semibold transition-colors ${
-              activeTab === 'saas'
-                ? 'bg-gray-800 text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-            disabled={isEditMode && projectTypeParam !== 'saas'}
-          >
-            SaaS / Subscriptions
-          </button>
-          <button
-            onClick={() => setActiveTab('store')}
-            className={`px-4 py-2 rounded-t font-semibold transition-colors ${
-              activeTab === 'store'
-                ? 'bg-gray-800 text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-            disabled={isEditMode && projectTypeParam !== 'store'}
-          >
-            Store / One-offs
-          </button>
-        </div>
+        {/* Type Chooser - Show for new projects before they pick a type */}
+        {!isEditMode && !hasChosenType && (
+          <div className="mb-8">
+            <h2 className="text-xl font-bold mb-2">Choose Your Business Type</h2>
+            <p className="text-gray-400 mb-6">This determines what kind of products you can create. Choose wisely - this can't be changed later for this project.</p>
 
-        {/* SaaS Tab Content */}
-        {activeTab === 'saas' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* SaaS Card */}
+              <button
+                onClick={() => handleChooseType('saas')}
+                className="bg-gray-800 border-2 border-gray-700 hover:border-blue-500 rounded-xl p-6 text-left transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-3xl">📊</span>
+                  <h3 className="text-lg font-bold group-hover:text-blue-400">SaaS / Subscriptions</h3>
+                </div>
+                <p className="text-gray-400 text-sm mb-4">
+                  Monthly subscriptions with usage limits. Track API calls, enforce quotas, bill recurring.
+                </p>
+                <ul className="text-sm text-gray-500 space-y-1">
+                  <li>• Tiers with monthly limits</li>
+                  <li>• Usage tracking per user</li>
+                  <li>• Recurring billing</li>
+                </ul>
+              </button>
+
+              {/* Store Card */}
+              <button
+                onClick={() => handleChooseType('store')}
+                className="bg-gray-800 border-2 border-gray-700 hover:border-purple-500 rounded-xl p-6 text-left transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-3xl">🛒</span>
+                  <h3 className="text-lg font-bold group-hover:text-purple-400">Store / One-offs</h3>
+                </div>
+                <p className="text-gray-400 text-sm mb-4">
+                  One-time purchases with inventory. Sell digital products, templates, downloads.
+                </p>
+                <ul className="text-sm text-gray-500 space-y-1">
+                  <li>• Products with prices</li>
+                  <li>• Optional inventory tracking</li>
+                  <li>• One-time payments</li>
+                </ul>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Show selected type badge after choosing (in create mode) */}
+        {!isEditMode && hasChosenType && (
+          <div className="flex items-center gap-3 mb-6">
+            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+              activeTab === 'saas'
+                ? 'bg-blue-900/30 border border-blue-700 text-blue-200'
+                : 'bg-purple-900/30 border border-purple-700 text-purple-200'
+            }`}>
+              {activeTab === 'saas' ? '📊 SaaS / Subscriptions' : '🛒 Store / One-offs'}
+            </span>
+            <button
+              onClick={() => setHasChosenType(false)}
+              className="text-xs text-gray-500 hover:text-gray-300"
+            >
+              Change
+            </button>
+          </div>
+        )}
+
+        {/* Edit mode: Show type badge instead of tabs */}
+        {isEditMode && (
+          <div className="mb-6">
+            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+              activeTab === 'saas'
+                ? 'bg-blue-900/30 border border-blue-700 text-blue-200'
+                : 'bg-purple-900/30 border border-purple-700 text-purple-200'
+            }`}>
+              {activeTab === 'saas' ? 'SaaS / Subscriptions' : 'Store / One-offs'}
+            </span>
+          </div>
+        )}
+
+        {/* SaaS Tab Content - Only show after type chosen */}
+        {(isEditMode || hasChosenType) && activeTab === 'saas' && (
           <div className="space-y-4">
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-4">
               <p className="text-sm text-gray-400">
@@ -604,7 +667,7 @@ export default function ApiTierConfig() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Price ($/month)</label>
                     <input
@@ -636,20 +699,9 @@ export default function ApiTierConfig() {
                         onChange={(e) => updateSaasTier(index, 'popular', e.target.checked)}
                         className="w-4 h-4 rounded border-gray-600 bg-gray-900"
                       />
-                      <span className="text-sm text-gray-400">Popular badge</span>
+                      <span className="text-sm text-gray-400">Popular</span>
                     </label>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Features (comma separated)</label>
-                  <input
-                    type="text"
-                    value={tier.features}
-                    onChange={(e) => updateSaasTier(index, 'features', e.target.value)}
-                    placeholder="API access, Email support, Priority support"
-                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-                  />
                 </div>
               </div>
             ))}
@@ -663,8 +715,8 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Store Tab Content */}
-        {activeTab === 'store' && (
+        {/* Store Tab Content - Only show after type chosen */}
+        {(isEditMode || hasChosenType) && activeTab === 'store' && (
           <div className="space-y-4">
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-4">
               <p className="text-sm text-gray-400">
@@ -799,7 +851,8 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Submit Button */}
+        {/* Submit Button - Only show after type chosen */}
+        {(isEditMode || hasChosenType) && (
         <div className="mt-8 pt-6 border-t border-gray-700">
           <button
             onClick={handleSubmit}
@@ -830,6 +883,7 @@ export default function ApiTierConfig() {
             }
           </p>
         </div>
+        )}
       </main>
     </div>
   );

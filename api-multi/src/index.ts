@@ -54,7 +54,7 @@ import { verifyApiKey } from './middleware/apiKey';
 import { handleDataRequest, handleUsageCheck } from './routes/usage';
 import { handleCreateCheckout, handleCustomerPortal } from './routes/checkout';
 import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer } from './routes/customers';
-import { handleDashboard } from './routes/dashboard';
+import { handleDashboard, handleDashboardTotals } from './routes/dashboard';
 import { handleCartCheckout, handleGetProducts } from './routes/products';
 import { handleAssetGet, handleAssetUpload } from './routes/assets';
 
@@ -278,8 +278,14 @@ export default {
 			}
 
 			// Dashboard aggregate (customers, tiers, metrics)
+			// Filter by platformId, then optionally by publishableKey
 			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
-				return await handleDashboard(env, platformId, corsHeaders, mode, projectId || null, publishableKey);
+				return await handleDashboard(env, platformId, corsHeaders, mode, publishableKey || null);
+			}
+
+			// All-live totals (aggregate across all live projects)
+			if (url.pathname === '/api/dashboard/totals' && request.method === 'GET') {
+				return await handleDashboardTotals(env, platformId, corsHeaders);
 			}
 
 			// Create Stripe Checkout session (upgrade flow)

@@ -4,6 +4,9 @@
 
 **Status:** Working | **Updated:** Dec 2024
 
+**Projects:** Keys/products are scoped per project (SaaS or Store). See `docs/PROJECTS.md`.
+**Storage schemas:** See `docs/STORAGE.md`.
+
 ---
 
 ## What Devs Get

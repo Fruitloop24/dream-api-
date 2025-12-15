@@ -36,6 +36,7 @@ interface Project {
   type: ProjectType;
   keys: {
     publishableKey: string;
+    secretKey: string | null;
     mode: ModeType;
     status: string;
     projectType: string | null;
@@ -206,6 +207,8 @@ export default function Dashboard() {
       setProjects(list);
       if (!selectedProjectId && list.length > 0) {
         setSelectedProjectId(list[0].projectId);
+        // Set activeTab to match first project's type
+        if (list[0].type) setActiveTab(list[0].type);
       }
     } catch (err) {
       console.error('[Dashboard] Projects error:', err);
@@ -216,8 +219,8 @@ export default function Dashboard() {
     const sk =
       overrideSk ||
       (mode === 'test'
-        ? project?.keys.find((k) => k.mode === 'test')?.publishableKey || credentials?.testSecretKey
-        : project?.keys.find((k) => k.mode === 'live')?.publishableKey || credentials?.liveSecretKey);
+        ? project?.keys.find((k) => k.mode === 'test')?.secretKey || credentials?.testSecretKey
+        : project?.keys.find((k) => k.mode === 'live')?.secretKey || credentials?.liveSecretKey);
     if (!sk) return;
 
     try {
@@ -253,8 +256,8 @@ export default function Dashboard() {
     const sk =
       overrideSk ||
       (mode === 'test'
-        ? project?.keys.find((k) => k.mode === 'test')?.publishableKey || credentials?.testSecretKey
-        : project?.keys.find((k) => k.mode === 'live')?.publishableKey || credentials?.liveSecretKey);
+        ? project?.keys.find((k) => k.mode === 'test')?.secretKey || credentials?.testSecretKey
+        : project?.keys.find((k) => k.mode === 'live')?.secretKey || credentials?.liveSecretKey);
     if (!sk) return;
 
     try {
@@ -403,7 +406,13 @@ export default function Dashboard() {
               <span className="text-sm text-gray-400">Project</span>
               <select
                 value={selectedProjectId || ''}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => {
+                  const newProjectId = e.target.value;
+                  setSelectedProjectId(newProjectId);
+                  // Auto-set activeTab to match project type
+                  const proj = projects.find(p => p.projectId === newProjectId);
+                  if (proj) setActiveTab(proj.type);
+                }}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
               >
                 {projects.map((p) => (
@@ -416,30 +425,16 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Main Tabs: SaaS | Store */}
+        {/* Project Type Badge + Mode Toggle */}
         <div className="flex items-center gap-4 mb-6 border-b border-gray-700 pb-4">
-          <button
-            onClick={() => setActiveTab('saas')}
-            className={`px-4 py-2 rounded-t font-semibold transition-colors ${
-              activeTab === 'saas'
-                ? 'bg-gray-800 text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-            disabled={project ? project.type !== 'saas' : false}
-          >
-            SaaS / Subscriptions
-          </button>
-          <button
-            onClick={() => setActiveTab('store')}
-            className={`px-4 py-2 rounded-t font-semibold transition-colors ${
-              activeTab === 'store'
-                ? 'bg-gray-800 text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-            disabled={project ? project.type !== 'store' : false}
-          >
-            Store / One-offs
-          </button>
+          {/* Show type badge based on selected project */}
+          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+            (project?.type || activeTab) === 'saas'
+              ? 'bg-blue-900/30 border border-blue-700 text-blue-200'
+              : 'bg-purple-900/30 border border-purple-700 text-purple-200'
+          }`}>
+            {(project?.type || activeTab) === 'saas' ? '📊 SaaS / Subscriptions' : '🛒 Store / One-offs'}
+          </span>
 
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-gray-500 uppercase">View:</span>
@@ -625,7 +620,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-bold">Subscription Tiers</h3>
                 <button
-                  onClick={() => navigate(`/api-tier-config?edit=true&mode=${viewMode}`)}
+                  onClick={() => navigate(`/api-tier-config?edit=true&mode=${viewMode}&projectType=saas&projectName=${encodeURIComponent(project?.name || '')}`)}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
                   Edit Tiers
@@ -748,7 +743,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">One-off Products</h3>
                 <button
-                  onClick={() => navigate(`/api-tier-config?edit=true&mode=${viewMode}`)}
+                  onClick={() => navigate(`/api-tier-config?edit=true&mode=${viewMode}&projectType=store&projectName=${encodeURIComponent(project?.name || '')}`)}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold"
                 >
                   Edit Products
