@@ -50,8 +50,8 @@ export default function ApiTierConfig() {
   const projectNameParam = searchParams.get('projectName') || '';
   const projectTypeFromUrl = searchParams.get('projectType') as ConfigTab | null;
 
-  // Mode: test or live
-  const [mode, setMode] = useState<ModeType>(editMode);
+  // Mode: test or live (test only for new projects, edit mode uses URL param)
+  const [mode] = useState<ModeType>(editMode);
 
   // Project name (only for new projects)
   const [projectName, setProjectName] = useState<string>(projectNameParam);
@@ -272,11 +272,13 @@ export default function ApiTierConfig() {
       if (isEditMode) {
         // UPDATE MODE: Update existing tiers
         await handleUpdate();
+        navigate('/dashboard');
       } else {
         // CREATE MODE: Create new products and keys
         await handleCreate();
+        // Go to credentials page to show the new keys
+        navigate('/credentials');
       }
-      navigate('/dashboard');
     } catch (error) {
       console.error('Error saving config:', error);
       alert('Failed to save configuration');
@@ -505,37 +507,24 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Mode Toggle */}
+        {/* Mode Display - Test only for new projects, shows mode badge for edits */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold mb-1">Environment Mode</h3>
               <p className="text-sm text-gray-400">
-                {isEditMode ? 'Editing tiers for this mode.' : 'Start with Test mode. When ready, create Live products.'}
+                {isEditMode
+                  ? `Editing ${mode} mode tiers.`
+                  : 'Creating in Test mode. Promote to Live from dashboard when ready.'}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setMode('test')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  mode === 'test'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500'
-                    : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
-                }`}
-              >
-                Test Mode
-              </button>
-              <button
-                onClick={() => setMode('live')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  mode === 'live'
-                    ? 'bg-green-500/20 text-green-300 border border-green-500'
-                    : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
-                }`}
-              >
-                Live Mode
-              </button>
-            </div>
+            <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+              mode === 'test'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500'
+                : 'bg-green-500/20 text-green-300 border border-green-500'
+            }`}>
+              {mode === 'test' ? 'Test Mode' : 'Live Mode'}
+            </span>
           </div>
         </div>
 
@@ -672,9 +661,13 @@ export default function ApiTierConfig() {
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Price ($/month)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={tier.price}
-                      onChange={(e) => updateSaasTier(index, 'price', Number(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        updateSaasTier(index, 'price', val === '' ? 0 : Number(val));
+                      }}
                       placeholder="0"
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
                     />
@@ -769,9 +762,13 @@ export default function ApiTierConfig() {
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Price ($)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={product.price}
-                      onChange={(e) => updateStoreProduct(index, 'price', Number(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        updateStoreProduct(index, 'price', val === '' ? 0 : Number(val));
+                      }}
                       placeholder="49"
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
                     />
@@ -779,7 +776,8 @@ export default function ApiTierConfig() {
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Inventory (blank = unlimited)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={product.inventory ?? ''}
                       onChange={(e) => updateStoreProduct(index, 'inventory', e.target.value === '' ? null : Number(e.target.value))}
                       placeholder="100"
