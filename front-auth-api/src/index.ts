@@ -178,6 +178,11 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
     if (url.pathname === '/health') return new Response(JSON.stringify({ status: 'ok' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+    // Stripe webhook - NO AUTH REQUIRED (uses signature verification)
+    if (url.pathname === '/webhook/stripe' && request.method === 'POST') {
+      return await handleStripeWebhook(request, env);
+    }
+
     try {
       // Authenticated routes
       const userId = await verifyAuth(request, env);
@@ -323,11 +328,6 @@ export default {
           liveSecretKey: liveSecretKey || null,
           liveProducts: liveProductsJson ? JSON.parse(liveProductsJson) : [],
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Stripe webhook
-      if (url.pathname === '/webhook/stripe' && request.method === 'POST') {
-        return await handleStripeWebhook(request, env);
       }
 
       return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

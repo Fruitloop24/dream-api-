@@ -50,8 +50,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Check if returning from payment
+  // Check if returning from payment or setup completion
   const paymentStatus = searchParams.get('payment');
+  const setupComplete = searchParams.get('setup') === 'complete';
 
   // Auth state
   const [hasPaid, setHasPaid] = useState(false);
@@ -97,17 +98,16 @@ export default function Dashboard() {
   useEffect(() => {
     if (user?.publicMetadata?.plan === 'paid') {
       setHasPaid(true);
-    } else if (paymentStatus === 'success') {
-      // Just returned from successful payment - webhook may not have processed yet
-      // Set hasPaid=true to show the connect stripe flow
-      // The webhook will update Clerk metadata in the background
-      console.log('[Dashboard] Payment success detected, proceeding to setup');
+    } else if (paymentStatus === 'success' || setupComplete) {
+      // Just returned from successful payment or setup completion
+      // Set hasPaid=true - webhook will update Clerk metadata in the background
+      console.log('[Dashboard] Payment/setup complete detected, proceeding');
       setHasPaid(true);
     } else if (user && platformIdGenerated && !loading) {
       setLoading(true);
       handlePayment();
     }
-  }, [user, platformIdGenerated, loading, paymentStatus]);
+  }, [user, platformIdGenerated, loading, paymentStatus, setupComplete]);
 
   // Load credentials once paid
   useEffect(() => {

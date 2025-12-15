@@ -101,7 +101,7 @@ export default function Credentials() {
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold">dream-api</h1>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/dashboard?setup=complete')}
               className="text-blue-400 hover:text-blue-300"
             >
               Go to Dashboard →
@@ -176,7 +176,7 @@ export default function Credentials() {
           {/* Go to Dashboard */}
           <div className="text-center">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/dashboard?setup=complete')}
               className="px-8 py-4 bg-blue-600 rounded-lg font-bold text-lg hover:bg-blue-700"
             >
               Go to Dashboard →
