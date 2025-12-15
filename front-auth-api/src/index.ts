@@ -1,9 +1,42 @@
 /// <reference types="@cloudflare/workers-types" />
 
 /**
- * FRONT-AUTH-API
- * Platform auth, billing, credentials, and project key utilities.
- * This restores the original endpoints while delegating schema/project/key helpers to modules.
+ * ============================================================================
+ * FRONT-AUTH-API - Platform Authentication & Dev Management
+ * ============================================================================
+ *
+ * This service handles authentication for platform OWNERS (devs who pay $15/mo).
+ * Uses Clerk App #1 (dream-api) for auth.
+ *
+ * ENDPOINTS:
+ * ----------
+ * POST /generate-platform-id  - Create plt_xxx on first login
+ * GET  /get-platform-id       - Retrieve existing platformId
+ * GET  /get-credentials       - Get test/live keys and products
+ * POST /create-checkout       - $15/mo subscription via Stripe
+ * POST /upload-asset          - Upload product images to R2
+ * GET  /projects              - List all projects for a dev
+ * POST /projects/rotate-key   - Rotate secret key (keep products)
+ * POST /verify-auth           - Verify auth + track usage
+ * POST /webhook/stripe        - Handle platform subscription events
+ *
+ * FLOW:
+ * -----
+ * 1. Dev signs up via Clerk (dream-api app)
+ * 2. /generate-platform-id creates plt_xxx
+ * 3. /create-checkout redirects to Stripe ($15/mo)
+ * 4. Webhook marks user as paid in Clerk metadata
+ * 5. Dev connects Stripe via oauth-api
+ * 6. Dev configures products via oauth-api
+ * 7. /get-credentials returns their keys
+ *
+ * STORAGE:
+ * --------
+ * - D1: platforms, api_keys tables
+ * - KV: user:{userId}:platformId, user:{userId}:secretKey:test, etc.
+ * - R2: Product images via dream_api_assets bucket
+ *
+ * ============================================================================
  */
 
 import { createClerkClient } from '@clerk/backend';
