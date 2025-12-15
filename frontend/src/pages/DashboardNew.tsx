@@ -9,7 +9,7 @@
  */
 
 import { useUser, UserButton, useAuth } from '@clerk/clerk-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
@@ -48,12 +48,8 @@ export default function Dashboard() {
   const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
-  // Check if returning from payment or setup completion
-  const paymentStatus = searchParams.get('payment');
-  const setupComplete = searchParams.get('setup') === 'complete';
-  const stripeConnected = searchParams.get('stripe') === 'connected';
+  // Note: We rely on Clerk metadata for paid status, not URL params
 
   // Auth state
   const [hasPaid, setHasPaid] = useState(false);
@@ -97,35 +93,16 @@ export default function Dashboard() {
 
   // Check payment status and redirect to checkout if needed
   useEffect(() => {
-    // Check Clerk metadata for paid status
+    // Check Clerk metadata for paid status - this is the source of truth
     if (user?.publicMetadata?.plan === 'paid') {
       console.log('[Dashboard] User is paid (from Clerk metadata)');
       setHasPaid(true);
-    } else if (paymentStatus === 'success') {
-      // Just returned from payment - webhook may still be processing
-      // Poll for Clerk update or proceed after short delay
-      console.log('[Dashboard] Payment success, waiting for webhook...');
-      const checkPaid = async () => {
-        // Wait a moment for webhook to process
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        // Re-check user (Clerk should have updated by now)
-        if (user?.publicMetadata?.plan === 'paid') {
-          setHasPaid(true);
-        } else {
-          // Webhook might be slow - proceed anyway, will catch up
-          console.log('[Dashboard] Webhook slow, proceeding with setup');
-          setHasPaid(true);
-        }
-      };
-      checkPaid();
-    } else if (setupComplete || stripeConnected) {
-      // Returning from setup completion or stripe connect
-      setHasPaid(true);
     } else if (user && platformIdGenerated && !loading) {
+      // Not paid yet, redirect to checkout
       setLoading(true);
       handlePayment();
     }
-  }, [user, platformIdGenerated, loading, paymentStatus, setupComplete, stripeConnected]);
+  }, [user, platformIdGenerated, loading]);
 
   // Load credentials once paid
   useEffect(() => {

@@ -96,7 +96,10 @@ export async function handleStripeWebhook(
         return new Response(JSON.stringify({ received: true, idempotent: true }), { status: 200 });
     }
 
-    const clerkClient = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
+    const clerkClient = createClerkClient({
+        secretKey: env.CLERK_SECRET_KEY,
+        publishableKey: env.CLERK_PUBLISHABLE_KEY
+    });
 
     // Handle different event types
     switch (event.type) {
