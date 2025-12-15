@@ -4,7 +4,15 @@
 
 ## What You Get
 
-**SaaS Mode** - Subscription tiers with usage limits
+- **API Keys** - Publishable + Secret key pair
+- **Stripe Billing** - On YOUR Stripe account via Connect
+- **Usage Tracking** - Limits enforced per tier
+- **Dashboard** - Customers, MRR, usage metrics
+- **No Webhooks** - We handle everything internally
+
+## Two Modes
+
+**SaaS** - Subscription tiers with usage limits
 ```js
 // Track API usage
 const res = await fetch('https://api-multi.../api/data', {
@@ -16,9 +24,10 @@ const res = await fetch('https://api-multi.../api/data', {
   }
 });
 // { allowed: true, usage: { count: 1, limit: 1000 } }
+// At limit: { allowed: false, error: "Tier limit reached" }
 ```
 
-**Store Mode** - One-off products with cart checkout
+**Store** - One-off products with cart checkout
 ```js
 // Cart checkout
 const res = await fetch('https://api-multi.../api/cart/checkout', {
@@ -48,21 +57,6 @@ const res = await fetch('https://api-multi.../api/cart/checkout', {
 
 **Auth:** `Authorization: Bearer sk_test_xxx` or `sk_live_xxx`
 
-## Test vs Live
-
-- **Test keys** (`pk_test_`, `sk_test_`) - Stripe sandbox
-- **Live keys** (`pk_live_`, `sk_live_`) - Real payments
-
-Create test first, then promote to live when ready.
-
-## Dashboard
-
-Dark theme, clean UI:
-- View customers and usage
-- Edit tiers/products
-- Test/Live mode toggle
-- Promote to live button
-
 ## Quick Start
 
 1. Sign up at https://dream-frontend-dyn.pages.dev
@@ -72,6 +66,13 @@ Dark theme, clean UI:
 5. Configure tiers/products
 6. Get your API keys
 7. Integrate into your app
+
+## Test vs Live
+
+- `pk_test_` / `sk_test_` - Stripe sandbox
+- `pk_live_` / `sk_live_` - Real payments
+
+Create test first, then "Go Live" when ready.
 
 ## Local Dev
 
@@ -91,6 +92,4 @@ git add -A && git commit -m "message" && git push
 
 ## Docs
 
-- `CLAUDE.md` - Technical deep-dive
-- `docs/STORAGE.md` - Database schema
-- `docs/PROJECTS.md` - Key/project model
+See [CLAUDE.md](./CLAUDE.md) for full technical reference.
