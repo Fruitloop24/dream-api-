@@ -103,19 +103,16 @@ export default function Dashboard() {
   // Load dashboard when project selected
   useEffect(() => {
     if (selectedProject) {
-      const sk = selectedProject.secretKey || null;
+      const sk = selectedProject.secretKey || (selectedProject.mode === 'test' ? credentials.testSecretKey : credentials.liveSecretKey);
       if (!sk) {
-        console.warn('[Dashboard] No secret key found for selected project; skipping fetch to avoid mixing data');
-        setDashboard(null);
-        setProducts([]);
-        return;
+        console.warn('[Dashboard] No secret key found for selected project; dashboard/products may be stale');
       }
       loadDashboard(selectedProject, sk);
       if (selectedProject.type === 'store') {
         loadProducts(selectedProject, sk);
       }
     }
-  }, [selectedPk, selectedProject?.secretKey]);
+  }, [selectedPk, selectedProject?.secretKey, credentials]);
 
   const generatePlatformId = async () => {
     try {
