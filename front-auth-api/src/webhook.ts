@@ -120,7 +120,7 @@ export async function handleStripeWebhook(
 
             // Update Clerk user metadata with purchased tier
             try {
-                await clerkClient.users.updateUser(userId, {
+                await clerkClient.users.updateUserMetadata(userId, {
                     publicMetadata: {
                         plan: tier,
                         stripeCustomerId: session.customer as string,
@@ -129,8 +129,9 @@ export async function handleStripeWebhook(
                 console.log(`✅ Updated user ${userId} to ${tier} plan after checkout`);
             } catch (err: any) {
                 console.error(`❌ Failed to update user ${userId}:`, err.message);
+                console.error(`❌ Full error:`, JSON.stringify(err, Object.getOwnPropertyNames(err)));
                 return new Response(
-                    JSON.stringify({ error: 'Failed to update user metadata' }),
+                    JSON.stringify({ error: 'Failed to update user metadata', details: err.message }),
                     { status: 500 }
                 );
             }
@@ -157,7 +158,7 @@ export async function handleStripeWebhook(
 
             // Update Clerk user metadata with subscription tier
             try {
-                await clerkClient.users.updateUser(subUserId, {
+                await clerkClient.users.updateUserMetadata(subUserId, {
                     publicMetadata: {
                         plan: subTier,
                         stripeCustomerId: subscription.customer as string,
