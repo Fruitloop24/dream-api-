@@ -9,7 +9,7 @@
  */
 
 import { useUser, UserButton, useAuth } from '@clerk/clerk-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
@@ -48,6 +48,10 @@ export default function Dashboard() {
   const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Check if returning from payment
+  const paymentStatus = searchParams.get('payment');
 
   // Auth state
   const [hasPaid, setHasPaid] = useState(false);
@@ -93,11 +97,17 @@ export default function Dashboard() {
   useEffect(() => {
     if (user?.publicMetadata?.plan === 'paid') {
       setHasPaid(true);
+    } else if (paymentStatus === 'success') {
+      // Just returned from successful payment - webhook may not have processed yet
+      // Set hasPaid=true to show the connect stripe flow
+      // The webhook will update Clerk metadata in the background
+      console.log('[Dashboard] Payment success detected, proceeding to setup');
+      setHasPaid(true);
     } else if (user && platformIdGenerated && !loading) {
       setLoading(true);
       handlePayment();
     }
-  }, [user, platformIdGenerated, loading]);
+  }, [user, platformIdGenerated, loading, paymentStatus]);
 
   // Load credentials once paid
   useEffect(() => {
