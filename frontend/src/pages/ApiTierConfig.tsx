@@ -48,7 +48,7 @@ export default function ApiTierConfig() {
   const isEditMode = searchParams.get('edit') === 'true';
   const editMode = (searchParams.get('mode') as ModeType) || 'test';
   const projectNameParam = searchParams.get('projectName') || '';
-  const projectTypeParam = (searchParams.get('projectType') as ConfigTab) || 'saas';
+  const projectTypeFromUrl = searchParams.get('projectType') as ConfigTab | null;
 
   // Mode: test or live
   const [mode, setMode] = useState<ModeType>(editMode);
@@ -56,11 +56,12 @@ export default function ApiTierConfig() {
   // Project name (only for new projects)
   const [projectName, setProjectName] = useState<string>(projectNameParam);
 
-  // Tab: saas or store
-  const [activeTab, setActiveTab] = useState<ConfigTab>(projectTypeParam);
+  // Tab: saas or store (default to saas, but only after choosing)
+  const [activeTab, setActiveTab] = useState<ConfigTab>(projectTypeFromUrl || 'saas');
 
   // For new projects: track if user has chosen a type yet
-  const [hasChosenType, setHasChosenType] = useState<boolean>(isEditMode || !!projectTypeParam);
+  // Only skip chooser if: edit mode OR projectType was explicitly passed in URL
+  const [hasChosenType, setHasChosenType] = useState<boolean>(isEditMode || !!projectTypeFromUrl);
 
   // SaaS tiers
   const [saasTiers, setSaasTiers] = useState<SaasTier[]>([
@@ -92,10 +93,10 @@ export default function ApiTierConfig() {
   // Load existing tiers when in edit mode
   useEffect(() => {
     if (isEditMode && user?.id) {
-      setActiveTab(projectTypeParam);
+      if (projectTypeFromUrl) setActiveTab(projectTypeFromUrl);
       loadExistingTiers();
     }
-  }, [isEditMode, user?.id, mode, projectTypeParam]);
+  }, [isEditMode, user?.id, mode, projectTypeFromUrl]);
 
   const loadExistingTiers = async () => {
     setLoadingTiers(true);
@@ -104,7 +105,7 @@ export default function ApiTierConfig() {
         userId: user?.id || '',
         mode,
         ...(projectNameParam ? { projectName: projectNameParam } : {}),
-        ...(projectTypeParam ? { projectType: projectTypeParam } : {}),
+        ...(projectTypeFromUrl ? { projectType: projectTypeFromUrl } : {}),
       });
       const response = await fetch(`${OAUTH_API}/tiers?${params.toString()}`);
       if (response.ok) {
