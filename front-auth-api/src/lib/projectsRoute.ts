@@ -3,6 +3,7 @@ import { getPlatformIdFromDb } from './auth';
 import { listProjects } from './projects';
 
 export async function handleListProjects(env: Env, userId: string): Promise<Response> {
+  // Get platformId from D1 or KV - userId comes from Clerk JWT
   const platformId =
     (await getPlatformIdFromDb(userId, env)) ||
     (await env.TOKENS_KV.get(`user:${userId}:platformId`));
@@ -14,7 +15,9 @@ export async function handleListProjects(env: Env, userId: string): Promise<Resp
     });
   }
 
+  // List all projects (api_keys) for this platform
   const projects = await listProjects(env, platformId);
+
   return new Response(JSON.stringify({ platformId, projects }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },

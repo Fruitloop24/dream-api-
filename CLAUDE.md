@@ -288,6 +288,58 @@ cd api-multi && npm run deploy
 - OAuth API: https://oauth-api.k-c-sheffield012376.workers.dev
 - Customer API: https://api-multi.k-c-sheffield012376.workers.dev
 
+## Tested Flow (Dec 2024)
+
+Full flow verified working:
+
+### 1. Dev Signup & Payment
+```
+Dashboard → No paid status → Create Checkout → Stripe payment
+         → Webhook updates Clerk metadata (plan: 'paid')
+         → Dashboard detects paid, shows Connect Stripe button
+```
+
+### 2. Stripe Connect
+```
+Connect Stripe → OAuth flow → callback stores token
+              → Dashboard shows "Create Products" button
+```
+
+### 3. Create Products (SaaS Example)
+```
++ New Project → Choose "SaaS" type → Configure tiers:
+  - free: $0, 100 limit
+  - pro: $29, 1000 limit
+→ Creates Stripe products + generates pk_test/sk_test
+→ Redirect to dashboard with keys shown
+```
+
+### 4. Developer's App Integration
+```js
+// Create customer (dev's app calls this)
+POST /api/create-checkout
+Headers: Authorization: Bearer sk_test_xxx, X-User-Id: customer123
+Body: { tier: "pro", successUrl: "...", cancelUrl: "..." }
+→ Returns Stripe checkout URL
+
+// Track usage
+POST /api/data
+Headers: Authorization: Bearer sk_test_xxx, X-User-Id: customer123, X-User-Plan: pro
+→ { allowed: true, usage: { count: 1, limit: 1000 } }
+
+// At limit
+→ { error: "Tier limit reached" }
+```
+
+### 5. Dashboard Shows
+- Active subscriptions count
+- MRR calculation
+- Customer table with:
+  - Email, plan, usage bar, status
+  - Usage shows X/Y format with visual bar
+  - Status: active (green), canceling (red)
+- Webhook events log
+
 ## TODO
 - [ ] Key rotation endpoint (rotate sk, keep products)
 - [ ] Better onboarding (reduce redirects)

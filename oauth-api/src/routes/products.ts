@@ -413,6 +413,9 @@ export async function handleCreateProducts(
     await env.PLATFORM_TOKENS_KV.put(`publishablekey:${publishableKey}:platformId`, platformId);
     await env.PLATFORM_TOKENS_KV.put(`secretkey:${secretKeyHash}:publishableKey`, publishableKey);
 
+    // Store secret key by publishableKey (for project listing)
+    await env.PLATFORM_TOKENS_KV.put(`pk:${publishableKey}:secretKey`, secretKey);
+
     // =========================================================================
     // CUSTOMER_TOKENS_KV: API-MULTI NAMESPACE
     // Copy essential data for the customer-facing API (api-multi)
