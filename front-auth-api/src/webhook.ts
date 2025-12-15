@@ -1,14 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
-
-interface Env {
-    CLERK_SECRET_KEY: string;
-    STRIPE_SECRET_KEY: string;
-    STRIPE_WEBHOOK_SECRET?: string;
-    USAGE_KV: KVNamespace;  // For webhook idempotency tracking (legacy)
-    DB: D1Database;
-}
+import { Env } from './types';
 
 async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
     const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
