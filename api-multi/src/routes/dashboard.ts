@@ -279,15 +279,24 @@ export async function handleDashboard(
     // =========================================================================
     // FETCH RECENT EVENTS
     // For webhook debugging visibility
+    // Filter by publishableKey when provided
     // =========================================================================
 
-    const eventsResult = await env.DB.prepare(`
+    let eventsQuery = `
       SELECT type, createdAt FROM events
       WHERE platformId = ?
-      ORDER BY createdAt DESC
-      LIMIT 5
-    `)
-      .bind(platformId)
+    `;
+    const eventsParams: any[] = [platformId];
+
+    if (publishableKey) {
+      eventsQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+      eventsParams.push(publishableKey);
+    }
+
+    eventsQuery += ' ORDER BY createdAt DESC LIMIT 5';
+
+    const eventsResult = await env.DB.prepare(eventsQuery)
+      .bind(...eventsParams)
       .all<EventRow>();
     const events = eventsResult.results || [];
 

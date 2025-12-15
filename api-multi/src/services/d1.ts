@@ -84,11 +84,6 @@ export async function ensureApiKeySchema(env: Env) {
   try {
     await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN name TEXT').run();
   } catch {}
-
-  // Legacy: projectId (keeping for backwards compat)
-  try {
-    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectId TEXT').run();
-  } catch {}
 }
 
 /**
@@ -136,22 +131,17 @@ export async function ensureTierSchema(env: Env) {
   try {
     await env.DB.prepare("ALTER TABLE tiers ADD COLUMN mode TEXT DEFAULT 'live'").run();
   } catch {}
-
-  // Legacy: projectId
-  try {
-    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectId TEXT').run();
-  } catch {}
 }
 
 /**
- * Ensure usage_counts table has projectId column (legacy)
+ * Ensure usage_counts table has publishableKey column
  */
 export async function ensureUsageSchema(env: Env) {
   if (usageSchemaChecked) return;
   usageSchemaChecked = true;
 
   try {
-    await env.DB.prepare('ALTER TABLE usage_counts ADD COLUMN projectId TEXT').run();
+    await env.DB.prepare('ALTER TABLE usage_counts ADD COLUMN publishableKey TEXT').run();
   } catch {}
 }
 
@@ -171,23 +161,16 @@ export async function ensureSubscriptionSchema(env: Env) {
   try {
     await env.DB.prepare('ALTER TABLE subscriptions ADD COLUMN stripeCustomerId TEXT').run();
   } catch {}
-
-  // Legacy: projectId
-  try {
-    await env.DB.prepare('ALTER TABLE subscriptions ADD COLUMN projectId TEXT').run();
-  } catch {}
 }
 
 /**
- * Ensure end_users table has projectId column (legacy)
+ * Ensure end_users table exists
+ * publishableKey column is created in schema
  */
 export async function ensureEndUserSchema(env: Env) {
   if (endUserSchemaChecked) return;
   endUserSchemaChecked = true;
-
-  try {
-    await env.DB.prepare('ALTER TABLE end_users ADD COLUMN projectId TEXT').run();
-  } catch {}
+  // No additional columns needed - base schema has publishableKey
 }
 
 // ============================================================================
@@ -211,8 +194,6 @@ export async function getPlatformFromSecretHash(
   mode?: string;
   projectType?: string | null;
 } | null> {
-  await ensureApiKeySchema(env);
-
   const row = await env.DB.prepare(`
     SELECT platformId, publishableKey, mode, projectType
     FROM api_keys

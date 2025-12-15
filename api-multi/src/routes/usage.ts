@@ -11,22 +11,10 @@
  * Track API usage per user and enforce tier limits. This is the core of
  * dream-api's value prop: automatic usage tracking + tier enforcement.
  *
- * HOW IT WORKS:
- * 1. Get current usage from KV (usage:{platformId}:{userId})
- * 2. Check if billing period reset needed (monthly by default)
- * 3. Enforce tier limit (from user:{platformId}:tierConfig)
- * 4. Increment counter
- * 5. Update stats for developer dashboard
- *
- * KV STRUCTURE:
- * usage:{platformId}:{userId}     → { count, plan, periodStart, periodEnd }
- * user:{platformId}:tierConfig    → { tiers: [...] }
- * platform:{platformId}:stats     → { totalCalls, users, revenue }
- *
- * MULTI-TENANT:
- * - platformId identifies the developer
- * - userId identifies the end-user
- * - Each developer's users are isolated in KV
+ * FILTERING:
+ * - platformId: identifies the developer (owner)
+ * - publishableKey: identifies the project (pk_test_xxx or pk_live_xxx)
+ * - userId: identifies the end-user
  *
  * ============================================================================
  */
@@ -38,28 +26,6 @@ import { ensureUsageSchema } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
- *
- * AUTHENTICATION:
- * - API key mode: userId from X-User-Id header, platformId from API key
- * - JWT mode: userId from JWT, platformId from JWT metadata
- *
- * FLOW:
- * 1. Get current usage from KV: usage:{platformId}:{userId}
- * 2. Reset usage if new billing period (monthly reset for limited tiers)
- * 3. Check if tier limit exceeded (from tier config in KV)
- * 4. Increment usage counter
- * 5. Update platform stats (for developer dashboard)
- * 6. Return success response with usage info
- *
- * PLACEHOLDER:
- * Replace "Request processed successfully" with actual business logic
- * (document processing, AI generation, data transformation, etc.)
- *
- * @param userId - End-user ID (from JWT or X-User-Id header)
- * @param platformId - Developer's platform ID (from API key or JWT metadata)
- * @param plan - User's tier (free, pro, enterprise)
- * @param env - Worker environment
- * @param corsHeaders - CORS headers for response
  */
 export async function handleDataRequest(
 	userId: string,
@@ -67,35 +33,32 @@ export async function handleDataRequest(
 	plan: PlanTier,
 	env: Env,
 	corsHeaders: Record<string, string>,
-	projectId: string | null = null,
 	mode: string = 'live',
 	publishableKey: string | null = null
 ): Promise<Response> {
 	await ensureUsageSchema(env);
 
-	// Get tier limit from config (using platformId + publishableKey for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId, projectId, mode, publishableKey);
+	// Get tier limit from config
+	const tierConfigs = await getTierConfig(env, platformId, mode, publishableKey);
 	const tierLimit = tierConfigs[plan]?.limit ?? 0;
 	const isUnlimited = tierLimit === Infinity;
 	const limitNumber = isUnlimited ? Number.MAX_SAFE_INTEGER : tierLimit;
 
 	const currentPeriod = getCurrentPeriod();
 
-	// Ensure a row exists in usage_counts
+	// Ensure a row exists in usage_counts (keyed by platformId + publishableKey + userId)
 	await env.DB.prepare(
-		`INSERT OR IGNORE INTO usage_counts (platformId, projectId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+		`INSERT OR IGNORE INTO usage_counts (platformId, publishableKey, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
      VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`
 	)
-		.bind(platformId, projectId, userId, plan, currentPeriod.start, currentPeriod.end)
+		.bind(platformId, publishableKey, userId, plan, currentPeriod.start, currentPeriod.end)
 		.run();
 
 	// Load current usage
 	let row = await env.DB.prepare(
-		projectId
-			? 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL)'
-			: 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
+		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL)'
 	)
-		.bind(...(projectId ? [platformId, userId, projectId] : [platformId, userId]))
+		.bind(platformId, userId, publishableKey)
 		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
 
 	let usageCount = row?.usageCount ?? 0;
@@ -110,11 +73,9 @@ export async function handleDataRequest(
 		periodStart = currentPeriod.start;
 		periodEnd = currentPeriod.end;
 		await env.DB.prepare(
-			projectId
-				? 'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL)'
-				: 'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ?'
+			'UPDATE usage_counts SET usageCount = 0, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL)'
 		)
-			.bind(...(projectId ? [periodStart, periodEnd, platformId, userId, projectId] : [periodStart, periodEnd, platformId, userId]))
+			.bind(periodStart, periodEnd, platformId, userId, publishableKey)
 			.run();
 	}
 
@@ -136,11 +97,9 @@ export async function handleDataRequest(
 
 	// Increment in D1
 	const updated = await env.DB.prepare(
-		projectId
-			? 'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL) RETURNING usageCount'
-			: 'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? RETURNING usageCount'
+		'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL) RETURNING usageCount'
 	)
-		.bind(...(projectId ? [plan, periodStart, periodEnd, platformId, userId, projectId] : [plan, periodStart, periodEnd, platformId, userId]))
+		.bind(plan, periodStart, periodEnd, platformId, userId, publishableKey)
 		.first<{ usageCount: number }>();
 
 	usageCount = updated?.usageCount ?? usageCount + 1;
@@ -165,21 +124,6 @@ export async function handleDataRequest(
 
 /**
  * Handle /api/usage - Get current usage and limits
- *
- * RETURNS:
- * - Current usage count (API calls this month)
- * - Tier limit (max calls allowed)
- * - Remaining requests
- * - Billing period dates (start/end)
- * - User's current plan
- *
- * Used by developers' apps to show usage bars, warnings, etc.
- *
- * @param userId - End-user ID
- * @param platformId - Developer's platform ID
- * @param plan - User's tier
- * @param env - Worker environment
- * @param corsHeaders - CORS headers
  */
 export async function handleUsageCheck(
 	userId: string,
@@ -187,7 +131,6 @@ export async function handleUsageCheck(
 	plan: PlanTier,
 	env: Env,
 	corsHeaders: Record<string, string>,
-	projectId: string | null = null,
 	mode: string = 'live',
 	publishableKey: string | null = null
 ): Promise<Response> {
@@ -195,19 +138,17 @@ export async function handleUsageCheck(
 	const currentPeriod = getCurrentPeriod();
 
 	const fromDb = await env.DB.prepare(
-		projectId
-			? 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (projectId = ? OR projectId IS NULL)'
-			: 'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ?'
+		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL)'
 	)
-		.bind(...(projectId ? [platformId, userId, projectId] : [platformId, userId]))
+		.bind(platformId, userId, publishableKey)
 		.first<{ usageCount: number; plan: string; periodStart: string | null; periodEnd: string | null }>();
 
 	const usageCount = fromDb?.usageCount ?? 0;
 	const periodStart = fromDb?.periodStart || currentPeriod.start;
 	const periodEnd = fromDb?.periodEnd || currentPeriod.end;
 
-	// Get tier limit from config (using platformId for multi-tenancy)
-	const tierConfigs = await getTierConfig(env, platformId, projectId, mode, publishableKey);
+	// Get tier limit from config
+	const tierConfigs = await getTierConfig(env, platformId, mode, publishableKey);
 	const tierLimit = tierConfigs[plan]?.limit || 0;
 
 	return new Response(
