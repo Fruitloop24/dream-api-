@@ -491,8 +491,14 @@ export default function ApiTierConfig() {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to promote: ${error}`);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      // Handle "already has live keys" case
+      if (response.status === 409 && errorData.existingLiveKey) {
+        alert(`This project already has live keys!\n\nExisting key: ${errorData.existingLiveKey}\n\nUse "Edit Tiers" on the live project to make changes.`);
+        navigate('/dashboard');
+        return;
+      }
+      throw new Error(errorData.message || errorData.error || 'Failed to promote');
     }
 
     const data = await response.json();
@@ -723,7 +729,7 @@ export default function ApiTierConfig() {
                       value={tier.name}
                       onChange={(e) => updateSaasTier(index, 'name', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
                       placeholder="free, pro, enterprise"
-                      disabled={!!tier.priceId} // Disable name change for existing tiers
+                      disabled={!!tier.priceId && !isPromoteMode} // Allow name change in promote mode (creating new products)
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 disabled:opacity-50"
                     />
                   </div>
@@ -824,7 +830,7 @@ export default function ApiTierConfig() {
                       value={product.name}
                       onChange={(e) => updateStoreProduct(index, 'name', e.target.value.toLowerCase().replace(/\s+/g, '_'))}
                       placeholder="product_1, template_pro"
-                      disabled={!!product.priceId}
+                      disabled={!!product.priceId && !isPromoteMode} // Allow name change in promote mode (creating new products)
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 disabled:opacity-50"
                     />
                   </div>

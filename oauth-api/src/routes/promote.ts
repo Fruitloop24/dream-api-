@@ -150,6 +150,22 @@ export async function handlePromoteToLive(
   const projectName = projectResult.name || 'Untitled Project';
   const projectType = projectResult.projectType || 'saas';
 
+  // Check if a live version already exists for this project (same name, live mode)
+  const existingLiveKey = await env.DB.prepare(
+    `SELECT publishableKey FROM api_keys WHERE platformId = ? AND name = ? AND mode = 'live'`
+  ).bind(platformId, projectName).first<{ publishableKey: string }>();
+
+  if (existingLiveKey) {
+    return new Response(
+      JSON.stringify({
+        error: 'Live version already exists',
+        message: `This project already has live keys (${existingLiveKey.publishableKey}). Use "Edit Tiers" on the live project to make changes.`,
+        existingLiveKey: existingLiveKey.publishableKey,
+      }),
+      { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   // Get tiers - use edited tiers if provided, otherwise load from D1
   let tiersToPromote: any[];
 
