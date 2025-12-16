@@ -114,38 +114,54 @@ export async function handlePromoteToLive(
     );
   }
 
-  // Load test tier config
-  const tierConfigJson = await env.CUSTOMER_TOKENS_KV.get(
-    `platform:${platformId}:tierConfig:test`
-  );
-
-  if (!tierConfigJson) {
+  // Require publishableKey - we need to know which test project to promote
+  if (!testPublishableKey) {
     return new Response(
-      JSON.stringify({ error: 'No test tier config found. Create test products first.' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const tierConfig = JSON.parse(tierConfigJson) as { tiers: any[] };
-
-  if (!tierConfig.tiers || tierConfig.tiers.length === 0) {
-    return new Response(
-      JSON.stringify({ error: 'No test tiers found.' }),
+      JSON.stringify({ error: 'Missing publishableKey. Select a test project to promote.' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
-  // If specific test key provided, filter tiers to just that project
-  let tiersToPromote = tierConfig.tiers;
-  if (testPublishableKey) {
-    tiersToPromote = tierConfig.tiers.filter(
-      (t: any) => t.publishableKey === testPublishableKey || !t.publishableKey
+  // Validate it's a test key
+  if (!testPublishableKey.startsWith('pk_test_')) {
+    return new Response(
+      JSON.stringify({ error: 'Can only promote test projects. Select a pk_test_ key.' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
-  // Get project type from first tier (they should all be same type)
-  const projectType = tiersToPromote[0]?.projectType || 'saas';
-  const projectName = tiersToPromote[0]?.projectName || 'Untitled Project';
+  // =========================================================================
+  // READ FROM D1 (SOURCE OF TRUTH)
+  // =========================================================================
+
+  // Get project info from api_keys table
+  const projectResult = await env.DB.prepare(
+    `SELECT name, projectType, mode FROM api_keys WHERE publishableKey = ? AND platformId = ?`
+  ).bind(testPublishableKey, platformId).first<{ name: string; projectType: string; mode: string }>();
+
+  if (!projectResult) {
+    return new Response(
+      JSON.stringify({ error: 'Test project not found in database.' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const projectName = projectResult.name || 'Untitled Project';
+  const projectType = projectResult.projectType || 'saas';
+
+  // Get tiers from D1 tiers table
+  const tiersResult = await env.DB.prepare(
+    `SELECT * FROM tiers WHERE publishableKey = ? AND platformId = ?`
+  ).bind(testPublishableKey, platformId).all();
+
+  if (!tiersResult.results || tiersResult.results.length === 0) {
+    return new Response(
+      JSON.stringify({ error: 'No tiers found for this test project.' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const tiersToPromote = tiersResult.results as any[];
 
   // Get Stripe credentials
   const stripeDataJson =
@@ -174,7 +190,19 @@ export async function handlePromoteToLive(
 
   try {
     for (const tier of tiersToPromote) {
-      const billingMode = tier.billingMode || 'subscription';
+      // Parse features JSON from D1 (contains billingMode, description, imageUrl, etc.)
+      let featuresData: any = {};
+      if (tier.features) {
+        try {
+          featuresData = typeof tier.features === 'string' ? JSON.parse(tier.features) : tier.features;
+        } catch (e) {
+          console.warn(`[Promote] Failed to parse features for tier ${tier.name}:`, e);
+        }
+      }
+
+      const billingMode = featuresData.billingMode || (projectType === 'store' ? 'one_off' : 'subscription');
+      const description = featuresData.description || '';
+      const imageUrl = featuresData.imageUrl || '';
 
       // Create live product
       const productParams = new URLSearchParams({
@@ -184,11 +212,11 @@ export async function handlePromoteToLive(
         'metadata[limit]': String(tier.limit ?? 0),
       });
 
-      if (billingMode === 'one_off' && tier.description?.trim()) {
-        productParams.append('description', tier.description);
+      if (billingMode === 'one_off' && description.trim()) {
+        productParams.append('description', description);
       }
-      if (tier.imageUrl?.trim()) {
-        productParams.append('images[]', tier.imageUrl);
+      if (imageUrl.trim()) {
+        productParams.append('images[]', imageUrl);
       }
 
       const productRes = await fetch('https://api.stripe.com/v1/products', {
@@ -313,6 +341,8 @@ export async function handlePromoteToLive(
         products: priceIds,
         mode: 'live',
         projectType,
+        projectName,
+        linkedTestKey: testPublishableKey,  // Which test project this came from
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

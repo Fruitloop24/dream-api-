@@ -242,13 +242,19 @@ const loadProducts = async (project: Project, sk: string) => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId: user?.id }),
+        body: JSON.stringify({ userId: user?.id, publishableKey: selectedProject.publishableKey }),
       });
       if (!res.ok) {
         alert(`Promote failed: ${await res.text()}`);
         return;
       }
+      const data = await res.json();
+      // Show the new live secret key (only time they'll see it!)
+      if (data.secretKey) {
+        alert(`Live keys created!\n\nPublishable Key: ${data.publishableKey}\n\nSecret Key: ${data.secretKey}\n\n⚠️ SAVE THIS SECRET KEY NOW - you won't see it again!`);
+      }
       await loadProjects();
+      await loadCredentials();
     } catch (err) {
       console.error('[Dashboard] Promote error:', err);
       alert('Failed to promote to live');
