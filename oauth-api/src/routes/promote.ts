@@ -91,9 +91,10 @@ export async function handlePromoteToLive(
   const body = await request.json() as {
     userId: string;
     publishableKey?: string;  // Optional: specific test key to promote
+    tiers?: any[];            // Optional: edited tiers to use instead of DB values
   };
 
-  const { userId, publishableKey: testPublishableKey } = body;
+  const { userId, publishableKey: testPublishableKey, tiers: editedTiers } = body;
 
   if (!userId) {
     return new Response(
@@ -149,19 +150,42 @@ export async function handlePromoteToLive(
   const projectName = projectResult.name || 'Untitled Project';
   const projectType = projectResult.projectType || 'saas';
 
-  // Get tiers from D1 tiers table
-  const tiersResult = await env.DB.prepare(
-    `SELECT * FROM tiers WHERE publishableKey = ? AND platformId = ?`
-  ).bind(testPublishableKey, platformId).all();
+  // Get tiers - use edited tiers if provided, otherwise load from D1
+  let tiersToPromote: any[];
 
-  if (!tiersResult.results || tiersResult.results.length === 0) {
-    return new Response(
-      JSON.stringify({ error: 'No tiers found for this test project.' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+  if (editedTiers && editedTiers.length > 0) {
+    // Use edited tiers from frontend (allows resetting inventory, adjusting prices)
+    console.log(`[Promote] Using ${editedTiers.length} edited tiers from frontend`);
+    tiersToPromote = editedTiers.map(t => ({
+      name: t.name,
+      displayName: t.displayName,
+      price: t.price,
+      limit: t.limit,
+      features: JSON.stringify({
+        billingMode: t.billingMode || (projectType === 'store' ? 'one_off' : 'subscription'),
+        description: t.description || '',
+        imageUrl: t.imageUrl || '',
+        features: t.features ? (typeof t.features === 'string' ? t.features.split(',').map((f: string) => f.trim()) : t.features) : [],
+      }),
+      inventory: t.inventory,
+      popular: t.popular || false,
+      projectType: projectType,
+    }));
+  } else {
+    // Load from D1 tiers table
+    const tiersResult = await env.DB.prepare(
+      `SELECT * FROM tiers WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).all();
+
+    if (!tiersResult.results || tiersResult.results.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'No tiers found for this test project.' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    tiersToPromote = tiersResult.results as any[];
   }
-
-  const tiersToPromote = tiersResult.results as any[];
 
   // Get Stripe credentials
   const stripeDataJson =

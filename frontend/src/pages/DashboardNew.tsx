@@ -58,7 +58,6 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [showSecret, setShowSecret] = useState(false);
-  const [promoting, setPromoting] = useState(false);
 
   // Selected project
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
@@ -231,38 +230,6 @@ const loadProducts = async (project: Project, sk: string) => {
     window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
   };
 
-  const handlePromoteToLive = async () => {
-    if (promoting || !selectedProject) return;
-    try {
-      setPromoting(true);
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${import.meta.env.VITE_OAUTH_API_URL}/promote-to-live`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userId: user?.id, publishableKey: selectedProject.publishableKey }),
-      });
-      if (!res.ok) {
-        alert(`Promote failed: ${await res.text()}`);
-        return;
-      }
-      const data = await res.json();
-      // Show the new live secret key (only time they'll see it!)
-      if (data.secretKey) {
-        alert(`Live keys created!\n\nPublishable Key: ${data.publishableKey}\n\nSecret Key: ${data.secretKey}\n\n⚠️ SAVE THIS SECRET KEY NOW - you won't see it again!`);
-      }
-      await loadProjects();
-      await loadCredentials();
-    } catch (err) {
-      console.error('[Dashboard] Promote error:', err);
-      alert('Failed to promote to live');
-    } finally {
-      setPromoting(false);
-    }
-  };
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
@@ -419,11 +386,10 @@ const loadProducts = async (project: Project, sk: string) => {
                 <div className="flex items-center gap-2">
                   {selectedProject.mode === 'test' && (
                     <button
-                      onClick={handlePromoteToLive}
-                      disabled={promoting}
-                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold disabled:opacity-50"
+                      onClick={() => navigate(`/api-tier-config?promote=true&mode=test&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}&projectName=${encodeURIComponent(selectedProject.name)}`)}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold"
                     >
-                      {promoting ? 'Promoting...' : 'Go Live'}
+                      Edit & Go Live
                     </button>
                   )}
                   <button
@@ -594,38 +560,44 @@ const loadProducts = async (project: Project, sk: string) => {
               <>
                 {/* Metrics */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <MetricCard label="Products" value={products.length} />
-                  <MetricCard label="Sold Out" value={products.filter((p: any) => p.soldOut).length} />
-                  <MetricCard label="In Stock" value={products.filter((p: any) => !p.soldOut && p.inventory !== null).reduce((sum: number, p: any) => sum + (p.inventory || 0), 0)} />
-                  <MetricCard label="Total Value" value={`$${products.reduce((sum: number, p: any) => sum + (p.price || 0), 0).toFixed(2)}`} />
+                  <MetricCard label="Total Sales" value={metrics.storeSalesCount || 0} />
+                  <MetricCard label="Revenue" value={`$${((metrics.storeTotalRevenue || 0) / 100).toFixed(2)}`} />
+                  <MetricCard label="In Stock" value={metrics.totalInventory || products.filter((p: any) => !p.soldOut && p.inventory !== null).reduce((sum: number, p: any) => sum + (p.inventory || 0), 0)} />
+                  <MetricCard label="Low Stock" value={metrics.lowStockProducts || 0} />
                 </div>
 
                 {/* Products Grid */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <h3 className="text-lg font-bold mb-4">Products</h3>
+                  <h3 className="text-lg font-bold mb-4">Products ({products.length})</h3>
                   {products.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {products.map((p: any) => (
                         <div key={p.priceId} className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
                           {p.imageUrl && (
-                            <div className="h-40 bg-gray-800">
+                            <div className="h-24 bg-gray-800">
                               <img src={p.imageUrl} alt={p.displayName} className="w-full h-full object-cover" />
                             </div>
                           )}
-                          <div className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-semibold">{p.displayName || p.name}</h4>
+                          <div className="p-3">
+                            <h4 className="font-medium text-sm truncate">{p.displayName || p.name}</h4>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-sm font-bold text-green-400">${(p.price || 0).toFixed(2)}</span>
                               {p.soldOut ? (
-                                <span className="text-xs px-2 py-0.5 bg-red-900/50 border border-red-700 rounded text-red-200">
-                                  Sold Out
+                                <span className="text-xs px-1.5 py-0.5 bg-red-900/50 border border-red-700 rounded text-red-200">
+                                  Out
                                 </span>
                               ) : p.inventory !== null ? (
-                                <span className="text-xs px-2 py-0.5 bg-gray-800 border border-gray-700 rounded">
-                                  {p.inventory} left
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  p.inventory <= 5
+                                    ? 'bg-amber-900/50 border border-amber-700 text-amber-200'
+                                    : 'bg-gray-800 border border-gray-700 text-gray-400'
+                                }`}>
+                                  {p.inventory}
                                 </span>
-                              ) : null}
+                              ) : (
+                                <span className="text-xs text-gray-500">∞</span>
+                              )}
                             </div>
-                            <p className="text-lg font-bold text-green-400">${(p.price || 0).toFixed(2)}</p>
                           </div>
                         </div>
                       ))}

@@ -44,8 +44,9 @@ export default function ApiTierConfig() {
   const { user } = useUser();
   const { getToken } = useAuth();
 
-  // Detect edit mode and project info from URL params
+  // Detect edit mode, promote mode, and project info from URL params
   const isEditMode = searchParams.get('edit') === 'true';
+  const isPromoteMode = searchParams.get('promote') === 'true';
   const editMode = (searchParams.get('mode') as ModeType) || 'test';
   const projectNameParam = searchParams.get('projectName') || '';
   const projectTypeFromUrl = searchParams.get('projectType') as ConfigTab | null;
@@ -61,8 +62,8 @@ export default function ApiTierConfig() {
   const [activeTab, setActiveTab] = useState<ConfigTab>(projectTypeFromUrl || 'saas');
 
   // For new projects: track if user has chosen a type yet
-  // Only skip chooser if: edit mode OR projectType was explicitly passed in URL
-  const [hasChosenType, setHasChosenType] = useState<boolean>(isEditMode || !!projectTypeFromUrl);
+  // Only skip chooser if: edit mode, promote mode, OR projectType was explicitly passed in URL
+  const [hasChosenType, setHasChosenType] = useState<boolean>(isEditMode || isPromoteMode || !!projectTypeFromUrl);
 
   // SaaS tiers
   const [saasTiers, setSaasTiers] = useState<SaasTier[]>([
@@ -91,13 +92,13 @@ export default function ApiTierConfig() {
     }
   }, []);
 
-  // Load existing tiers when in edit mode
+  // Load existing tiers when in edit mode or promote mode
   useEffect(() => {
-    if (isEditMode && user?.id) {
+    if ((isEditMode || isPromoteMode) && user?.id) {
       if (projectTypeFromUrl) setActiveTab(projectTypeFromUrl);
       loadExistingTiers();
     }
-  }, [isEditMode, user?.id, mode, projectTypeFromUrl]);
+  }, [isEditMode, isPromoteMode, user?.id, mode, projectTypeFromUrl]);
 
   const loadExistingTiers = async () => {
     setLoadingTiers(true);
@@ -266,10 +267,10 @@ export default function ApiTierConfig() {
     setStoreProducts(storeProducts.filter((_, i) => i !== index));
   };
 
-  // Submit handler - handles both create and update
+  // Submit handler - handles create, update, and promote
   const handleSubmit = async () => {
     // Validate project name (only for new projects)
-    if (!isEditMode && !projectName.trim()) {
+    if (!isEditMode && !isPromoteMode && !projectName.trim()) {
       alert('Please enter a project name');
       return;
     }
@@ -277,7 +278,10 @@ export default function ApiTierConfig() {
     setLoading(true);
 
     try {
-      if (isEditMode) {
+      if (isPromoteMode) {
+        // PROMOTE MODE: Create live products from edited test tiers
+        await handlePromote();
+      } else if (isEditMode) {
         // UPDATE MODE: Update existing tiers
         await handleUpdate();
         navigate('/dashboard');
@@ -442,6 +446,65 @@ export default function ApiTierConfig() {
     }
   };
 
+  // Handle promoting test to live with edited values
+  const handlePromote = async () => {
+    const token = await getToken({ template: 'dream-api' });
+    if (!token) throw new Error('Not authenticated');
+
+    // Build tiers array with edited values
+    let tiers: any[] = [];
+
+    if (activeTab === 'saas') {
+      tiers = saasTiers.map(t => ({
+        name: t.name,
+        displayName: t.displayName,
+        price: t.price,
+        limit: t.limit,
+        billingMode: 'subscription',
+        popular: t.popular,
+      }));
+    } else {
+      tiers = storeProducts.map(p => ({
+        name: p.name,
+        displayName: p.displayName,
+        price: p.price,
+        limit: 0,
+        billingMode: 'one_off',
+        features: p.features,
+        description: p.description,
+        imageUrl: p.imageUrl,
+        inventory: p.inventory, // User can edit this before going live
+      }));
+    }
+
+    const response = await fetch(`${OAUTH_API}/promote-to-live`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: user?.id,
+        publishableKey: publishableKeyParam,
+        tiers, // Pass edited tiers to use for live products
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to promote: ${error}`);
+    }
+
+    const data = await response.json();
+
+    // Show the new live keys
+    if (data.secretKey) {
+      alert(`Live keys created!\n\nPublishable Key: ${data.publishableKey}\n\nSecret Key: ${data.secretKey}\n\nSAVE THIS SECRET KEY NOW - you won't see it again!`);
+    }
+
+    navigate('/dashboard');
+  };
+
   if (loadingTiers) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -457,7 +520,7 @@ export default function ApiTierConfig() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold">dream-api</h1>
-            <span className="text-gray-500">/ {isEditMode ? 'Edit Products' : 'Configure Products'}</span>
+            <span className="text-gray-500">/ {isPromoteMode ? 'Go Live' : isEditMode ? 'Edit Products' : 'Configure Products'}</span>
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -483,8 +546,19 @@ export default function ApiTierConfig() {
           </div>
         )}
 
+        {/* Promote Mode Banner */}
+        {isPromoteMode && (
+          <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6 flex items-center gap-3">
+            <span className="text-2xl">🚀</span>
+            <div>
+              <p className="font-semibold text-green-200">Go Live</p>
+              <p className="text-sm text-green-300/70">Review and adjust your products before creating live keys. Reset inventory, update prices, then launch!</p>
+            </div>
+          </div>
+        )}
+
         {/* Edit Mode Banner */}
-        {isEditMode && (
+        {isEditMode && !isPromoteMode && (
           <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6 flex items-center gap-3">
             <span className="text-2xl">✎</span>
             <div>
@@ -495,7 +569,7 @@ export default function ApiTierConfig() {
         )}
 
         {/* Project Name */}
-        {!isEditMode && (
+        {!isEditMode && !isPromoteMode && (
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
             <label className="block font-semibold mb-2">Project Name</label>
             <input
@@ -508,10 +582,10 @@ export default function ApiTierConfig() {
             <p className="text-sm text-gray-500 mt-2">This name will identify your API keys in the dashboard</p>
           </div>
         )}
-        {isEditMode && projectNameParam && (
+        {(isEditMode || isPromoteMode) && projectNameParam && (
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
             <p className="text-sm text-gray-400">Project</p>
-            <p className="font-semibold">{projectNameParam}</p>
+            <p className="font-semibold">{decodeURIComponent(projectNameParam)}</p>
           </div>
         )}
 
@@ -603,8 +677,8 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Edit mode: Show type badge instead of tabs */}
-        {isEditMode && (
+        {/* Edit/Promote mode: Show type badge instead of tabs */}
+        {(isEditMode || isPromoteMode) && (
           <div className="mb-6">
             <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
               activeTab === 'saas'
@@ -617,7 +691,7 @@ export default function ApiTierConfig() {
         )}
 
         {/* SaaS Tab Content - Only show after type chosen */}
-        {(isEditMode || hasChosenType) && activeTab === 'saas' && (
+        {(isEditMode || isPromoteMode || hasChosenType) && activeTab === 'saas' && (
           <div className="space-y-4">
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-4">
               <p className="text-sm text-gray-400">
@@ -718,7 +792,7 @@ export default function ApiTierConfig() {
         )}
 
         {/* Store Tab Content - Only show after type chosen */}
-        {(isEditMode || hasChosenType) && activeTab === 'store' && (
+        {(isEditMode || isPromoteMode || hasChosenType) && activeTab === 'store' && (
           <div className="space-y-4">
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-4">
               <p className="text-sm text-gray-400">
@@ -859,7 +933,7 @@ export default function ApiTierConfig() {
         )}
 
         {/* Submit Button - Only show after type chosen */}
-        {(isEditMode || hasChosenType) && (
+        {(isEditMode || isPromoteMode || hasChosenType) && (
         <div className="mt-8 pt-6 border-t border-gray-700">
           <button
             onClick={handleSubmit}
@@ -867,26 +941,28 @@ export default function ApiTierConfig() {
             className={`w-full py-4 rounded-lg font-bold text-lg transition-colors ${
               loading
                 ? 'bg-gray-700 cursor-not-allowed'
-                : isEditMode
-                  ? 'bg-blue-600 hover:bg-blue-700'
-                  : mode === 'live'
-                    ? 'bg-green-600 hover:bg-green-700'
+                : isPromoteMode
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : isEditMode
+                    ? 'bg-blue-600 hover:bg-blue-700'
                     : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
             {loading
-              ? (isEditMode ? 'Saving Changes...' : 'Creating Products...')
-              : isEditMode
-                ? 'Save Changes'
-                : mode === 'live'
-                  ? `Create Live ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
+              ? (isPromoteMode ? 'Creating Live Products...' : isEditMode ? 'Saving Changes...' : 'Creating Products...')
+              : isPromoteMode
+                ? `🚀 Create Live ${activeTab === 'saas' ? 'Subscriptions' : 'Products'}`
+                : isEditMode
+                  ? 'Save Changes'
                   : `Create Test ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
             }
           </button>
           <p className="text-center text-sm text-gray-500 mt-3">
-            {isEditMode
-              ? 'Updates your existing tiers without creating new API keys.'
-              : `This creates ${mode} products on your Stripe account and generates ${mode} API keys.`
+            {isPromoteMode
+              ? 'Creates LIVE products on Stripe and generates new live API keys.'
+              : isEditMode
+                ? 'Updates your existing tiers without creating new API keys.'
+                : `This creates ${mode} products on your Stripe account and generates ${mode} API keys.`
             }
           </p>
         </div>

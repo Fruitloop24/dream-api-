@@ -437,15 +437,68 @@ export async function handleDashboard(
     const usageTotal = usage.reduce((sum, u) => sum + (u.usageCount || 0), 0);
 
     // =========================================================================
+    // STORE METRICS - Count sales from checkout.session.completed events
+    // =========================================================================
+
+    let storeSalesCount = 0;
+    let storeTotalRevenue = 0;
+
+    // Query events for payment-mode checkouts (store purchases)
+    let storeEventsQuery = `
+      SELECT payload_json FROM events
+      WHERE platformId = ?
+        AND type = 'checkout.session.completed'
+    `;
+    const storeEventsParams: any[] = [platformId];
+
+    if (publishableKey) {
+      storeEventsQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+      storeEventsParams.push(publishableKey);
+    }
+
+    const storeEventsResult = await env.DB.prepare(storeEventsQuery)
+      .bind(...storeEventsParams)
+      .all<{ payload_json: string }>();
+
+    for (const evt of storeEventsResult.results || []) {
+      try {
+        const payload = JSON.parse(evt.payload_json);
+        const session = payload?.data?.object;
+        // Only count payment mode (one-off purchases), not subscriptions
+        if (session?.mode === 'payment') {
+          storeSalesCount++;
+          storeTotalRevenue += (session.amount_total || 0);
+        }
+      } catch {
+        // Skip malformed events
+      }
+    }
+
+    // Calculate store inventory metrics from tiers
+    const storeProducts = tiers.filter(t => t.projectType === 'store' || (t as any).billingMode === 'one_off');
+    const lowStockProducts = storeProducts.filter(t =>
+      t.inventory !== null && typeof t.inventory === 'number' && t.inventory > 0 && t.inventory <= 5
+    ).length;
+    const totalInventory = storeProducts
+      .filter(t => t.inventory !== null && typeof t.inventory === 'number')
+      .reduce((sum, t) => sum + (t.inventory as number), 0);
+
+    // =========================================================================
     // BUILD RESPONSE
     // =========================================================================
 
     const response = {
       metrics: {
+        // SaaS metrics
         activeSubs,
         cancelingSubs,
         mrr,
         usageThisPeriod: usageTotal,
+        // Store metrics
+        storeSalesCount,
+        storeTotalRevenue,
+        lowStockProducts,
+        totalInventory,
       },
       customers,
       tiers,
