@@ -57,9 +57,9 @@ export default function Credentials() {
     }
   };
 
-  // Has any keys?
-  const hasTestKeys = testPublishableKey && testSecretKey;
-  const hasLiveKeys = livePublishableKey && liveSecretKey;
+  // Has any keys? Check that the key matches its expected prefix
+  const hasTestKeys = testPublishableKey?.startsWith('pk_test_') && testSecretKey?.startsWith('sk_test_');
+  const hasLiveKeys = livePublishableKey?.startsWith('pk_live_') && liveSecretKey?.startsWith('sk_live_');
   const hasAnyKeys = hasTestKeys || hasLiveKeys;
 
   if (loading) {
