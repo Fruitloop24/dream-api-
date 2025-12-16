@@ -287,13 +287,36 @@ export async function handlePromoteToLive(
     // BUILD LIVE TIER CONFIG
     // =========================================================================
 
-    const liveTierConfig: TierInput[] = tiersToPromote.map((tier: any, i: number) => ({
-      ...tier,
-      publishableKey,        // Link to new live key
-      priceId: priceIds[i].priceId,
-      productId: priceIds[i].productId,
-      mode: 'live',
-    }));
+    const liveTierConfig: TierInput[] = tiersToPromote.map((tier: any, i: number) => {
+      // Parse features JSON from D1 to extract individual fields
+      let featuresData: any = {};
+      if (tier.features) {
+        try {
+          featuresData = typeof tier.features === 'string' ? JSON.parse(tier.features) : tier.features;
+        } catch (e) {
+          console.warn(`[Promote] Failed to parse features for tier ${tier.name}`);
+        }
+      }
+
+      return {
+        name: tier.name,
+        displayName: tier.displayName,
+        price: tier.price,
+        limit: tier.limit,
+        publishableKey,        // Link to new live key
+        priceId: priceIds[i].priceId,
+        productId: priceIds[i].productId,
+        mode: 'live',
+        projectType: tier.projectType || projectType,
+        // Extract from parsed features
+        billingMode: featuresData.billingMode || (projectType === 'store' ? 'one_off' : 'subscription'),
+        description: featuresData.description || '',
+        imageUrl: featuresData.imageUrl || '',
+        inventory: tier.inventory ?? featuresData.inventory ?? null,
+        features: featuresData.features || [],
+        popular: tier.popular || false,
+      };
+    });
 
     // =========================================================================
     // PERSIST TO D1 AND KV
