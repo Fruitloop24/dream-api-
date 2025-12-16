@@ -49,6 +49,7 @@ export default function ApiTierConfig() {
   const editMode = (searchParams.get('mode') as ModeType) || 'test';
   const projectNameParam = searchParams.get('projectName') || '';
   const projectTypeFromUrl = searchParams.get('projectType') as ConfigTab | null;
+  const publishableKeyParam = searchParams.get('pk') || '';
 
   // Mode: test or live (test only for new projects, edit mode uses URL param)
   const [mode] = useState<ModeType>(editMode);
@@ -104,7 +105,7 @@ export default function ApiTierConfig() {
       const params = new URLSearchParams({
         userId: user?.id || '',
         mode,
-        ...(projectNameParam ? { projectName: projectNameParam } : {}),
+        ...(publishableKeyParam ? { publishableKey: publishableKeyParam } : {}),
         ...(projectTypeFromUrl ? { projectType: projectTypeFromUrl } : {}),
       });
       const response = await fetch(`${OAUTH_API}/tiers?${params.toString()}`);
@@ -392,7 +393,7 @@ export default function ApiTierConfig() {
           userId: user?.id,
           tierName: tier.name,
           mode,
-          projectName: projectName || projectNameParam,
+          publishableKey: publishableKeyParam,
           projectType: activeTab,
           updates,
         }),
@@ -407,7 +408,7 @@ export default function ApiTierConfig() {
         body: JSON.stringify({
           userId: user?.id,
           mode,
-          projectName: projectName || projectNameParam,
+          publishableKey: publishableKeyParam,
           projectType: activeTab,
           tier: {
             name: tier.name.toLowerCase().replace(/\s+/g, '_'),
@@ -434,7 +435,7 @@ export default function ApiTierConfig() {
           userId: user?.id,
           tierName: tier.name,
           mode,
-          projectName: projectName || projectNameParam,
+          publishableKey: publishableKeyParam,
           projectType: activeTab,
         }),
       });
