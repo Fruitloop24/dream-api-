@@ -48,7 +48,18 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-		// D1 is authoritative for keys
+		// Try KV cache first (fast path)
+		const cachedPk = await env.TOKENS_KV.get(`secretkey:${hashHex}:publishableKey`);
+		if (cachedPk) {
+			const cachedPlatformId = await env.TOKENS_KV.get(`publishablekey:${cachedPk}:platformId`);
+			if (cachedPlatformId) {
+				const mode = cachedPk.startsWith('pk_test_') ? 'test' : 'live';
+				console.log(`[API Key] ✅ Valid (from cache) - Platform: ${cachedPlatformId}, PublishableKey: ${cachedPk}, Mode: ${mode}`);
+				return { platformId: cachedPlatformId, publishableKey: cachedPk, mode, projectType: null };
+			}
+		}
+
+		// Cache miss - query D1
 		const fromDb = await getPlatformFromSecretHash(env, hashHex);
 		if (!fromDb) {
 			console.warn(`[API Key] Invalid key hash: ${hashHex}`);
@@ -60,11 +71,11 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		const mode = fromDb.mode || (pk.startsWith('pk_test_') ? 'test' : 'live');
 		const projectType = fromDb.projectType || null;
 
-		// Best-effort rehydrate KV cache
+		// Warm KV cache for next time (only on cache miss)
 		await env.TOKENS_KV.put(`secretkey:${hashHex}:publishableKey`, pk);
 		await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
 
-		console.log(`[API Key] ✅ Valid - Platform: ${platformId}, PublishableKey: ${pk}, Mode: ${mode}`);
+		console.log(`[API Key] ✅ Valid (from D1) - Platform: ${platformId}, PublishableKey: ${pk}, Mode: ${mode}`);
 		return { platformId, publishableKey: pk, mode, projectType };
 	} catch (error) {
 		console.error('[API Key] Verification error:', error);

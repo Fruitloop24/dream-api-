@@ -107,9 +107,9 @@ export default function Dashboard() {
       if (!sk) {
         console.warn('[Dashboard] No secret key found for selected project; dashboard/products may be stale');
       }
-      loadDashboard(selectedProject, sk);
+      loadDashboard(selectedProject, sk || '');
       if (selectedProject.type === 'store') {
-        loadProducts(selectedProject, sk);
+        loadProducts(selectedProject, sk || '');
       }
     }
   }, [selectedPk, selectedProject?.secretKey, credentials]);

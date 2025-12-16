@@ -237,11 +237,19 @@ export async function getPriceIdMap(
 
   for (const tier of config.tiers) {
     const priceId = tier.stripePriceId || tier.priceId;
-    const key = tier.name || tier.id;
-    if (!priceId || !key) continue;
+    if (!priceId) continue;
 
-    priceIdMap[key] = priceId;
-    priceIdMap[key.toLowerCase()] = priceId;
+    // Index by id (internal name like 'free', 'pro')
+    if (tier.id) {
+      priceIdMap[tier.id] = priceId;
+      priceIdMap[tier.id.toLowerCase()] = priceId;
+    }
+
+    // Also index by display name
+    if (tier.name) {
+      priceIdMap[tier.name] = priceId;
+      priceIdMap[tier.name.toLowerCase()] = priceId;
+    }
   }
 
   return priceIdMap;

@@ -199,25 +199,18 @@ export async function handleDashboard(
 
     // =========================================================================
     // FETCH USAGE
-    // Get usage for users who have subscriptions in this mode
+    // Get usage from usage_counts for ALL users (including free tier)
     // =========================================================================
 
-    const userIdsInMode = subscriptions.map(s => s.userId);
-    let usage: UsageRow[] = [];
-
-    if (userIdsInMode.length > 0) {
-      const usageQuery = `
-        SELECT userId, usageCount, plan, periodStart, periodEnd
-        FROM usage_counts
-        WHERE platformId = ?
-      `;
-      const usageResult = await env.DB.prepare(usageQuery)
-        .bind(platformId)
-        .all<UsageRow>();
-
-      // Filter to only users in this mode
-      usage = (usageResult.results || []).filter(u => userIdsInMode.includes(u.userId));
-    }
+    const usageQuery = `
+      SELECT userId, usageCount, plan, periodStart, periodEnd
+      FROM usage_counts
+      WHERE platformId = ?
+    `;
+    const usageResult = await env.DB.prepare(usageQuery)
+      .bind(platformId)
+      .all<UsageRow>();
+    const usage = usageResult.results || [];
 
     // =========================================================================
     // FETCH END USERS

@@ -405,13 +405,19 @@ export async function recordEvent(
   platformId: string | null,
   type: string,
   source: string,
-  payloadJson: string
+  payloadJson: string,
+  publishableKey?: string | null
 ) {
+  // Ensure publishableKey column exists
+  try {
+    await env.DB.prepare('ALTER TABLE events ADD COLUMN publishableKey TEXT').run();
+  } catch {}
+
   await env.DB.prepare(`
-    INSERT INTO events (platformId, source, type, eventId, payload_json)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO events (platformId, source, type, eventId, payload_json, publishableKey)
+    VALUES (?, ?, ?, ?, ?, ?)
   `)
-    .bind(platformId, source, type, eventId, payloadJson)
+    .bind(platformId, source, type, eventId, payloadJson, publishableKey ?? null)
     .run();
 }
 

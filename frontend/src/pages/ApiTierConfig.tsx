@@ -157,11 +157,18 @@ export default function ApiTierConfig() {
 
         if (saasList.length > 0) {
           setSaasTiers(saasList);
-          setActiveTab('saas');
         }
         if (storeList.length > 0) {
           setStoreProducts(storeList);
-          if (saasList.length === 0) setActiveTab('store');
+        }
+
+        // Respect projectType from URL if provided, otherwise infer from data
+        if (projectTypeFromUrl) {
+          setActiveTab(projectTypeFromUrl);
+        } else if (storeList.length > 0 && saasList.length === 0) {
+          setActiveTab('store');
+        } else if (saasList.length > 0) {
+          setActiveTab('saas');
         }
       }
     } catch (err) {

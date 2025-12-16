@@ -127,6 +127,7 @@ export async function handleStripeWebhook(
 
 	const clerkClient = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
 	let eventPlatformId: string | null = null;
+	let eventPublishableKey: string | null = null;
 
 	// Handle different event types
 	switch (event.type) {
@@ -163,6 +164,7 @@ export async function handleStripeWebhook(
 					const pkFromSession = session.metadata?.publishableKey as string | undefined;
 					const publishableKey = existingPk || pkFromSession;
 					eventPlatformId = await resolvePlatformId(env, publishableKey);
+					eventPublishableKey = publishableKey || null;
 
 					await clerkClient.users.updateUserMetadata(userId, {
 						publicMetadata: {
@@ -210,6 +212,7 @@ export async function handleStripeWebhook(
 			if (session.mode === 'payment') {
 				const publishableKey = session.metadata?.publishableKey as string | undefined;
 				eventPlatformId = await resolvePlatformId(env, publishableKey);
+				eventPublishableKey = publishableKey || null;
 				const eventMode = (await getModeForPublishableKey(env, publishableKey || '')) || (publishableKey?.startsWith('pk_test_') ? 'test' : 'live');
 				if (!eventPlatformId) {
 					console.warn('[Webhook] No platformId resolved for one-off checkout');
@@ -260,6 +263,7 @@ export async function handleStripeWebhook(
 				const pkFromSub = subscription.metadata?.publishableKey as string | undefined;
 				const publishableKey = existingPk || pkFromSub;
 				eventPlatformId = await resolvePlatformId(env, publishableKey);
+				eventPublishableKey = publishableKey || null;
 
 				await clerkClient.users.updateUserMetadata(subUserId, {
 					publicMetadata: {
@@ -279,8 +283,8 @@ export async function handleStripeWebhook(
 				const amount = price?.unit_amount ?? null;
 				const currency = price?.currency ?? null;
 				const currentPeriodEndUnix =
-					subscription.current_period_end ||
-					item?.current_period_end || // fallback if subscription.current_period_end missing
+					(subscription as any).current_period_end ||
+					(item as any)?.current_period_end || // fallback if subscription.current_period_end missing
 					null;
 				const currentPeriodEnd = currentPeriodEndUnix
 					? new Date(currentPeriodEndUnix * 1000).toISOString()
@@ -339,6 +343,7 @@ export async function handleStripeWebhook(
 
 				const publishableKey = deletedSubscription.metadata?.publishableKey as string | undefined;
 				eventPlatformId = await resolvePlatformId(env, publishableKey);
+				eventPublishableKey = publishableKey || null;
 
 				const item = deletedSubscription.items.data[0];
 				const price = item?.price;
@@ -385,7 +390,7 @@ export async function handleStripeWebhook(
 	}
 
 	// Record event for idempotency/audit in D1
-	await recordEvent(env, event.id, eventPlatformId, event.type, 'stripe-webhook', body);
+	await recordEvent(env, event.id, eventPlatformId, event.type, 'stripe-webhook', body, eventPublishableKey);
 
 	return new Response(JSON.stringify({ received: true }), { status: 200 });
 }
