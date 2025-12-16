@@ -49,16 +49,23 @@ async function getPlatformId(userId: string, env: Env): Promise<string | null> {
  * Needed to create/archive products on their Stripe account
  */
 async function getStripeCredentials(
-  userId: string,
   platformId: string,
   env: Env
 ): Promise<{ accessToken: string; stripeUserId: string } | null> {
-  const json =
-    await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`) ||
-    await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+  // D1 is source of truth for Stripe tokens
+  const row = await env.DB.prepare(
+    'SELECT accessToken, stripeUserId FROM stripe_tokens WHERE platformId = ? ORDER BY createdAt DESC LIMIT 1'
+  )
+    .bind(platformId)
+    .first<{ accessToken: string; stripeUserId: string }>();
 
-  if (!json) return null;
-  return JSON.parse(json);
+  if (row) return row;
+
+  // Fallback to KV cache
+  const json = await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+  if (json) return JSON.parse(json);
+
+  return null;
 }
 
 /**
@@ -280,6 +287,7 @@ export async function handleAddTier(
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
+  try {
   const body = await request.json() as {
     userId: string;
     mode?: string;
@@ -346,7 +354,7 @@ export async function handleAddTier(
   }
 
   // Get Stripe credentials
-  const stripeData = await getStripeCredentials(userId, platformId, env);
+  const stripeData = await getStripeCredentials(platformId, env);
   if (!stripeData) {
     return new Response(
       JSON.stringify({ error: 'Stripe not connected' }),
@@ -453,7 +461,7 @@ export async function handleAddTier(
     tierNameSlug,
     tier.displayName,
     tier.price,
-    tier.limit === 'unlimited' ? null : tier.limit,
+    tier.limit === 'unlimited' || tier.limit === undefined ? null : tier.limit,
     price.id,
     product.id,
     featuresJson,
@@ -477,6 +485,13 @@ export async function handleAddTier(
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+  } catch (error) {
+    console.error('[Tiers Add] Error:', error);
+    return new Response(
+      JSON.stringify({ error: `Failed to add tier: ${(error as Error).message}` }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 }
 
 /**
@@ -545,7 +560,7 @@ export async function handleDeleteTier(
   }
 
   // Archive Stripe product (don't delete - might have existing subscriptions)
-  const stripeData = await getStripeCredentials(userId, platformId, env);
+  const stripeData = await getStripeCredentials(platformId, env);
   if (stripeData && tier.productId) {
     try {
       await fetch(`https://api.stripe.com/v1/products/${tier.productId}`, {
