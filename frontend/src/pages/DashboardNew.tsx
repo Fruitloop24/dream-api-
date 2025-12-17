@@ -58,6 +58,8 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [showSecret, setShowSecret] = useState(false);
+  const [keyActionLoading, setKeyActionLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Selected project
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
@@ -234,6 +236,71 @@ const loadProducts = async (project: Project, sk: string) => {
     navigator.clipboard.writeText(text);
   };
 
+  // DELETE PROJECT - Nukes everything (test + live keys, tiers, data, assets)
+  const handleDeleteProject = async () => {
+    if (!selectedProject) return;
+    setKeyActionLoading(true);
+    try {
+      const token = await getToken({ template: 'dream-api' });
+      const res = await fetch(`${FRONT_AUTH_API}/projects/delete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ projectName: selectedProject.name }),
+      });
+      if (res.ok) {
+        // Remove ALL keys for this project from list
+        setProjects(prev => prev.filter(p => p.name !== selectedProject.name));
+        setSelectedPk(null);
+        setShowDeleteConfirm(false);
+        alert('Project deleted permanently');
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to delete project');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Delete error:', err);
+      alert('Failed to delete project');
+    } finally {
+      setKeyActionLoading(false);
+    }
+  };
+
+  // REGENERATE SECRET - New secret key, same publishable key (per-key)
+  const handleRegenerateSecret = async () => {
+    if (!selectedProject) return;
+    const mode = selectedProject.mode;
+    if (!confirm(`This will generate a new SECRET key for your ${mode.toUpperCase()} environment.\n\nYour publishable key stays the same.\nYour old secret key will stop working immediately.\n\nContinue?`)) return;
+    setKeyActionLoading(true);
+    try {
+      const token = await getToken({ template: 'dream-api' });
+      const res = await fetch(`${FRONT_AUTH_API}/projects/regenerate-secret`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ publishableKey: selectedProject.publishableKey }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`New ${mode.toUpperCase()} secret key generated!\n\n${data.secretKey}\n\nSAVE THIS - you won't see it again!\n\nYour publishable key is unchanged.`);
+        // Reload credentials to get new secret
+        await loadCredentials();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to regenerate secret');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Regenerate error:', err);
+      alert('Failed to regenerate secret');
+    } finally {
+      setKeyActionLoading(false);
+    }
+  };
+
   // Loading states
   if (!isSignedIn) return null;
 
@@ -383,25 +450,17 @@ const loadProducts = async (project: Project, sk: string) => {
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">API Keys</h3>
-                <div className="flex items-center gap-2">
-                  {selectedProject.mode === 'test' && (
-                    <button
-                      onClick={() => navigate(`/api-tier-config?promote=true&mode=test&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}&projectName=${encodeURIComponent(selectedProject.name)}`)}
-                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold"
-                    >
-                      Edit & Go Live
-                    </button>
-                  )}
+                {selectedProject.mode === 'test' && (
                   <button
-                    onClick={() => navigate(`/api-tier-config?edit=true&mode=${selectedProject.mode}&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}`)}
-                    className="text-xs text-blue-400 hover:text-blue-300"
+                    onClick={() => navigate(`/api-tier-config?promote=true&mode=test&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}&projectName=${encodeURIComponent(selectedProject.name)}`)}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold"
                   >
-                    Edit {selectedProject.type === 'saas' ? 'Tiers' : 'Products'}
+                    Edit & Go Live
                   </button>
-                </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Publishable Key</p>
                   <div className="flex items-center gap-2">
@@ -444,6 +503,42 @@ const loadProducts = async (project: Project, sk: string) => {
                   })()}
                 </div>
               </div>
+
+              {/* Key Actions */}
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-700">
+                <button
+                  onClick={handleRegenerateSecret}
+                  disabled={keyActionLoading}
+                  className="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded font-medium"
+                >
+                  {keyActionLoading ? 'Working...' : `Regen ${selectedProject.mode === 'test' ? 'Test' : 'Live'} Secret`}
+                </button>
+                {!showDeleteConfirm ? (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded"
+                  >
+                    Delete Project
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 bg-red-900/20 border border-red-800 rounded p-2">
+                    <span className="text-xs text-red-300">Delete "{selectedProject.name}" permanently? (Test + Live keys, all data)</span>
+                    <button
+                      onClick={handleDeleteProject}
+                      disabled={keyActionLoading}
+                      className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded font-medium"
+                    >
+                      {keyActionLoading ? 'Deleting...' : 'Yes, Delete Forever'}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* SaaS Content */}
@@ -459,20 +554,58 @@ const loadProducts = async (project: Project, sk: string) => {
 
                 {/* Tiers */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <h3 className="text-lg font-bold mb-3">Subscription Tiers</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">Subscription Tiers</h3>
+                    <button
+                      onClick={() => navigate(`/api-tier-config?edit=true&mode=${selectedProject.mode}&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}`)}
+                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium"
+                    >
+                      Edit Tiers
+                    </button>
+                  </div>
                   {tiers.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {tiers.map((tier: any) => (
-                        <div key={tier.name} className="bg-gray-900 rounded p-3 border border-gray-800">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="font-semibold">{tier.displayName || tier.name}</p>
+                        <div key={tier.name} className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-bold text-lg">{tier.displayName || tier.name}</h4>
                             {tier.popular && (
-                              <span className="text-xs px-2 py-0.5 bg-blue-600 rounded">Popular</span>
+                              <span className="text-xs px-2 py-1 bg-blue-600 rounded-full font-medium">Popular</span>
                             )}
                           </div>
-                          <p className="text-sm text-gray-400">
-                            ${tier.price}/mo &middot; {tier.limit === 'unlimited' ? 'Unlimited' : `${tier.limit} calls`}
+                          <div className="mb-3">
+                            <span className="text-2xl font-bold">${tier.price}</span>
+                            <span className="text-gray-400 text-sm">/mo</span>
+                          </div>
+                          <p className="text-sm text-gray-300 mb-3">
+                            {tier.limit === 'unlimited' ? 'Unlimited API calls' : `${tier.limit} API calls/month`}
                           </p>
+                          <div className="pt-3 border-t border-gray-800 space-y-1.5">
+                            {tier.productId && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-16">Product:</span>
+                                <code className="text-xs text-gray-400 font-mono truncate flex-1">{tier.productId}</code>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tier.productId); }}
+                                  className="text-xs text-blue-400 hover:text-blue-300"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            )}
+                            {tier.priceId && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-16">Price:</span>
+                                <code className="text-xs text-gray-400 font-mono truncate flex-1">{tier.priceId}</code>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tier.priceId); }}
+                                  className="text-xs text-blue-400 hover:text-blue-300"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

@@ -204,6 +204,117 @@ export default {
         return new Response(JSON.stringify(rotated), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // DELETE PROJECT - Nukes everything: both keys (test+live), tiers, data, assets
+      if (url.pathname === '/projects/delete' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({})) as { projectName: string };
+        if (!body.projectName) {
+          return new Response(JSON.stringify({ error: 'projectName required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
+        if (!platformId) {
+          return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        // Get all keys for this project (test + live)
+        const keysResult = await env.DB.prepare(`
+          SELECT publishableKey, secretKeyHash FROM api_keys
+          WHERE platformId = ? AND name = ?
+        `).bind(platformId, body.projectName).all<{ publishableKey: string; secretKeyHash: string }>();
+        const keys = keysResult.results || [];
+
+        if (keys.length === 0) {
+          return new Response(JSON.stringify({ error: 'Project not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const publishableKeys = keys.map(k => k.publishableKey);
+
+        // Delete from D1: api_keys
+        await env.DB.prepare(`DELETE FROM api_keys WHERE platformId = ? AND name = ?`).bind(platformId, body.projectName).run();
+
+        // Delete from D1: tiers (for all keys of this project)
+        for (const pk of publishableKeys) {
+          await env.DB.prepare(`DELETE FROM tiers WHERE platformId = ? AND publishableKey = ?`).bind(platformId, pk).run();
+        }
+
+        // Delete from D1: subscriptions, usage_counts, events, end_users
+        for (const pk of publishableKeys) {
+          await env.DB.prepare(`DELETE FROM subscriptions WHERE platformId = ? AND publishableKey = ?`).bind(platformId, pk).run().catch(() => {});
+          await env.DB.prepare(`DELETE FROM usage_counts WHERE platformId = ? AND publishableKey = ?`).bind(platformId, pk).run().catch(() => {});
+          await env.DB.prepare(`DELETE FROM events WHERE platformId = ? AND publishableKey = ?`).bind(platformId, pk).run().catch(() => {});
+          await env.DB.prepare(`DELETE FROM end_users WHERE platformId = ? AND publishableKey = ?`).bind(platformId, pk).run().catch(() => {});
+        }
+
+        // Clear KV cache
+        for (const key of keys) {
+          await env.TOKENS_KV.delete(`publishablekey:${key.publishableKey}:platformId`).catch(() => {});
+          await env.TOKENS_KV.delete(`secretkey:${key.secretKeyHash}:publishableKey`).catch(() => {});
+        }
+        // Clear user-level KV keys
+        await env.TOKENS_KV.delete(`user:${userId}:publishableKey:test`).catch(() => {});
+        await env.TOKENS_KV.delete(`user:${userId}:secretKey:test`).catch(() => {});
+        await env.TOKENS_KV.delete(`user:${userId}:publishableKey:live`).catch(() => {});
+        await env.TOKENS_KV.delete(`user:${userId}:secretKey:live`).catch(() => {});
+
+        // Delete R2 assets for this platform (best effort)
+        try {
+          const listed = await env.ASSETS.list({ prefix: `${platformId}/` });
+          for (const obj of listed.objects) {
+            await env.ASSETS.delete(obj.key);
+          }
+        } catch (e) {
+          console.warn('[Delete Project] R2 cleanup failed:', e);
+        }
+
+        return new Response(JSON.stringify({ success: true, message: 'Project deleted permanently', deletedKeys: publishableKeys.length }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // REGENERATE SECRET - New secret key, same publishable key
+      if (url.pathname === '/projects/regenerate-secret' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({})) as { publishableKey: string };
+        if (!body.publishableKey) {
+          return new Response(JSON.stringify({ error: 'publishableKey required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
+        if (!platformId) {
+          return new Response(JSON.stringify({ error: 'Platform not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        // Verify ownership
+        const existing = await env.DB.prepare(`
+          SELECT secretKeyHash, mode FROM api_keys WHERE platformId = ? AND publishableKey = ?
+        `).bind(platformId, body.publishableKey).first<{ secretKeyHash: string; mode: string }>();
+        if (!existing) {
+          return new Response(JSON.stringify({ error: 'Key not found or not owned by you' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        // Generate new secret key (keep same prefix based on mode)
+        const mode = existing.mode || (body.publishableKey.startsWith('pk_test_') ? 'test' : 'live');
+        const newSecretKey = `sk_${mode}_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
+        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(newSecretKey));
+        const newHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        // Update D1
+        await env.DB.prepare(`UPDATE api_keys SET secretKeyHash = ? WHERE publishableKey = ?`).bind(newHash, body.publishableKey).run();
+
+        // Update KV - remove old, add new
+        await env.TOKENS_KV.delete(`secretkey:${existing.secretKeyHash}:publishableKey`).catch(() => {});
+        await env.TOKENS_KV.put(`secretkey:${newHash}:publishableKey`, body.publishableKey);
+        // Update user-level secret key in KV
+        await env.TOKENS_KV.put(`user:${userId}:secretKey:${mode}`, newSecretKey);
+
+        return new Response(JSON.stringify({
+          success: true,
+          publishableKey: body.publishableKey,
+          secretKey: newSecretKey,
+          mode,
+          message: 'Secret key regenerated. Old key no longer works.'
+        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       // Verify auth + usage
       if (url.pathname === '/verify-auth' && request.method === 'POST') {
         const client = await clerk(env);

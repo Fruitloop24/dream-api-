@@ -199,16 +199,24 @@ export async function handleDashboard(
 
     // =========================================================================
     // FETCH USAGE
-    // Get usage from usage_counts for ALL users (including free tier)
+    // Get usage from usage_counts filtered by publishableKey (test vs live)
     // =========================================================================
 
-    const usageQuery = `
+    let usageQuery = `
       SELECT userId, usageCount, plan, periodStart, periodEnd
       FROM usage_counts
       WHERE platformId = ?
+        AND (publishableKey LIKE ? OR publishableKey IS NULL)
     `;
+    const usageParams: any[] = [platformId, keyPrefix];
+
+    if (publishableKey) {
+      usageQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+      usageParams.push(publishableKey);
+    }
+
     const usageResult = await env.DB.prepare(usageQuery)
-      .bind(platformId)
+      .bind(...usageParams)
       .all<UsageRow>();
     const usage = usageResult.results || [];
 
