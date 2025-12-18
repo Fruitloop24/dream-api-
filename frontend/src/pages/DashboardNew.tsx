@@ -537,6 +537,30 @@ export default function Dashboard() {
             + New Project
           </button>
 
+          {/* Refresh Button */}
+          {selectedProject && (
+            <button
+              onClick={() => {
+                const sk = selectedProject.secretKey || (selectedProject.mode === 'test' ? credentials.testSecretKey : credentials.liveSecretKey);
+                if (sk) {
+                  loadDashboard(selectedProject, sk);
+                  if (selectedProject.type === 'store') {
+                    loadProducts(selectedProject, sk);
+                  }
+                  showToast('Dashboard refreshed', 'success');
+                }
+              }}
+              disabled={loadingDashboard}
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800 border border-gray-700 hover:border-gray-600 rounded transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              title="Refresh dashboard data"
+            >
+              <svg className={`w-4 h-4 ${loadingDashboard ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loadingDashboard ? 'Refreshing...' : 'Refresh'}
+            </button>
+          )}
+
           {/* Delete Project - Top Level */}
           {selectedProject && !showDeleteConfirm && (
             <button
@@ -546,8 +570,6 @@ export default function Dashboard() {
               Delete Project
             </button>
           )}
-
-          {loadingDashboard && <span className="text-xs text-gray-500">Loading...</span>}
         </div>
 
         {/* ================================================================

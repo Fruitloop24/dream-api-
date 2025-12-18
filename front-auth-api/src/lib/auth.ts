@@ -1,8 +1,7 @@
 import { createClerkClient } from '@clerk/backend';
 import { Env } from '../types';
 import { ensurePlatform } from './schema';
-import { ensureProject } from './projects';
-import { upsertApiKey } from './keys';
+// Note: ensureProject, upsertApiKey available via './projects', './keys' if needed
 
 export async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
   const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')

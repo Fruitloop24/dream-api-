@@ -35,33 +35,109 @@ Frontend (React) → front-auth-api (Dev Auth) → oauth-api (Stripe Connect)
 | `oauth-api` | Stripe Connect OAuth, create/edit products & tiers |
 | `api-multi` | Customer API - usage tracking, checkouts, webhooks, dashboard |
 
-## Key Endpoints
+## API Endpoints Reference
 
-### front-auth-api
+### api-multi (Main API for devs to integrate)
+
+Base URL: `https://api-multi.k-c-sheffield012376.workers.dev`
+
+**All requests require:** `Authorization: Bearer sk_xxx`
+
+#### POST /api/customers - Create end-user
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customers \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "customer@example.com",
+    "password": "SecurePassword123!",
+    "firstName": "John",
+    "lastName": "Doe",
+    "plan": "free"
+  }'
+```
+Response: `{ "success": true, "customer": { "id": "user_xxx", "email": "...", "plan": "free" } }`
+
+#### POST /api/data - Track usage + enforce limits
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_xxx" \
+  -H "X-User-Plan: free"
+```
+Success: `{ "success": true, "usage": { "count": 1, "limit": 100, "plan": "free" } }`
+Limit hit (403): `{ "error": "Tier limit reached", "usageCount": 100, "limit": 100 }`
+
+#### GET /api/usage - Check current usage
+```bash
+curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_xxx" \
+  -H "X-User-Plan: free"
+```
+
+#### POST /api/create-checkout - Subscription upgrade
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_xxx" \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://yourapp.com" \
+  -d '{"tier": "pro"}'
+```
+Or with priceId: `-d '{"priceId": "price_xxx"}'`
+Response: `{ "url": "https://checkout.stripe.com/..." }`
+
+#### POST /api/customer-portal - Billing portal
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-portal \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_xxx" \
+  -H "Origin: https://yourapp.com"
+```
+
+#### GET /api/products - List store products
+```bash
+curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/products \
+  -H "Authorization: Bearer sk_test_xxx"
+```
+
+#### POST /api/cart/checkout - Store cart checkout
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/cart/checkout \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://yourapp.com" \
+  -d '{
+    "email": "buyer@example.com",
+    "items": [{"priceId": "price_xxx", "quantity": 1}],
+    "successUrl": "https://yourapp.com/success",
+    "cancelUrl": "https://yourapp.com/cancel"
+  }'
+```
+
+#### GET /api/dashboard - Platform metrics
+```bash
+curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-Publishable-Key: pk_test_xxx"
+```
+
+### front-auth-api (Dev Management)
 ```
 POST /generate-platform-id     Create plt_xxx
 GET  /get-credentials          Get test + live keys
 GET  /projects                 List all projects
-POST /projects/delete          DELETE ENTIRE PROJECT (test+live, all data, R2 assets)
-POST /projects/regenerate-secret  New secret key, same publishable key
+POST /projects/delete          DELETE ENTIRE PROJECT
+POST /projects/regenerate-secret  New secret key
 ```
 
-### oauth-api
+### oauth-api (Stripe Connect)
 ```
 GET  /authorize                Start Stripe OAuth
-POST /create-products          Create project + Stripe products + keys
-PUT  /tiers                    Edit tier (price, limit) - no new keys
-POST /promote-to-live          Test → Live with edits
-```
-
-### api-multi
-```
-POST /api/customers            Create end-user (in shared Clerk app)
-POST /api/data                 Track usage + enforce limits
-POST /api/create-checkout      SaaS subscription checkout
-POST /api/cart/checkout        Store multi-item checkout
-GET  /api/dashboard            Metrics for dev dashboard
-POST /webhook/stripe           Handle payments, update subs/inventory
+POST /create-products          Create project + Stripe products
+PUT  /tiers                    Edit tier (price, limit)
+POST /promote-to-live          Test → Live
 ```
 
 ## D1 Tables
@@ -82,7 +158,7 @@ POST /webhook/stripe           Handle payments, update subs/inventory
 
 ```
 # Auth lookups (api-multi)
-secretkey:{hash}:publishableKey → pk_xxx
+secretkey:{sha256hash}:publishableKey → pk_xxx
 publishablekey:{pk}:platformId → plt_xxx
 
 # Dashboard credentials (front-auth-api)
@@ -94,21 +170,6 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 
 1. **dream-api** - Platform devs ($15/mo customers)
 2. **end-user-api** - Shared app for ALL devs' end customers, isolated by `publishableKey` in metadata
-
-## SaaS Flow (Tested & Working)
-```bash
-# 1. Create customer
-curl -X POST .../api/customers -H "Authorization: Bearer sk_live_xxx" \
-  -d '{"email":"user@example.com","password":"xxx","plan":"free"}'
-
-# 2. Track usage (returns count/limit, blocks at limit)
-curl -X POST .../api/data -H "Authorization: Bearer sk_live_xxx" \
-  -H "X-User-Id: user_xxx" -H "X-User-Plan: free"
-
-# 3. Create upgrade checkout
-curl -X POST .../api/create-checkout -H "Authorization: Bearer sk_live_xxx" \
-  -H "X-User-Id: user_xxx" -d '{"tier":"pro","successUrl":"...","cancelUrl":"..."}'
-```
 
 ## Key Management
 
@@ -135,45 +196,25 @@ curl -X POST .../api/create-checkout -H "Authorization: Bearer sk_live_xxx" \
 | Problem | Fix |
 |---------|-----|
 | "Invalid API key" | Hash sk with SHA-256, check D1 `api_keys.secretKeyHash`, clear KV cache |
-| Dashboard shows old secret | Regen updates KV `user:{id}:secretKey:{mode}` - check both with and without mode suffix |
-| User not showing in dashboard | Check `end_users.publishableKey` matches your project |
-| Usage wrong between test/live | Ensure queries filter by `publishableKey` not just `platformId` |
+| Dashboard shows old secret | Regen updates KV `user:{id}:secretKey:{mode}` |
+| User not in dashboard | Check `end_users.publishableKey` matches project |
+| Usage wrong test/live | Filter queries by `publishableKey` not just `platformId` |
+| Limit always 0 | Check `X-User-Plan` header matches tier name in `tiers` table |
 
 ## What's Working (Dec 2025)
 
-- Full SaaS flow: signup → usage tracking → limits → checkout → subscription
-- Full Store flow: products → cart → checkout → inventory decrement
-- Project management: create, edit tiers, promote to live, delete, regen secret
-- Dashboard: metrics, customers, tiers with priceId/productId
-- Webhooks: subscription create/update, inventory decrement, idempotent
+- [x] SaaS flow: signup → usage tracking → limits → checkout → subscription
+- [x] Store flow: products → cart → checkout → inventory decrement
+- [x] Project management: create, edit tiers, promote to live, delete, regen secret
+- [x] Dashboard: metrics, customers, tiers with priceId/productId
+- [x] Webhooks: subscription create/update, inventory decrement, idempotent
+- [x] Stripe account ID shown in dashboard with link
+- [x] Sold out badge computed from inventory (not stored flag)
 
 ## TODO
 
-- [x] Better browser alerts on regen - replaced with dark themed toast notifications
-- [x] Store dashboard cleanup - product table with images, price IDs, stock status
-- [x] Sold out badge display on dashboard
-- [ ] Totals view - aggregate live revenue only (currently shows project counts)
+- [ ] Totals view - aggregate live revenue only
+- [ ] Refresh button on dashboard
+- [ ] SDK wrapper for devs
 - [ ] PWA for mobile
-
-## Dashboard Improvements (Stripe Trust & Control)
-
-- [ ] Show Stripe Account ID (acct_xxx) in dashboard - copyable
-- [ ] "Open Stripe Dashboard" link (https://dashboard.stripe.com/acct_xxx)
-- [ ] Disconnect Stripe button with warning modal:
-      "This will revoke our access. Your products stay in Stripe.
-       Your dream-api project will be downgraded to limited mode.
-       You can reconnect anytime."
-- [ ] Handle revoked tokens gracefully:
-      - Detect on API call failure (401 from Stripe)
-      - Show "Stripe disconnected" banner in dashboard
-      - Prompt to reconnect, don't break everything
 - [ ] CSV export for transactions/customers
-
-## Future: Template Sites
-
-- [ ] "Try our template sites" button in dashboard
-- [ ] AI picks from 40 components based on description
-- [ ] Store hero/about images in R2
-- [ ] Deploy to CF Pages (our account)
-- [ ] Simple edit pages in dashboard (hero text, images, colors)
-- [ ] GitHub repo handoff with DREAM-API.md docs

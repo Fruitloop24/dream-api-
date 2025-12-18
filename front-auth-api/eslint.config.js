@@ -21,9 +21,7 @@ export default defineConfig([
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      // Allow empty catch blocks for schema migrations (column already exists)
       'no-empty': ['error', { allowEmptyCatch: true }],
-      // Allow unused vars with _ prefix (intentionally unused params)
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },

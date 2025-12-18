@@ -103,7 +103,7 @@ export async function handleStripeWebhook(
 
     // Handle different event types
     switch (event.type) {
-        case 'checkout.session.completed':
+        case 'checkout.session.completed': {
             // For checkout, userId is in client_reference_id
             const session = event.data.object as Stripe.Checkout.Session;
             const userId = session.client_reference_id || session.metadata?.userId;
@@ -114,10 +114,9 @@ export async function handleStripeWebhook(
             }
 
             // Get tier from session metadata (sent during checkout)
-            // IMPORTANT: Should always be present - if not, fail explicitly
             const tier = session.metadata?.tier;
             if (!tier) {
-                console.error('❌ No tier metadata in checkout session');
+                console.error('No tier metadata in checkout session');
                 return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
             }
 
@@ -129,19 +128,20 @@ export async function handleStripeWebhook(
                         stripeCustomerId: session.customer as string,
                     },
                 });
-                console.log(`✅ Updated user ${userId} to ${tier} plan after checkout`);
-            } catch (err: any) {
-                console.error(`❌ Failed to update user ${userId}:`, err.message);
-                console.error(`❌ Full error:`, JSON.stringify(err, Object.getOwnPropertyNames(err)));
+                console.log(`Updated user ${userId} to ${tier} plan after checkout`);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Unknown error';
+                console.error(`Failed to update user ${userId}:`, msg);
                 return new Response(
-                    JSON.stringify({ error: 'Failed to update user metadata', details: err.message }),
+                    JSON.stringify({ error: 'Failed to update user metadata', details: msg }),
                     { status: 500 }
                 );
             }
             break;
+        }
 
         case 'customer.subscription.created':
-        case 'customer.subscription.updated':
+        case 'customer.subscription.updated': {
             // Extract customer metadata (should include userId)
             const subscription = event.data.object as Stripe.Subscription;
             const subUserId = subscription.metadata?.userId;
@@ -152,10 +152,9 @@ export async function handleStripeWebhook(
             }
 
             // Get tier from subscription metadata
-            // IMPORTANT: Should always be present - if not, fail explicitly
             const subTier = subscription.metadata?.tier;
             if (!subTier) {
-                console.error('❌ No tier metadata in subscription');
+                console.error('No tier metadata in subscription');
                 return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
             }
 
@@ -168,17 +167,19 @@ export async function handleStripeWebhook(
                         subscriptionId: subscription.id,
                     },
                 });
-                console.log(`✅ Updated user ${subUserId} to ${subTier} plan`);
-            } catch (err: any) {
-                console.error(`❌ Failed to update user ${subUserId}:`, err.message);
+                console.log(`Updated user ${subUserId} to ${subTier} plan`);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Unknown error';
+                console.error(`Failed to update user ${subUserId}:`, msg);
                 return new Response(
                     JSON.stringify({ error: 'Failed to update user metadata' }),
                     { status: 500 }
                 );
             }
             break;
+        }
 
-        case 'customer.subscription.deleted':
+        case 'customer.subscription.deleted': {
             const deletedSubscription = event.data.object as Stripe.Subscription;
             const deletedUserId = deletedSubscription.metadata?.userId;
 
@@ -194,15 +195,17 @@ export async function handleStripeWebhook(
                         plan: 'free',
                     },
                 });
-                console.log(`✅ Downgraded user ${deletedUserId} to free plan`);
-            } catch (err: any) {
-                console.error(`❌ Failed to downgrade user ${deletedUserId}:`, err.message);
+                console.log(`Downgraded user ${deletedUserId} to free plan`);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Unknown error';
+                console.error(`Failed to downgrade user ${deletedUserId}:`, msg);
                 return new Response(
                     JSON.stringify({ error: 'Failed to update user metadata' }),
                     { status: 500 }
                 );
             }
             break;
+        }
 
         default:
             console.log(`Unhandled event type: ${event.type}`);

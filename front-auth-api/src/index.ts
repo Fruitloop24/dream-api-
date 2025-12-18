@@ -135,7 +135,7 @@ async function trackUsage(userId: string, plan: PlatformPlan, env: Env) {
   const usageKey = `usage:${userId}`;
   const raw = await env.USAGE_KV.get(usageKey);
   const period = getCurrentPeriod();
-  let usage = raw ? JSON.parse(raw) as { usageCount: number; plan: PlatformPlan; periodStart?: string; periodEnd?: string } : {
+  const usage = raw ? JSON.parse(raw) as { usageCount: number; plan: PlatformPlan; periodStart?: string; periodEnd?: string } : {
     usageCount: 0,
     plan,
     periodStart: period.start,

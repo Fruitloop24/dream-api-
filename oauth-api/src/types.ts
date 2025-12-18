@@ -7,6 +7,7 @@ export interface Env {
   CLERK_SECRET_KEY: string;
   CLERK_PUBLISHABLE_KEY: string;
   FRONTEND_URL: string;
+  CLERK_JWT_TEMPLATE?: string;
 }
 
 export type ProjectType = 'saas' | 'store';

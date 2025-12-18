@@ -8,74 +8,187 @@
 - **Stripe Billing** - On YOUR Stripe account via Connect
 - **Usage Tracking** - Limits enforced per tier
 - **Dashboard** - Customers, MRR, usage metrics
-- **No Webhooks** - We handle everything internally
-
-## Two Modes
-
-**SaaS** - Subscription tiers with usage limits
-```js
-// Track API usage
-const res = await fetch('https://api-multi.../api/data', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer sk_test_xxx',
-    'X-User-Id': 'user_123',
-    'X-User-Plan': 'pro'
-  }
-});
-// { allowed: true, usage: { count: 1, limit: 1000 } }
-// At limit: { allowed: false, error: "Tier limit reached" }
-```
-
-**Store** - One-off products with cart checkout
-```js
-// Cart checkout
-const res = await fetch('https://api-multi.../api/cart/checkout', {
-  method: 'POST',
-  headers: { 'Authorization': 'Bearer sk_test_xxx' },
-  body: JSON.stringify({
-    email: 'buyer@example.com',
-    items: [{ priceId: 'price_xxx', quantity: 1 }]
-  })
-});
-// { url: "https://checkout.stripe.com/..." }
-```
-
-## API Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/customers` | POST | Create end-user account |
-| `/api/data` | POST | Track usage (enforces limits) |
-| `/api/usage` | GET | Check current usage |
-| `/api/create-checkout` | POST | Subscription upgrade checkout |
-| `/api/cart/checkout` | POST | One-off cart checkout |
-| `/api/products` | GET | List store products |
-| `/api/customer-portal` | POST | Stripe billing portal |
-| `/api/dashboard` | GET | Your platform metrics |
-
-**Base URL:** `https://api-multi.k-c-sheffield012376.workers.dev`
-
-**Auth:** `Authorization: Bearer sk_test_xxx` or `sk_live_xxx`
+- **Webhooks Handled** - We handle everything internally
 
 ## Quick Start
 
 1. Sign up at https://dream-frontend-dyn.pages.dev
-2. Pay $15/mo
-3. Connect Stripe
-4. Choose: **SaaS** or **Store** (locked per project)
-5. Configure tiers/products
-6. Get your API keys
-7. Integrate into your app
+2. Connect Stripe via OAuth
+3. Choose: **SaaS** or **Store** (locked per project)
+4. Configure tiers/products
+5. Get your API keys
+6. Integrate into your app
+
+## API Base URL
+
+```
+https://api-multi.k-c-sheffield012376.workers.dev
+```
+
+## Authentication
+
+All API calls require your secret key:
+
+```
+Authorization: Bearer sk_test_xxx
+```
 
 ## Test vs Live
 
-- `pk_test_` / `sk_test_` - Stripe sandbox
+- `pk_test_` / `sk_test_` - Stripe test mode
 - `pk_live_` / `sk_live_` - Real payments
 
-Create test first, then "Go Live" when ready.
+## SaaS Mode - Subscription Tiers
 
-## Local Dev
+### 1. Create Customer
+
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customers \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!",
+    "firstName": "John",
+    "lastName": "Doe",
+    "plan": "free"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "customer": {
+    "id": "user_abc123",
+    "email": "user@example.com",
+    "plan": "free"
+  }
+}
+```
+
+### 2. Track Usage
+
+Call this on every API request to track and enforce limits:
+
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_abc123" \
+  -H "X-User-Plan: free"
+```
+
+Success Response:
+```json
+{
+  "success": true,
+  "data": { "message": "Request processed successfully" },
+  "usage": { "count": 1, "limit": 100, "plan": "free" }
+}
+```
+
+Limit Reached (403):
+```json
+{
+  "error": "Tier limit reached",
+  "usageCount": 100,
+  "limit": 100,
+  "message": "Please upgrade to unlock more requests"
+}
+```
+
+### 3. Check Usage
+
+```bash
+curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_abc123" \
+  -H "X-User-Plan: free"
+```
+
+### 4. Create Upgrade Checkout
+
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_abc123" \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://yourapp.com" \
+  -d '{"tier": "pro"}'
+```
+
+Or with explicit priceId:
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_abc123" \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://yourapp.com" \
+  -d '{"priceId": "price_xxx"}'
+```
+
+Response:
+```json
+{ "url": "https://checkout.stripe.com/c/pay/..." }
+```
+
+### 5. Customer Portal (Billing Management)
+
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-portal \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-User-Id: user_abc123" \
+  -H "Origin: https://yourapp.com"
+```
+
+## Store Mode - One-Off Products
+
+### List Products
+
+```bash
+curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/products \
+  -H "Authorization: Bearer sk_test_xxx"
+```
+
+### Cart Checkout
+
+```bash
+curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/cart/checkout \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://yourapp.com" \
+  -d '{
+    "email": "buyer@example.com",
+    "items": [
+      { "priceId": "price_xxx", "quantity": 1 }
+    ],
+    "successUrl": "https://yourapp.com/success",
+    "cancelUrl": "https://yourapp.com/cancel"
+  }'
+```
+
+## Dashboard Endpoint
+
+Get metrics for your platform:
+
+```bash
+curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
+  -H "Authorization: Bearer sk_test_xxx" \
+  -H "X-Publishable-Key: pk_test_xxx"
+```
+
+## Required Headers Summary
+
+| Endpoint | Required Headers |
+|----------|------------------|
+| All endpoints | `Authorization: Bearer sk_xxx` |
+| `/api/data`, `/api/usage` | + `X-User-Id`, `X-User-Plan` |
+| `/api/create-checkout` | + `X-User-Id`, `Origin` |
+| `/api/customer-portal` | + `X-User-Id`, `Origin` |
+| `/api/cart/checkout` | + `Origin` |
+| `/api/dashboard` | + `X-Publishable-Key` |
+
+## Local Development
 
 ```bash
 cd frontend && npm run dev        # :5173
@@ -91,6 +204,6 @@ Auto-deploy via GitHub → Cloudflare:
 git add -A && git commit -m "message" && git push
 ```
 
-## Docs
+## Technical Reference
 
-See [CLAUDE.md](./CLAUDE.md) for full technical reference.
+See [CLAUDE.md](./CLAUDE.md) for architecture, database schemas, and debugging.

@@ -1,9 +1,28 @@
+/**
+ * ============================================================================
+ * ASSETS ROUTES - R2 Product Image Storage
+ * ============================================================================
+ *
+ * Handles upload/retrieval of product images stored in Cloudflare R2.
+ * Images are namespaced by platformId to prevent cross-tenant access.
+ *
+ * ENDPOINTS:
+ *   POST /api/assets - Upload image (base64 encoded)
+ *   GET  /api/assets/{key} - Retrieve image
+ *
+ * STORAGE:
+ *   Key format: {platformId}/{timestamp}-{filename}
+ *   Bucket: dream_api_assets (R2)
+ *
+ * ============================================================================
+ */
+
 import { Env } from '../types';
 
 type UploadBody = {
 	filename: string;
 	contentType?: string;
-	data: string; // base64 string
+	data: string; // base64 encoded binary
 };
 
 function decodeBase64(data: string): Uint8Array {
@@ -20,6 +39,11 @@ function sanitizeFilename(name: string): string {
 	return name.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
+/**
+ * Upload a product image to R2
+ * Body: { filename, contentType?, data (base64) }
+ * Returns: { key, url }
+ */
 export async function handleAssetUpload(
 	env: Env,
 	platformId: string,
@@ -36,7 +60,7 @@ export async function handleAssetUpload(
 	let body: UploadBody;
 	try {
 		body = await request.json() as UploadBody;
-	} catch (err) {
+	} catch {
 		return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
 			status: 400,
 			headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -64,6 +88,10 @@ export async function handleAssetUpload(
 	});
 }
 
+/**
+ * Retrieve a product image from R2
+ * Validates platformId ownership to prevent cross-tenant access
+ */
 export async function handleAssetGet(
 	env: Env,
 	platformId: string,

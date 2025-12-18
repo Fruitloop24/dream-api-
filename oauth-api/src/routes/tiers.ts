@@ -83,22 +83,15 @@ async function getStripeCredentials(
  *   - platformId: The platform these belong to
  */
 export async function handleGetTiers(
-  request: Request,
+  _request: Request,
   env: Env,
-  url: URL
+  url: URL,
+  userId: string
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
-  const userId = url.searchParams.get('userId');
   const mode = url.searchParams.get('mode') || 'test';
   const publishableKey = url.searchParams.get('publishableKey');
-
-  if (!userId) {
-    return new Response(
-      JSON.stringify({ error: 'Missing userId' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
 
   const platformId = await getPlatformId(userId, env);
   if (!platformId) {
@@ -167,12 +160,13 @@ export async function handleGetTiers(
  */
 export async function handleUpdateTier(
   request: Request,
-  env: Env
+  env: Env,
+  authenticatedUserId: string
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
   const body = await request.json() as {
-    userId: string;
+    userId?: string;
     tierName: string;
     mode?: string;
     publishableKey?: string;
@@ -187,13 +181,21 @@ export async function handleUpdateTier(
     };
   };
 
-  const { userId, tierName, updates, mode = 'test', publishableKey } = body;
+  const { tierName, updates, mode = 'test', publishableKey } = body;
+  const userId = authenticatedUserId;
 
   // Validate required fields
-  if (!userId || !tierName) {
+  if (!tierName) {
     return new Response(
-      JSON.stringify({ error: 'Missing userId or tierName' }),
+      JSON.stringify({ error: 'Missing tierName' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  if (body.userId && body.userId !== userId) {
+    return new Response(
+      JSON.stringify({ error: 'User mismatch', message: 'Token user does not match request userId' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
@@ -283,13 +285,14 @@ export async function handleUpdateTier(
  */
 export async function handleAddTier(
   request: Request,
-  env: Env
+  env: Env,
+  authenticatedUserId: string
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
   try {
   const body = await request.json() as {
-    userId: string;
+    userId?: string;
     mode?: string;
     publishableKey: string;
     tier: {
@@ -306,13 +309,21 @@ export async function handleAddTier(
     };
   };
 
-  const { userId, tier, mode = 'test', publishableKey } = body;
+  const { tier, mode = 'test', publishableKey } = body;
+  const userId = authenticatedUserId;
 
   // Validate required fields
-  if (!userId || !tier?.name || !tier?.displayName || !publishableKey) {
+  if (!tier?.name || !tier?.displayName || !publishableKey) {
     return new Response(
-      JSON.stringify({ error: 'Missing required fields (userId, tier.name, tier.displayName, publishableKey)' }),
+      JSON.stringify({ error: 'Missing required fields (tier.name, tier.displayName, publishableKey)' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  if (body.userId && body.userId !== userId) {
+    return new Response(
+      JSON.stringify({ error: 'User mismatch', message: 'Token user does not match request userId' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
@@ -508,23 +519,32 @@ export async function handleAddTier(
  */
 export async function handleDeleteTier(
   request: Request,
-  env: Env
+  env: Env,
+  authenticatedUserId: string
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
   const body = await request.json() as {
-    userId: string;
+    userId?: string;
     tierName: string;
     mode?: string;
     publishableKey?: string;
   };
 
-  const { userId, tierName, mode = 'test', publishableKey } = body;
+  const { tierName, mode = 'test', publishableKey } = body;
+  const userId = authenticatedUserId;
 
-  if (!userId || !tierName) {
+  if (!tierName) {
     return new Response(
-      JSON.stringify({ error: 'Missing userId or tierName' }),
+      JSON.stringify({ error: 'Missing tierName' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  if (body.userId && body.userId !== userId) {
+    return new Response(
+      JSON.stringify({ error: 'User mismatch', message: 'Token user does not match request userId' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 

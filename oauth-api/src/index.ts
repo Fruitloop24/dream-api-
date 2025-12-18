@@ -50,6 +50,7 @@ import { handleAuthorize, handleCallback, getCorsHeaders } from './routes/oauth'
 import { handleCreateProducts } from './routes/products';
 import { handleGetTiers, handleUpdateTier, handleAddTier, handleDeleteTier } from './routes/tiers';
 import { handlePromoteToLive } from './routes/promote';
+import { requireClerkUser } from './lib/auth';
 
 export default {
   /**
@@ -90,7 +91,8 @@ export default {
 
     // POST /create-products - Create new project with products and keys
     if (url.pathname === '/create-products' && request.method === 'POST') {
-      return handleCreateProducts(request, env);
+      const userId = await requireClerkUser(request, env);
+      return handleCreateProducts(request, env, userId);
     }
 
     // =========================================================================
@@ -100,22 +102,26 @@ export default {
 
     // GET /tiers - List tiers for a platform
     if (url.pathname === '/tiers' && request.method === 'GET') {
-      return handleGetTiers(request, env, url);
+      const userId = await requireClerkUser(request, env);
+      return handleGetTiers(request, env, url, userId);
     }
 
     // PUT /tiers - Update tier properties
     if (url.pathname === '/tiers' && request.method === 'PUT') {
-      return handleUpdateTier(request, env);
+      const userId = await requireClerkUser(request, env);
+      return handleUpdateTier(request, env, userId);
     }
 
     // POST /tiers/add - Add new tier to existing project
     if (url.pathname === '/tiers/add' && request.method === 'POST') {
-      return handleAddTier(request, env);
+      const userId = await requireClerkUser(request, env);
+      return handleAddTier(request, env, userId);
     }
 
     // DELETE /tiers - Remove a tier
     if (url.pathname === '/tiers' && request.method === 'DELETE') {
-      return handleDeleteTier(request, env);
+      const userId = await requireClerkUser(request, env);
+      return handleDeleteTier(request, env, userId);
     }
 
     // =========================================================================
@@ -125,7 +131,8 @@ export default {
 
     // POST /promote-to-live - Create live products from test config
     if (url.pathname === '/promote-to-live' && request.method === 'POST') {
-      return handlePromoteToLive(request, env);
+      const userId = await requireClerkUser(request, env);
+      return handlePromoteToLive(request, env, userId);
     }
 
     // =========================================================================

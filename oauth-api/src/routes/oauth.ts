@@ -23,7 +23,7 @@
  */
 
 import { Env } from '../types';
-import { ensurePlatform, ensureStripeTokenSchema } from '../lib/schema';
+import { ensurePlatform } from '../lib/schema';
 import { saveStripeToken } from '../lib/stripe';
 
 /**
@@ -115,7 +115,6 @@ export async function handleCallback(
 ): Promise<Response> {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
-  const corsHeaders = getCorsHeaders();
 
   // Validate required params
   if (!code || !state) {

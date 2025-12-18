@@ -29,22 +29,12 @@
 
 import { createClerkClient } from '@clerk/backend';
 import { Env, ProjectType } from '../types';
-import { ensurePlatform, ensureApiKeySchema, ensureTierSchema } from '../lib/schema';
+import { ensurePlatform } from '../lib/schema';
 import { upsertApiKey } from '../lib/keys';
 import { TierInput, upsertTiers } from '../lib/tiers';
 import { getCorsHeaders } from './oauth';
 
-/**
- * Helper: Get platformId from D1 database by userId
- */
-async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
-  const row = await env.DB.prepare(
-    'SELECT platformId FROM platforms WHERE clerkUserId = ?'
-  )
-    .bind(userId)
-    .first<{ platformId: string }>();
-  return row?.platformId || null;
-}
+// Note: getPlatformIdFromDb removed - using KV lookup instead
 
 /**
  * Helper: Generate a cryptographically secure API key
@@ -256,13 +246,14 @@ async function configureStripePortal(
  */
 export async function handleCreateProducts(
   request: Request,
-  env: Env
+  env: Env,
+  authenticatedUserId: string
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
   // Parse and validate request body
   const body = await request.json() as {
-    userId: string;
+    userId?: string;
     mode?: 'live' | 'test';
     projectName?: string;
     projectType?: 'saas' | 'store';
@@ -278,15 +269,24 @@ export async function handleCreateProducts(
     }>;
   };
 
-  const { userId, tiers, projectName } = body;
+  const { tiers, projectName } = body;
   const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
   const projectType: ProjectType = body.projectType === 'store' ? 'store' : 'saas';
+  const userId = authenticatedUserId;
 
   // Validate required fields
-  if (!userId || !tiers || tiers.length === 0) {
+  if (!tiers || tiers.length === 0) {
     return new Response(
-      JSON.stringify({ error: 'Missing userId or tiers' }),
+      JSON.stringify({ error: 'Missing tiers' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Optional: block mismatched userId in legacy clients
+  if (body.userId && body.userId !== userId) {
+    return new Response(
+      JSON.stringify({ error: 'User mismatch', message: 'Token user does not match request userId' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 

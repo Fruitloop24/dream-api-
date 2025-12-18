@@ -235,7 +235,6 @@ export async function handleCustomerPortal(
 		// Get user from Clerk to retrieve Stripe customer ID
 		const user = await clerkClient.users.getUser(userId);
 		const stripeCustomerId = user.publicMetadata?.stripeCustomerId as string;
-		const publishableKeyMeta = user.publicMetadata?.publishableKey as string | undefined;
 
 		if (!stripeCustomerId) {
 			return new Response(

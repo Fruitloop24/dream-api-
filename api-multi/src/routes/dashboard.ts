@@ -249,7 +249,7 @@ export async function handleDashboard(
     // Get all keys for this platform filtered by mode
     // =========================================================================
 
-    let keysQuery = `
+    const keysQuery = `
       SELECT publishableKey, secretKeyHash, createdAt, status, name,
              projectType, mode
       FROM api_keys
@@ -431,8 +431,8 @@ export async function handleDashboard(
           const meta = user.publicMetadata || {};
           customer.subscriptionId = customer.subscriptionId || (meta as any).subscriptionId || null;
           customer.stripeCustomerId = customer.stripeCustomerId || (meta as any).stripeCustomerId || null;
-        } catch (err) {
-          // Silently ignore - user might not exist in Clerk
+        } catch {
+          // User might not exist in Clerk - continue with D1 data only
           console.warn(`[Dashboard] Failed to fetch Clerk user ${customer.userId}`);
         }
       }

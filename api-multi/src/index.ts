@@ -37,6 +37,35 @@ import { handleAssetGet, handleAssetUpload } from './routes/assets';
 // Utilities
 import { validateEnv } from './utils';
 
+async function verifyEndUserToken(
+	request: Request,
+	env: Env
+): Promise<{ userId: string; plan: PlanTier; publishableKeyFromToken?: string | null }> {
+	const token =
+		request.headers.get('X-Clerk-Token') ||
+		request.headers.get('X-User-Token') ||
+		request.headers.get('X-End-User-Token');
+
+	if (!token) {
+		throw new Error('Missing end-user token (send X-Clerk-Token or X-User-Token)');
+	}
+
+	const clerkClient = createClerkClient({
+		secretKey: env.CLERK_SECRET_KEY,
+		publishableKey: env.CLERK_PUBLISHABLE_KEY,
+	});
+
+	const verified = await clerkClient.verifyToken(token, {
+		template: env.CLERK_JWT_TEMPLATE,
+	});
+
+	const publicMeta = (verified as any).publicMetadata || {};
+	const plan = (publicMeta.plan as PlanTier) || 'free';
+	const publishableKeyFromToken = (publicMeta.publishableKey as string) || null;
+
+	return { userId: verified.sub, plan, publishableKeyFromToken };
+}
+
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		// Validate environment
@@ -132,21 +161,44 @@ export default {
 				);
 			}
 
-			const { platformId, publishableKey, mode: keyMode, projectType } = authResult;
+			const { platformId, publishableKey, mode: keyMode } = authResult;
 			const mode = keyMode || (publishableKey?.startsWith('pk_test_') ? 'test' : 'live');
 
-			// Get userId from header
-			const userId = request.headers.get('X-User-Id') || 'anonymous';
+			// Verify end-user JWT to derive user + plan (stateless, no DB lookup)
+			let userId: string;
+			let plan: PlanTier;
+			let publishableKeyFromToken: string | null | undefined;
 
-			// Get plan from header
-			const planHeader = request.headers.get('X-User-Plan');
-			let plan: PlanTier = (planHeader as PlanTier) || 'free';
+			try {
+				const verified = await verifyEndUserToken(request, env);
+				userId = verified.userId;
+				plan = verified.plan;
+				publishableKeyFromToken = verified.publishableKeyFromToken;
+			} catch (tokenError: any) {
+				return new Response(
+					JSON.stringify({
+						error: 'Invalid or missing end-user token',
+						message: tokenError?.message || 'Provide X-Clerk-Token with a valid JWT',
+					}),
+					{
+						status: 401,
+						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+					}
+				);
+			}
 
-			// If no plan specified, default to free tier from config
-			if (!plan || plan === 'free') {
-				const allTiers = await getAllTiers(env, platformId, mode, publishableKey || undefined);
-				const freeTier = allTiers.find(t => t.price === 0) || allTiers[0];
-				plan = (freeTier?.id || 'free') as PlanTier;
+			// Optional safety: ensure token scope matches the project tied to the secret key
+			if (publishableKeyFromToken && publishableKeyFromToken !== publishableKey) {
+				return new Response(
+					JSON.stringify({
+						error: 'Publishable key mismatch',
+						message: 'End-user token does not match this project',
+					}),
+					{
+						status: 403,
+						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+					}
+				);
 			}
 
 			console.log(`[Auth] ✅ Verified - Platform: ${platformId}, User: ${userId}, Plan: ${plan}`);

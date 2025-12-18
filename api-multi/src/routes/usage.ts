@@ -55,7 +55,7 @@ export async function handleDataRequest(
 		.run();
 
 	// Load current usage
-	let row = await env.DB.prepare(
+	const row = await env.DB.prepare(
 		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL)'
 	)
 		.bind(platformId, userId, publishableKey)

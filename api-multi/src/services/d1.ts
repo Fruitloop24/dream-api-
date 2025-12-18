@@ -60,7 +60,7 @@ let endUserSchemaChecked = false;
 
 // ============================================================================
 // SCHEMA ENSURE FUNCTIONS
-// Add columns if missing, silently fail if they exist
+// Add columns if missing, silently ignore if they exist (ALTER TABLE throws)
 // ============================================================================
 
 /**
@@ -167,7 +167,7 @@ export async function ensureSubscriptionSchema(env: Env) {
  * Ensure end_users table exists
  * publishableKey column is created in schema
  */
-export async function ensureEndUserSchema(env: Env) {
+export async function ensureEndUserSchema(_env: Env) {
   if (endUserSchemaChecked) return;
   endUserSchemaChecked = true;
   // No additional columns needed - base schema has publishableKey

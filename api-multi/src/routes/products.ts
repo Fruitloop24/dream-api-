@@ -1,3 +1,23 @@
+/**
+ * ============================================================================
+ * PRODUCTS ROUTES - Store Mode Product & Cart Checkout
+ * ============================================================================
+ *
+ * Handles store-mode functionality: product listings and cart checkout.
+ * Products are tiers with billingMode='one_off' (vs 'subscription' for SaaS).
+ *
+ * ENDPOINTS:
+ *   GET  /api/products      - List all one-off products
+ *   POST /api/cart/checkout - Create Stripe checkout for cart items
+ *
+ * KEY LOGIC:
+ *   - soldOut is COMPUTED from inventory (inventory <= 0), not stored
+ *   - Checkout validates inventory before creating Stripe session
+ *   - Inventory decremented via webhook after successful payment
+ *
+ * ============================================================================
+ */
+
 import { Env } from '../types';
 import { getAllTiers } from '../config/configLoader';
 import { buildStripeHeaders, getDevStripeToken } from './checkout';
@@ -48,7 +68,15 @@ export async function handleGetProducts(
 }
 
 /**
- * Create a Stripe Checkout session for a cart of one-off items.
+ * Create Stripe Checkout for a cart of one-off items
+ *
+ * Validates:
+ *   - All items exist and have priceIds
+ *   - No items are sold out (inventory <= 0)
+ *   - Requested quantity doesn't exceed available inventory
+ *
+ * Returns Stripe Checkout URL. Inventory decrement happens in webhook
+ * after successful payment (not here - avoids race conditions).
  */
 export async function handleCartCheckout(
   platformId: string,

@@ -84,22 +84,24 @@ async function hashSecretKey(secretKey: string): Promise<string> {
  */
 export async function handlePromoteToLive(
   request: Request,
-  env: Env
+  env: Env,
+  authenticatedUserId: string
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders();
 
   const body = await request.json() as {
-    userId: string;
+    userId?: string;
     publishableKey?: string;  // Optional: specific test key to promote
     tiers?: any[];            // Optional: edited tiers to use instead of DB values
   };
 
-  const { userId, publishableKey: testPublishableKey, tiers: editedTiers } = body;
+  const { publishableKey: testPublishableKey, tiers: editedTiers } = body;
+  const userId = authenticatedUserId;
 
-  if (!userId) {
+  if (body.userId && body.userId !== userId) {
     return new Response(
-      JSON.stringify({ error: 'Missing userId' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: 'User mismatch', message: 'Token user does not match request userId' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
@@ -333,7 +335,7 @@ export async function handlePromoteToLive(
       if (tier.features) {
         try {
           featuresData = typeof tier.features === 'string' ? JSON.parse(tier.features) : tier.features;
-        } catch (e) {
+        } catch {
           console.warn(`[Promote] Failed to parse features for tier ${tier.name}`);
         }
       }
