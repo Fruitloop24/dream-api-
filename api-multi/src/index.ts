@@ -37,6 +37,13 @@ import { handleAssetGet, handleAssetUpload } from './routes/assets';
 // Utilities
 import { validateEnv } from './utils';
 
+/**
+ * Verify end-user JWT token (required for user-specific operations)
+ *
+ * SECURITY: No header fallback - JWT is the ONLY way to identify end-users.
+ * The plan comes from JWT's publicMetadata, set by our system during subscription.
+ * This prevents users from spoofing their plan via headers.
+ */
 async function verifyEndUserToken(
 	request: Request,
 	env: Env
@@ -47,13 +54,7 @@ async function verifyEndUserToken(
 		request.headers.get('X-End-User-Token');
 
 	if (!token) {
-		// TEMP: allow header-based fallback for testing; remove this after adding frontend token plumbing
-		const userIdFallback = request.headers.get('X-User-Id');
-		const planHeader = request.headers.get('X-User-Plan') as PlanTier | null;
-		if (userIdFallback && planHeader) {
-			return { userId: userIdFallback, plan: planHeader, publishableKeyFromToken: null };
-		}
-		throw new Error('Missing end-user token (send X-Clerk-Token or X-User-Token)');
+		throw new Error('Missing end-user token (send X-Clerk-Token with a valid JWT)');
 	}
 
 	const clerkClient = createClerkClient({
@@ -70,6 +71,23 @@ async function verifyEndUserToken(
 	const publishableKeyFromToken = (publicMeta.publishableKey as string) || null;
 
 	return { userId: verified.sub, plan, publishableKeyFromToken };
+}
+
+/**
+ * Endpoints that require end-user JWT verification
+ * These are operations where we need to know WHO the end-user is
+ */
+const ENDPOINTS_REQUIRING_USER_JWT = [
+	{ path: '/api/data', method: 'POST' },        // Usage tracking - must know real user
+	{ path: '/api/usage', method: 'GET' },        // Usage check - must know real user
+	{ path: '/api/create-checkout', method: 'POST' }, // Subscription upgrade - must know who's upgrading
+	{ path: '/api/customer-portal', method: 'POST' }, // Billing portal - must know who's managing
+];
+
+function requiresEndUserJwt(pathname: string, method: string): boolean {
+	return ENDPOINTS_REQUIRING_USER_JWT.some(
+		(ep) => ep.path === pathname && ep.method === method
+	);
 }
 
 export default {
@@ -170,147 +188,163 @@ export default {
 			const { platformId, publishableKey, mode: keyMode } = authResult;
 			const mode = keyMode || (publishableKey?.startsWith('pk_test_') ? 'test' : 'live');
 
-			// Verify end-user JWT to derive user + plan (stateless, no DB lookup)
-			let userId: string;
-			let plan: PlanTier;
-			let publishableKeyFromToken: string | null | undefined;
-
-			try {
-				const verified = await verifyEndUserToken(request, env);
-				userId = verified.userId;
-				plan = verified.plan;
-				publishableKeyFromToken = verified.publishableKeyFromToken;
-			} catch (tokenError: any) {
-				return new Response(
-					JSON.stringify({
-						error: 'Invalid or missing end-user token',
-						message: tokenError?.message || 'Provide X-Clerk-Token with a valid JWT',
-					}),
-					{
-						status: 401,
-						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-					}
-				);
-			}
-
-			// Optional safety: ensure token scope matches the project tied to the secret key
-			if (publishableKeyFromToken && publishableKeyFromToken !== publishableKey) {
-				return new Response(
-					JSON.stringify({
-						error: 'Publishable key mismatch',
-						message: 'End-user token does not match this project',
-					}),
-					{
-						status: 403,
-						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-					}
-				);
-			}
-
-			console.log(`[Auth] ✅ Verified - Platform: ${platformId}, User: ${userId}, Plan: ${plan}`);
-
-			// Create Clerk client
+			// Create Clerk client (needed for several routes)
 			const clerkClient = createClerkClient({
 				secretKey: env.CLERK_SECRET_KEY,
 				publishableKey: env.CLERK_PUBLISHABLE_KEY,
 			});
 
-			// Rate limiting
-			const rateCheck = await checkRateLimit(userId, env);
-			if (!rateCheck.allowed) {
-				return new Response(
-					JSON.stringify({
-						error: 'Rate limit exceeded',
-						message: `Maximum ${RATE_LIMIT_PER_MINUTE} requests per minute`,
-						retryAfter: 60,
-					}),
-					{
-						status: 429,
-						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
-							'Retry-After': '60',
-						},
-					}
-				);
-			}
-
-			// ====================================================================
-			// ROUTE TO HANDLERS
-			// ====================================================================
-
 			// Get publishableKey from header override or auth result
 			const overridePk = request.headers.get('X-Publishable-Key');
 			const pkForFilter = overridePk || publishableKey || null;
 
-			// Process request and track usage
-			if (url.pathname === '/api/data' && request.method === 'POST') {
-				return await handleDataRequest(userId, platformId, plan, env, corsHeaders, mode, pkForFilter);
-			}
+			// ====================================================================
+			// SK-ONLY ENDPOINTS (No end-user JWT required)
+			// These are dev operations or don't need user identity
+			// ====================================================================
 
-			// Get current usage and limits
-			if (url.pathname === '/api/usage' && request.method === 'GET') {
-				return await handleUsageCheck(userId, platformId, plan, env, corsHeaders, mode, pkForFilter);
-			}
-
-			// Dashboard aggregate
-			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
-				return await handleDashboard(env, platformId, corsHeaders, mode, pkForFilter);
-			}
-
-			// All-live totals
-			if (url.pathname === '/api/dashboard/totals' && request.method === 'GET') {
-				return await handleDashboardTotals(env, platformId, corsHeaders);
-			}
-
-			// Create Stripe Checkout session
-			if (url.pathname === '/api/create-checkout' && request.method === 'POST') {
-				const origin = request.headers.get('Origin') || '';
-				return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request, mode);
-			}
-
-			// List products
-			if (url.pathname === '/api/products' && request.method === 'GET') {
-				return await handleGetProducts(env, platformId, corsHeaders, mode, pkForFilter);
-			}
-
-			// Upload assets
-			if (url.pathname === '/api/assets' && request.method === 'POST') {
-				return await handleAssetUpload(env, platformId, corsHeaders, request);
-			}
-
-			// Serve assets
-			if (url.pathname.startsWith('/api/assets/') && request.method === 'GET') {
-				return await handleAssetGet(env, platformId, url.pathname, corsHeaders);
-			}
-
-			// Cart checkout
-			if (url.pathname === '/api/cart/checkout' && request.method === 'POST') {
-				const origin = request.headers.get('Origin') || '';
-				return await handleCartCheckout(platformId, pkForFilter || publishableKey, env, corsHeaders, origin, request, mode, pkForFilter);
-			}
-
-			// Customer portal
-			if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
-				const origin = request.headers.get('Origin') || '';
-				return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin, mode);
-			}
-
-			// Create customer
+			// Create customer - Dev is creating a customer, no JWT needed
 			if (url.pathname === '/api/customers' && request.method === 'POST') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Creating customer`);
 				return await handleCreateCustomer(platformId, publishableKey, clerkClient, env, corsHeaders, request);
 			}
 
-			// Get customer
+			// Get customer - Dev fetching customer info
 			if (url.pathname.startsWith('/api/customers/') && request.method === 'GET') {
 				const customerId = url.pathname.replace('/api/customers/', '');
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Getting customer: ${customerId}`);
 				return await handleGetCustomer(customerId, platformId, publishableKey, clerkClient, corsHeaders);
 			}
 
-			// Update customer
+			// Update customer - Dev updating customer
 			if (url.pathname.startsWith('/api/customers/') && request.method === 'PATCH') {
 				const customerId = url.pathname.replace('/api/customers/', '');
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Updating customer: ${customerId}`);
 				return await handleUpdateCustomer(customerId, platformId, publishableKey, clerkClient, corsHeaders, request);
+			}
+
+			// Dashboard - Dev viewing their own metrics
+			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Dashboard`);
+				return await handleDashboard(env, platformId, corsHeaders, mode, pkForFilter);
+			}
+
+			// Dashboard totals - Dev viewing aggregate metrics
+			if (url.pathname === '/api/dashboard/totals' && request.method === 'GET') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Dashboard totals`);
+				return await handleDashboardTotals(env, platformId, corsHeaders);
+			}
+
+			// List products - Public product catalog
+			if (url.pathname === '/api/products' && request.method === 'GET') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Products list`);
+				return await handleGetProducts(env, platformId, corsHeaders, mode, pkForFilter);
+			}
+
+			// Cart checkout - Guest checkout (email in body, no account needed)
+			if (url.pathname === '/api/cart/checkout' && request.method === 'POST') {
+				const origin = request.headers.get('Origin') || '';
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Cart checkout`);
+				return await handleCartCheckout(platformId, pkForFilter || publishableKey, env, corsHeaders, origin, request, mode, pkForFilter);
+			}
+
+			// Upload assets - Dev uploading assets
+			if (url.pathname === '/api/assets' && request.method === 'POST') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Asset upload`);
+				return await handleAssetUpload(env, platformId, corsHeaders, request);
+			}
+
+			// Serve assets (authenticated) - Already have public route above, this is for private assets
+			if (url.pathname.startsWith('/api/assets/') && request.method === 'GET') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Asset get`);
+				return await handleAssetGet(env, platformId, url.pathname, corsHeaders);
+			}
+
+			// ====================================================================
+			// JWT-REQUIRED ENDPOINTS (Need end-user identity)
+			// These operations must know WHO the end-user is
+			// ====================================================================
+
+			if (requiresEndUserJwt(url.pathname, request.method)) {
+				let userId: string;
+				let plan: PlanTier;
+				let publishableKeyFromToken: string | null | undefined;
+
+				try {
+					const verified = await verifyEndUserToken(request, env);
+					userId = verified.userId;
+					plan = verified.plan;
+					publishableKeyFromToken = verified.publishableKeyFromToken;
+				} catch (tokenError: any) {
+					return new Response(
+						JSON.stringify({
+							error: 'Invalid or missing end-user token',
+							message: tokenError?.message || 'Provide X-Clerk-Token with a valid JWT',
+						}),
+						{
+							status: 401,
+							headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+						}
+					);
+				}
+
+				// Security: ensure token's publishableKey matches the secret key's project
+				if (publishableKeyFromToken && publishableKeyFromToken !== publishableKey) {
+					return new Response(
+						JSON.stringify({
+							error: 'Publishable key mismatch',
+							message: 'End-user token does not match this project',
+						}),
+						{
+							status: 403,
+							headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+						}
+					);
+				}
+
+				console.log(`[Auth] ✅ JWT verified - Platform: ${platformId}, User: ${userId}, Plan: ${plan}`);
+
+				// Rate limiting (per user)
+				const rateCheck = await checkRateLimit(userId, env);
+				if (!rateCheck.allowed) {
+					return new Response(
+						JSON.stringify({
+							error: 'Rate limit exceeded',
+							message: `Maximum ${RATE_LIMIT_PER_MINUTE} requests per minute`,
+							retryAfter: 60,
+						}),
+						{
+							status: 429,
+							headers: {
+								...corsHeaders,
+								'Content-Type': 'application/json',
+								'Retry-After': '60',
+							},
+						}
+					);
+				}
+
+				// Process request and track usage
+				if (url.pathname === '/api/data' && request.method === 'POST') {
+					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, mode, pkForFilter);
+				}
+
+				// Get current usage and limits
+				if (url.pathname === '/api/usage' && request.method === 'GET') {
+					return await handleUsageCheck(userId, platformId, plan, env, corsHeaders, mode, pkForFilter);
+				}
+
+				// Create Stripe Checkout session (subscription upgrade)
+				if (url.pathname === '/api/create-checkout' && request.method === 'POST') {
+					const origin = request.headers.get('Origin') || '';
+					return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request, mode);
+				}
+
+				// Customer portal (billing management)
+				if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
+					const origin = request.headers.get('Origin') || '';
+					return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin, mode);
+				}
 			}
 
 			// 404
@@ -319,8 +353,8 @@ export default {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});
 		} catch (error) {
-			console.error('Token verification failed:', error);
-			return new Response(JSON.stringify({ error: 'Invalid token' }), {
+			console.error('API key verification failed:', error);
+			return new Response(JSON.stringify({ error: 'Invalid API key' }), {
 				status: 401,
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});

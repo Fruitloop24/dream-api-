@@ -69,13 +69,12 @@ Response:
 
 ### 2. Track Usage
 
-Call this on every API request to track and enforce limits:
+Call this on every API request to track and enforce limits. **Requires end-user JWT** (from Clerk after user logs in):
 
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_abc123" \
-  -H "X-User-Plan: free"
+  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 Success Response:
@@ -99,19 +98,22 @@ Limit Reached (403):
 
 ### 3. Check Usage
 
+**Requires end-user JWT:**
+
 ```bash
 curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_abc123" \
-  -H "X-User-Plan: free"
+  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 ### 4. Create Upgrade Checkout
 
+**Requires end-user JWT:**
+
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_abc123" \
+  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
   -H "Origin: https://yourapp.com" \
   -d '{"tier": "pro"}'
@@ -121,7 +123,7 @@ Or with explicit priceId:
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_abc123" \
+  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
   -H "Origin: https://yourapp.com" \
   -d '{"priceId": "price_xxx"}'
@@ -134,10 +136,12 @@ Response:
 
 ### 5. Customer Portal (Billing Management)
 
+**Requires end-user JWT:**
+
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-portal \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_abc123" \
+  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Origin: https://yourapp.com"
 ```
 
@@ -177,18 +181,21 @@ curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
   -H "X-Publishable-Key: pk_test_xxx"
 ```
 
-## Required Headers Summary
+## Authentication Summary
 
-| Endpoint | Required Headers |
-|----------|------------------|
-| All endpoints | `Authorization: Bearer sk_xxx` |
-| `/api/data`, `/api/usage` | + `X-User-Id`, `X-User-Plan` *(temp fallback while end-user JWT wiring is added)* |
-| `/api/create-checkout` | + `X-User-Id`, `Origin` |
-| `/api/customer-portal` | + `X-User-Id`, `Origin` |
-| `/api/cart/checkout` | + `Origin` |
-| `/api/dashboard` | + `X-Publishable-Key` |
+| Endpoint | Required Auth | Notes |
+|----------|---------------|-------|
+| `POST /api/customers` | SK only | Dev creating a new customer |
+| `GET /api/products` | SK only | Public product catalog |
+| `POST /api/cart/checkout` | SK + Origin | Guest checkout |
+| `GET /api/dashboard` | SK + X-Publishable-Key | Dev metrics |
+| `POST /api/data` | SK + JWT | Usage tracking - needs real user identity |
+| `GET /api/usage` | SK + JWT | Usage check - needs real user identity |
+| `POST /api/create-checkout` | SK + JWT + Origin | Subscription upgrade |
+| `POST /api/customer-portal` | SK + JWT + Origin | Billing management |
 
-> TODO: Enforce end-user Clerk JWT on `/api/data` and `/api/usage` (drop the header fallback once frontend sends `X-Clerk-Token`).
+**SK** = Secret key (`Authorization: Bearer sk_xxx`)
+**JWT** = End-user Clerk token (`X-Clerk-Token: eyJ...`)
 
 ## Local Development
 

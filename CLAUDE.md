@@ -59,28 +59,29 @@ curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customers \
 Response: `{ "success": true, "customer": { "id": "user_xxx", "email": "...", "plan": "free" } }`
 
 #### POST /api/data - Track usage + enforce limits
+**Requires:** SK + End-user JWT
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_xxx" \
-  -H "X-User-Plan: free"
+  -H "X-Clerk-Token: eyJhbG..."
 ```
 Success: `{ "success": true, "usage": { "count": 1, "limit": 100, "plan": "free" } }`
 Limit hit (403): `{ "error": "Tier limit reached", "usageCount": 100, "limit": 100 }`
 
 #### GET /api/usage - Check current usage
+**Requires:** SK + End-user JWT
 ```bash
 curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_xxx" \
-  -H "X-User-Plan: free"
+  -H "X-Clerk-Token: eyJhbG..."
 ```
 
 #### POST /api/create-checkout - Subscription upgrade
+**Requires:** SK + End-user JWT
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_xxx" \
+  -H "X-Clerk-Token: eyJhbG..." \
   -H "Content-Type: application/json" \
   -H "Origin: https://yourapp.com" \
   -d '{"tier": "pro"}'
@@ -89,10 +90,11 @@ Or with priceId: `-d '{"priceId": "price_xxx"}'`
 Response: `{ "url": "https://checkout.stripe.com/..." }`
 
 #### POST /api/customer-portal - Billing portal
+**Requires:** SK + End-user JWT
 ```bash
 curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-portal \
   -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-User-Id: user_xxx" \
+  -H "X-Clerk-Token: eyJhbG..." \
   -H "Origin: https://yourapp.com"
 ```
 
@@ -201,13 +203,30 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 | Usage wrong test/live | Filter queries by `publishableKey` not just `platformId` |
 | Limit always 0 | Check `X-User-Plan` header matches tier name in `tiers` table |
 
-> TODO: Temporarily allowing header-based `X-User-Id` / `X-User-Plan` when no end-user JWT is provided in api-multi. Remove this fallback and require Clerk JWT once frontend plumbing is in place.
+## Authentication Model (api-multi)
 
-## Testing auth (api-multi)
+Two-layer auth model for security:
 
-- Preferred: send end-user Clerk JWT in `X-Clerk-Token` (or `X-User-Token` / `X-End-User-Token`) with your secret key.
-- Temp fallback (testing only): `X-User-Id` + `X-User-Plan` accepted if no token is present. Remove this once frontend/SDK sends the token.
-- Clerk quotas can block new user creation (`user quota exceeded`); clear old test users or raise quota to test customer creation.
+| Endpoint | Auth Required | Why |
+|----------|---------------|-----|
+| `POST /api/customers` | SK only | Dev creating customer - no user exists yet |
+| `GET /api/customers/:id` | SK only | Dev fetching customer info |
+| `PATCH /api/customers/:id` | SK only | Dev updating customer |
+| `GET /api/products` | SK only | Public product catalog |
+| `POST /api/cart/checkout` | SK only | Guest checkout (email in body) |
+| `GET /api/dashboard` | SK only | Dev viewing their own metrics |
+| `POST /api/assets` | SK only | Dev uploading assets |
+| `POST /api/data` | SK + JWT | Usage tracking - must verify real user identity |
+| `GET /api/usage` | SK + JWT | Usage check - must verify real user identity |
+| `POST /api/create-checkout` | SK + JWT | Subscription upgrade - must verify who's upgrading |
+| `POST /api/customer-portal` | SK + JWT | Billing portal - must verify who's managing |
+
+**Security notes:**
+- SK (secret key) = "I am developer X" - proves dev identity
+- JWT (end-user token) = "I am end-user Y on dev X's platform" - proves user identity + plan
+- Plan is in JWT's `publicMetadata.plan` - set by system during subscription, cannot be spoofed
+- `publishableKey` in JWT must match the SK's project (prevents cross-project attacks)
+- Clerk quotas can block new user creation (`user quota exceeded`); clear old test users or raise quota to test.
 
 ## What's Working (Dec 2025)
 
