@@ -201,6 +201,14 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 | Usage wrong test/live | Filter queries by `publishableKey` not just `platformId` |
 | Limit always 0 | Check `X-User-Plan` header matches tier name in `tiers` table |
 
+> TODO: Temporarily allowing header-based `X-User-Id` / `X-User-Plan` when no end-user JWT is provided in api-multi. Remove this fallback and require Clerk JWT once frontend plumbing is in place.
+
+## Testing auth (api-multi)
+
+- Preferred: send end-user Clerk JWT in `X-Clerk-Token` (or `X-User-Token` / `X-End-User-Token`) with your secret key.
+- Temp fallback (testing only): `X-User-Id` + `X-User-Plan` accepted if no token is present. Remove this once frontend/SDK sends the token.
+- Clerk quotas can block new user creation (`user quota exceeded`); clear old test users or raise quota to test customer creation.
+
 ## What's Working (Dec 2025)
 
 - [x] SaaS flow: signup → usage tracking → limits → checkout → subscription

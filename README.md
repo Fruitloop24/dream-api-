@@ -182,11 +182,13 @@ curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
 | Endpoint | Required Headers |
 |----------|------------------|
 | All endpoints | `Authorization: Bearer sk_xxx` |
-| `/api/data`, `/api/usage` | + `X-User-Id`, `X-User-Plan` |
+| `/api/data`, `/api/usage` | + `X-User-Id`, `X-User-Plan` *(temp fallback while end-user JWT wiring is added)* |
 | `/api/create-checkout` | + `X-User-Id`, `Origin` |
 | `/api/customer-portal` | + `X-User-Id`, `Origin` |
 | `/api/cart/checkout` | + `Origin` |
 | `/api/dashboard` | + `X-Publishable-Key` |
+
+> TODO: Enforce end-user Clerk JWT on `/api/data` and `/api/usage` (drop the header fallback once frontend sends `X-Clerk-Token`).
 
 ## Local Development
 
