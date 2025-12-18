@@ -69,78 +69,94 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // =========================================================================
-    // OAUTH ROUTES
-    // Handle Stripe Connect authorization flow
-    // =========================================================================
+    try {
+      // =========================================================================
+      // OAUTH ROUTES
+      // Handle Stripe Connect authorization flow
+      // =========================================================================
 
-    // GET /authorize - Start OAuth flow
-    if (url.pathname === '/authorize' && request.method === 'GET') {
-      return handleAuthorize(request, env, url);
+      // GET /authorize - Start OAuth flow
+      if (url.pathname === '/authorize' && request.method === 'GET') {
+        return handleAuthorize(request, env, url);
+      }
+
+      // GET /callback - Stripe redirects here after authorization
+      if (url.pathname === '/callback' && request.method === 'GET') {
+        return handleCallback(request, env, url);
+      }
+
+      // =========================================================================
+      // PRODUCT CREATION
+      // Create Stripe products and generate API keys
+      // =========================================================================
+
+      // POST /create-products - Create new project with products and keys
+      if (url.pathname === '/create-products' && request.method === 'POST') {
+        const userId = await requireClerkUser(request, env);
+        return handleCreateProducts(request, env, userId);
+      }
+
+      // =========================================================================
+      // TIER MANAGEMENT
+      // CRUD operations on tiers (no key changes)
+      // =========================================================================
+
+      // GET /tiers - List tiers for a platform
+      if (url.pathname === '/tiers' && request.method === 'GET') {
+        const userId = await requireClerkUser(request, env);
+        return handleGetTiers(request, env, url, userId);
+      }
+
+      // PUT /tiers - Update tier properties
+      if (url.pathname === '/tiers' && request.method === 'PUT') {
+        const userId = await requireClerkUser(request, env);
+        return handleUpdateTier(request, env, userId);
+      }
+
+      // POST /tiers/add - Add new tier to existing project
+      if (url.pathname === '/tiers/add' && request.method === 'POST') {
+        const userId = await requireClerkUser(request, env);
+        return handleAddTier(request, env, userId);
+      }
+
+      // DELETE /tiers - Remove a tier
+      if (url.pathname === '/tiers' && request.method === 'DELETE') {
+        const userId = await requireClerkUser(request, env);
+        return handleDeleteTier(request, env, userId);
+      }
+
+      // =========================================================================
+      // PROMOTION
+      // Take test products live
+      // =========================================================================
+
+      // POST /promote-to-live - Create live products from test config
+      if (url.pathname === '/promote-to-live' && request.method === 'POST') {
+        const userId = await requireClerkUser(request, env);
+        return handlePromoteToLive(request, env, userId);
+      }
+
+      // =========================================================================
+      // 404 - Route not found
+      // =========================================================================
+      return new Response(
+        JSON.stringify({ error: 'Not Found', path: url.pathname }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } catch (error: any) {
+      // Ensure all errors return CORS headers so browser can read the error
+      console.error('[oauth-api] Error:', error.message || error);
+      return new Response(
+        JSON.stringify({
+          error: 'Authentication failed',
+          message: error.message || 'Unknown error'
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
-
-    // GET /callback - Stripe redirects here after authorization
-    if (url.pathname === '/callback' && request.method === 'GET') {
-      return handleCallback(request, env, url);
-    }
-
-    // =========================================================================
-    // PRODUCT CREATION
-    // Create Stripe products and generate API keys
-    // =========================================================================
-
-    // POST /create-products - Create new project with products and keys
-    if (url.pathname === '/create-products' && request.method === 'POST') {
-      const userId = await requireClerkUser(request, env);
-      return handleCreateProducts(request, env, userId);
-    }
-
-    // =========================================================================
-    // TIER MANAGEMENT
-    // CRUD operations on tiers (no key changes)
-    // =========================================================================
-
-    // GET /tiers - List tiers for a platform
-    if (url.pathname === '/tiers' && request.method === 'GET') {
-      const userId = await requireClerkUser(request, env);
-      return handleGetTiers(request, env, url, userId);
-    }
-
-    // PUT /tiers - Update tier properties
-    if (url.pathname === '/tiers' && request.method === 'PUT') {
-      const userId = await requireClerkUser(request, env);
-      return handleUpdateTier(request, env, userId);
-    }
-
-    // POST /tiers/add - Add new tier to existing project
-    if (url.pathname === '/tiers/add' && request.method === 'POST') {
-      const userId = await requireClerkUser(request, env);
-      return handleAddTier(request, env, userId);
-    }
-
-    // DELETE /tiers - Remove a tier
-    if (url.pathname === '/tiers' && request.method === 'DELETE') {
-      const userId = await requireClerkUser(request, env);
-      return handleDeleteTier(request, env, userId);
-    }
-
-    // =========================================================================
-    // PROMOTION
-    // Take test products live
-    // =========================================================================
-
-    // POST /promote-to-live - Create live products from test config
-    if (url.pathname === '/promote-to-live' && request.method === 'POST') {
-      const userId = await requireClerkUser(request, env);
-      return handlePromoteToLive(request, env, userId);
-    }
-
-    // =========================================================================
-    // 404 - Route not found
-    // =========================================================================
-    return new Response(
-      JSON.stringify({ error: 'Not Found', path: url.pathname }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   },
 };
