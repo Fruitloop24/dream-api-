@@ -167,7 +167,8 @@ export async function handleDashboard(
       productId: t.productId,
       popular: !!t.popular,
       inventory: t.inventory ?? null,
-      soldOut: !!t.soldOut || (typeof t.inventory === 'number' && t.inventory <= 0),
+      // soldOut is computed from inventory, not stored - so restocking works
+      soldOut: typeof t.inventory === 'number' && t.inventory <= 0,
       publishableKey: t.publishableKey,
       projectType: t.projectType,
     }));

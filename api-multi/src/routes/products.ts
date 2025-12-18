@@ -34,7 +34,8 @@ export async function handleGetProducts(
       currency: 'usd',
       imageUrl: t.imageUrl || null,
       inventory: typeof t.inventory === 'number' ? t.inventory : null,
-      soldOut: t.soldOut || (typeof t.inventory === 'number' ? t.inventory <= 0 : false),
+      // soldOut computed from inventory - not stored, so restocking works
+      soldOut: typeof t.inventory === 'number' ? t.inventory <= 0 : false,
       priceId: t.priceId,
       productId: t.productId,
       features: Array.isArray(t.features) ? t.features : t.features ? [t.features] : [],
