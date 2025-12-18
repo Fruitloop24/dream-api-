@@ -103,13 +103,16 @@ export default function ApiTierConfig() {
   const loadExistingTiers = async () => {
     setLoadingTiers(true);
     try {
+      const token = await getToken({ template: 'dream-api' });
       const params = new URLSearchParams({
         userId: user?.id || '',
         mode,
         ...(publishableKeyParam ? { publishableKey: publishableKeyParam } : {}),
         ...(projectTypeFromUrl ? { projectType: projectTypeFromUrl } : {}),
       });
-      const response = await fetch(`${OAUTH_API}/tiers?${params.toString()}`);
+      const response = await fetch(`${OAUTH_API}/tiers?${params.toString()}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (response.ok) {
         const data = await response.json();
         const tiers = data.tiers || [];
@@ -301,6 +304,9 @@ export default function ApiTierConfig() {
 
   // Handle creating new project
   const handleCreate = async () => {
+    const token = await getToken({ template: 'dream-api' });
+    if (!token) throw new Error('Not authenticated');
+
     // Build tiers array based on active tab
     let tiers: any[] = [];
 
@@ -337,7 +343,10 @@ export default function ApiTierConfig() {
 
     const response = await fetch(`${OAUTH_API}/create-products`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         userId: user?.id,
         tiers,
@@ -355,6 +364,9 @@ export default function ApiTierConfig() {
 
   // Handle updating existing tiers
   const handleUpdate = async () => {
+    const token = await getToken({ template: 'dream-api' });
+    if (!token) throw new Error('Not authenticated');
+
     const currentTiers = activeTab === 'saas' ? saasTiers : storeProducts;
     const originalNames = new Set(originalTiers.map(t => t.name));
     const currentNames = new Set(currentTiers.map(t => t.name));
@@ -392,7 +404,10 @@ export default function ApiTierConfig() {
 
       await fetch(`${OAUTH_API}/tiers`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           userId: user?.id,
           tierName: tier.name,
@@ -408,7 +423,10 @@ export default function ApiTierConfig() {
     for (const tier of toAdd) {
       await fetch(`${OAUTH_API}/tiers/add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           userId: user?.id,
           mode,
@@ -434,7 +452,10 @@ export default function ApiTierConfig() {
     for (const tier of toDelete) {
       await fetch(`${OAUTH_API}/tiers`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           userId: user?.id,
           tierName: tier.name,
