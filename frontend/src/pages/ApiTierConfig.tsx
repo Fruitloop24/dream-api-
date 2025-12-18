@@ -307,13 +307,11 @@ export default function ApiTierConfig() {
     // Try template first, fall back to default token
     let token = await getToken({ template: 'dream-api' });
     if (!token) {
-      console.log('[Auth] Template token null, trying default...');
       token = await getToken();
     }
     if (!token) {
       throw new Error('Not authenticated - no token available');
     }
-    console.log('[Auth] Got token:', token.substring(0, 30) + '...');
 
     // Build tiers array based on active tab
     let tiers: any[] = [];
