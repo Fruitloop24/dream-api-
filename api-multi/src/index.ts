@@ -47,6 +47,12 @@ async function verifyEndUserToken(
 		request.headers.get('X-End-User-Token');
 
 	if (!token) {
+		// TEMP: allow header-based fallback for testing; remove this after adding frontend token plumbing
+		const userIdFallback = request.headers.get('X-User-Id');
+		const planHeader = request.headers.get('X-User-Plan') as PlanTier | null;
+		if (userIdFallback && planHeader) {
+			return { userId: userIdFallback, plan: planHeader, publishableKeyFromToken: null };
+		}
 		throw new Error('Missing end-user token (send X-Clerk-Token or X-User-Token)');
 	}
 
