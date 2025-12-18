@@ -157,23 +157,20 @@ All on Cloudflare Workers. Auto-scaling. Global edge. ~50ms cold start.
 | Auth | Clerk | JWT tokens, handles all credentials |
 | Assets | R2 | Product images |
 
-## Limitations (Honest Assessment)
+## What's Battle-Tested (Dec 2025)
 
-**Not production-hardened yet:**
-- No SDK package (devs copy-paste fetch calls for now)
-- Live mode (test → production) flow incomplete
-- Key rotation exists but untested
-- Dashboard metrics are basic
+**Full flow working:**
+- Create customer → track usage → hit limit → checkout → subscription → JWT updated
+- Test mode → Edit tiers → Promote to Live (separate Stripe products)
+- Regenerate secret key (instant, old key dies, same publishable key)
+- Delete entire project (nukes test+live keys, all data, R2 assets)
+- Dashboard shows real metrics: MRR, active subs, usage, customers
+- Response times: ~300-500ms edge-to-edge
 
-**Architectural constraints:**
-- KV writes on every request (rate limiting cost)
-- D1 has ~10ms read latency (not Redis-fast)
-- Workers have 30s CPU limit (fine for API calls)
-- No WebSocket support (HTTP only)
-
-**Business constraints:**
-- Stripe Connect only (no PayPal, no crypto)
-- Usage limits are per-billing-period only
+**Limitations (Honest):**
+- No SDK package yet (devs copy-paste fetch calls)
+- D1 has ~10ms read latency (not Redis-fast, but fine)
+- Stripe Connect only (no PayPal, crypto)
 - Store mode has no product variants
 - No multi-currency yet
 

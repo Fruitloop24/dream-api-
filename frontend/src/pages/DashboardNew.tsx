@@ -60,6 +60,9 @@ export default function Dashboard() {
   const [showSecret, setShowSecret] = useState(false);
   const [keyActionLoading, setKeyActionLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+  const [customerPage, setCustomerPage] = useState(0);
+  const CUSTOMERS_PER_PAGE = 10;
 
   // Selected project
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
@@ -272,7 +275,6 @@ const loadProducts = async (project: Project, sk: string) => {
   const handleRegenerateSecret = async () => {
     if (!selectedProject) return;
     const mode = selectedProject.mode;
-    if (!confirm(`This will generate a new SECRET key for your ${mode.toUpperCase()} environment.\n\nYour publishable key stays the same.\nYour old secret key will stop working immediately.\n\nContinue?`)) return;
     setKeyActionLoading(true);
     try {
       const token = await getToken({ template: 'dream-api' });
@@ -286,7 +288,12 @@ const loadProducts = async (project: Project, sk: string) => {
       });
       if (res.ok) {
         const data = await res.json();
-        alert(`New ${mode.toUpperCase()} secret key generated!\n\n${data.secretKey}\n\nSAVE THIS - you won't see it again!\n\nYour publishable key is unchanged.`);
+        // Copy to clipboard automatically
+        try {
+          await navigator.clipboard.writeText(data.secretKey);
+        } catch {}
+        alert(`✓ New ${mode.toUpperCase()} secret key generated!\n\n${data.secretKey}\n\n(Copied to clipboard)\n\nUpdate your backend's SECRET_KEY env var.\nYour publishable key and all integrations remain unchanged.`);
+        setShowRegenConfirm(false);
         // Reload credentials to get new secret
         await loadCredentials();
       } else {
@@ -438,8 +445,45 @@ const loadProducts = async (project: Project, sk: string) => {
             + New Project
           </button>
 
+          {/* Delete Project - Top Level */}
+          {selectedProject && !showDeleteConfirm && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-red-400 hover:bg-red-900/20 border border-gray-700 hover:border-red-800 rounded transition-colors"
+            >
+              Delete Project
+            </button>
+          )}
+
           {loadingDashboard && <span className="text-xs text-gray-500">Loading...</span>}
         </div>
+
+        {/* Delete Confirmation Banner */}
+        {showDeleteConfirm && selectedProject && (
+          <div className="mb-4 flex items-center gap-3 bg-red-900/20 border border-red-800 rounded-lg p-4">
+            <span className="text-red-300 font-medium">
+              Delete "{selectedProject.name}" permanently?
+            </span>
+            <span className="text-red-400/70 text-sm">
+              This removes both Test + Live keys, all customer data, usage, and assets.
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={handleDeleteProject}
+                disabled={keyActionLoading}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded font-medium text-sm"
+              >
+                {keyActionLoading ? 'Deleting...' : 'Yes, Delete Forever'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Totals View */}
         {showTotals ? (
@@ -450,13 +494,20 @@ const loadProducts = async (project: Project, sk: string) => {
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">API Keys</h3>
-                {selectedProject.mode === 'test' && (
+{/* Only show "Edit & Go Live" if test mode AND no live version exists */}
+                {selectedProject.mode === 'test' && !projects.some(p => p.name === selectedProject.name && p.mode === 'live') && (
                   <button
                     onClick={() => navigate(`/api-tier-config?promote=true&mode=test&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}&projectName=${encodeURIComponent(selectedProject.name)}`)}
                     className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold"
                   >
                     Edit & Go Live
                   </button>
+                )}
+                {/* Show badge if already live */}
+                {selectedProject.mode === 'test' && projects.some(p => p.name === selectedProject.name && p.mode === 'live') && (
+                  <span className="px-3 py-1.5 bg-green-900/30 border border-green-700 rounded text-sm text-green-300">
+                    ✓ Live version exists
+                  </span>
                 )}
               </div>
 
@@ -504,38 +555,55 @@ const loadProducts = async (project: Project, sk: string) => {
                 </div>
               </div>
 
-              {/* Key Actions */}
-              <div className="flex items-center gap-3 pt-3 border-t border-gray-700">
-                <button
-                  onClick={handleRegenerateSecret}
-                  disabled={keyActionLoading}
-                  className="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded font-medium"
-                >
-                  {keyActionLoading ? 'Working...' : `Regen ${selectedProject.mode === 'test' ? 'Test' : 'Live'} Secret`}
-                </button>
-                {!showDeleteConfirm ? (
+              {/* Key Rotation */}
+              <div className="pt-3 border-t border-gray-700">
+                {!showRegenConfirm ? (
                   <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded"
+                    onClick={() => setShowRegenConfirm(true)}
+                    className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded font-medium flex items-center gap-2"
                   >
-                    Delete Project
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Rotate {selectedProject.mode === 'test' ? 'Test' : 'Live'} Secret
                   </button>
                 ) : (
-                  <div className="flex items-center gap-2 bg-red-900/20 border border-red-800 rounded p-2">
-                    <span className="text-xs text-red-300">Delete "{selectedProject.name}" permanently? (Test + Live keys, all data)</span>
-                    <button
-                      onClick={handleDeleteProject}
-                      disabled={keyActionLoading}
-                      className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded font-medium"
-                    >
-                      {keyActionLoading ? 'Deleting...' : 'Yes, Delete Forever'}
-                    </button>
-                    <button
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded"
-                    >
-                      Cancel
-                    </button>
+                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-blue-200 mb-1">Rotate Secret Key</h4>
+                        <p className="text-sm text-blue-300/80 mb-3">
+                          This generates a new secret key for your <strong>{selectedProject.mode}</strong> environment.
+                          Your publishable key stays the same, so your frontend code won't break.
+                        </p>
+                        <ul className="text-xs text-blue-300/70 mb-3 space-y-1">
+                          <li>✓ Publishable key unchanged - frontend keeps working</li>
+                          <li>✓ Products & tiers unchanged - no Stripe reconfiguration</li>
+                          <li>✓ Customer data preserved - subscriptions continue</li>
+                          <li>• Only update: your backend's <code className="bg-blue-900/50 px-1 rounded">SECRET_KEY</code> env var</li>
+                        </ul>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleRegenerateSecret}
+                            disabled={keyActionLoading}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded font-medium text-sm"
+                          >
+                            {keyActionLoading ? 'Generating...' : 'Generate New Secret'}
+                          </button>
+                          <button
+                            onClick={() => setShowRegenConfirm(false)}
+                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -617,17 +685,20 @@ const loadProducts = async (project: Project, sk: string) => {
                 {/* Customers */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">Customers</h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold">Customers</h3>
+                      <span className="text-sm text-gray-500">({filteredCustomers.length})</span>
+                    </div>
                     <div className="flex items-center gap-3">
                       <input
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => { setSearch(e.target.value); setCustomerPage(0); }}
                         placeholder="Search email or ID"
                         className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm w-48"
                       />
                       <select
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                        onChange={(e) => { setStatusFilter(e.target.value as any); setCustomerPage(0); }}
                         className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm"
                       >
                         <option value="all">All</option>
@@ -648,7 +719,9 @@ const loadProducts = async (project: Project, sk: string) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredCustomers.map((c: any) => (
+                      {filteredCustomers
+                        .slice(customerPage * CUSTOMERS_PER_PAGE, (customerPage + 1) * CUSTOMERS_PER_PAGE)
+                        .map((c: any) => (
                         <tr
                           key={c.userId}
                           className="border-b border-gray-800 hover:bg-gray-900/50 cursor-pointer"
@@ -681,6 +754,34 @@ const loadProducts = async (project: Project, sk: string) => {
                     </tbody>
                   </table>
 
+                  {/* Pagination */}
+                  {filteredCustomers.length > CUSTOMERS_PER_PAGE && (
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-700 mt-4">
+                      <span className="text-sm text-gray-500">
+                        Showing {customerPage * CUSTOMERS_PER_PAGE + 1}-{Math.min((customerPage + 1) * CUSTOMERS_PER_PAGE, filteredCustomers.length)} of {filteredCustomers.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCustomerPage(p => Math.max(0, p - 1))}
+                          disabled={customerPage === 0}
+                          className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-400">
+                          Page {customerPage + 1} of {Math.ceil(filteredCustomers.length / CUSTOMERS_PER_PAGE)}
+                        </span>
+                        <button
+                          onClick={() => setCustomerPage(p => p + 1)}
+                          disabled={(customerPage + 1) * CUSTOMERS_PER_PAGE >= filteredCustomers.length}
+                          className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {selectedCustomer && (
                     <CustomerDetail customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onCopy={copyToClipboard} />
                   )}
@@ -691,52 +792,190 @@ const loadProducts = async (project: Project, sk: string) => {
             {/* Store Content */}
             {selectedProject.type === 'store' && (
               <>
-                {/* Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {/* Sales Metrics Row */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
                   <MetricCard label="Total Sales" value={metrics.storeSalesCount || 0} />
                   <MetricCard label="Revenue" value={`$${((metrics.storeTotalRevenue || 0) / 100).toFixed(2)}`} />
-                  <MetricCard label="In Stock" value={metrics.totalInventory || products.filter((p: any) => !p.soldOut && p.inventory !== null).reduce((sum: number, p: any) => sum + (p.inventory || 0), 0)} />
-                  <MetricCard label="Low Stock" value={metrics.lowStockProducts || 0} />
+                  <MetricCard label="Avg Order" value={metrics.storeSalesCount > 0 ? `$${((metrics.storeTotalRevenue || 0) / metrics.storeSalesCount / 100).toFixed(2)}` : '$0.00'} />
                 </div>
 
-                {/* Products Grid */}
+                {/* Products Table */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <h3 className="text-lg font-bold mb-4">Products ({products.length})</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold">Products</h3>
+                      <span className="text-sm text-gray-500">({products.length})</span>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/api-tier-config?edit=true&mode=${selectedProject.mode}&projectType=store&pk=${selectedProject.publishableKey}`)}
+                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium"
+                    >
+                      Edit Products
+                    </button>
+                  </div>
+
                   {products.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {products.map((p: any) => (
-                        <div key={p.priceId} className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-                          {p.imageUrl && (
-                            <div className="h-24 bg-gray-800">
-                              <img src={p.imageUrl} alt={p.displayName} className="w-full h-full object-cover" />
-                            </div>
-                          )}
-                          <div className="p-3">
-                            <h4 className="font-medium text-sm truncate">{p.displayName || p.name}</h4>
-                            <div className="flex items-center justify-between mt-1">
-                              <span className="text-sm font-bold text-green-400">${(p.price || 0).toFixed(2)}</span>
-                              {p.soldOut ? (
-                                <span className="text-xs px-1.5 py-0.5 bg-red-900/50 border border-red-700 rounded text-red-200">
-                                  Out
-                                </span>
-                              ) : p.inventory !== null ? (
-                                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                  p.inventory <= 5
-                                    ? 'bg-amber-900/50 border border-amber-700 text-amber-200'
-                                    : 'bg-gray-800 border border-gray-700 text-gray-400'
-                                }`}>
-                                  {p.inventory}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-gray-500">∞</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-gray-400 border-b border-gray-700">
+                            <th className="py-2 pr-4 w-16">Image</th>
+                            <th className="py-2 pr-4">Name</th>
+                            <th className="py-2 pr-4">Price</th>
+                            <th className="py-2 pr-4">Price ID</th>
+                            <th className="py-2 pr-4">Product ID</th>
+                            <th className="py-2 pr-4 text-right">Stock</th>
+                            <th className="py-2 pr-4">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {products.map((p: any) => (
+                            <tr key={p.priceId} className="border-b border-gray-800 hover:bg-gray-900/50">
+                              <td className="py-3 pr-4">
+                                {p.imageUrl ? (
+                                  <img src={p.imageUrl} alt={p.displayName} className="w-12 h-12 object-cover rounded" />
+                                ) : (
+                                  <div className="w-12 h-12 bg-gray-700 rounded flex items-center justify-center text-gray-500">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-3 pr-4 font-medium">{p.displayName || p.name}</td>
+                              <td className="py-3 pr-4">
+                                <span className="text-green-400 font-bold">${(p.price || 0).toFixed(2)}</span>
+                              </td>
+                              <td className="py-3 pr-4">
+                                <div className="flex items-center gap-1">
+                                  <code className="text-xs text-gray-400 font-mono truncate max-w-[120px]">{p.priceId}</code>
+                                  <button
+                                    onClick={() => copyToClipboard(p.priceId)}
+                                    className="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0"
+                                  >
+                                    Copy
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="py-3 pr-4">
+                                <div className="flex items-center gap-1">
+                                  <code className="text-xs text-gray-400 font-mono truncate max-w-[120px]">{p.productId}</code>
+                                  <button
+                                    onClick={() => copyToClipboard(p.productId)}
+                                    className="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0"
+                                  >
+                                    Copy
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="py-3 pr-4 text-right">
+                                {p.inventory !== null ? (
+                                  <span className={`font-mono ${p.inventory <= 5 ? 'text-amber-400' : 'text-gray-300'}`}>
+                                    {p.inventory}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500">∞</span>
+                                )}
+                              </td>
+                              <td className="py-3 pr-4">
+                                {p.soldOut ? (
+                                  <span className="px-2 py-1 text-xs bg-red-900/50 border border-red-700 rounded text-red-200">
+                                    Sold Out
+                                  </span>
+                                ) : p.inventory !== null && p.inventory <= 5 ? (
+                                  <span className="px-2 py-1 text-xs bg-amber-900/50 border border-amber-700 rounded text-amber-200">
+                                    Low Stock
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-1 text-xs bg-green-900/50 border border-green-700 rounded text-green-200">
+                                    In Stock
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500">No products yet.</p>
+                  )}
+                </div>
+
+                {/* Orders / Customers */}
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold">Orders</h3>
+                      <span className="text-sm text-gray-500">
+                        ({(webhook.recent || []).filter((e: any) => e.type === 'checkout.session.completed' && e.payload?.data?.object?.mode === 'payment').length})
+                      </span>
+                    </div>
+                  </div>
+
+                  {(webhook.recent || []).filter((e: any) => e.type === 'checkout.session.completed' && e.payload?.data?.object?.mode === 'payment').length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-gray-400 border-b border-gray-700">
+                            <th className="py-2 pr-4">Customer</th>
+                            <th className="py-2 pr-4">Email</th>
+                            <th className="py-2 pr-4">Amount</th>
+                            <th className="py-2 pr-4">Payment ID</th>
+                            <th className="py-2 pr-4">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(webhook.recent || [])
+                            .filter((e: any) => e.type === 'checkout.session.completed' && e.payload?.data?.object?.mode === 'payment')
+                            .slice(0, 15)
+                            .map((evt: any, i: number) => {
+                              const session = evt.payload?.data?.object || {};
+                              const customerDetails = session.customer_details || {};
+                              const name = customerDetails.name || '—';
+                              const email = session.customer_email || customerDetails.email || 'Guest';
+                              const paymentIntent = session.payment_intent || session.id || '—';
+                              return (
+                                <tr key={i} className="border-b border-gray-800 hover:bg-gray-900/50">
+                                  <td className="py-3 pr-4 font-medium">{name}</td>
+                                  <td className="py-3 pr-4">
+                                    <span className="text-blue-400">{email}</span>
+                                  </td>
+                                  <td className="py-3 pr-4">
+                                    <span className="text-green-400 font-bold">${((session.amount_total || 0) / 100).toFixed(2)}</span>
+                                  </td>
+                                  <td className="py-3 pr-4">
+                                    <div className="flex items-center gap-1">
+                                      <code className="text-xs text-gray-400 font-mono truncate max-w-[100px]">
+                                        {typeof paymentIntent === 'string' ? paymentIntent.slice(-8) : '—'}
+                                      </code>
+                                      {typeof paymentIntent === 'string' && (
+                                        <button
+                                          onClick={() => copyToClipboard(paymentIntent)}
+                                          className="text-xs text-blue-400 hover:text-blue-300"
+                                        >
+                                          Copy
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 pr-4 text-gray-400">
+                                    {evt.createdAt ? new Date(evt.createdAt).toLocaleString() : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <svg className="w-12 h-12 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                      <p className="text-gray-500">No orders yet</p>
+                      <p className="text-gray-600 text-sm mt-1">Orders will appear here after customers complete checkout</p>
+                    </div>
                   )}
                 </div>
               </>

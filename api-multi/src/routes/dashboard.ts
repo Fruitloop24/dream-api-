@@ -284,7 +284,7 @@ export async function handleDashboard(
     // =========================================================================
 
     let eventsQuery = `
-      SELECT type, createdAt FROM events
+      SELECT type, createdAt, payload_json FROM events
       WHERE platformId = ?
     `;
     const eventsParams: any[] = [platformId];
@@ -294,12 +294,16 @@ export async function handleDashboard(
       eventsParams.push(publishableKey);
     }
 
-    eventsQuery += ' ORDER BY createdAt DESC LIMIT 5';
+    eventsQuery += ' ORDER BY createdAt DESC LIMIT 20';
 
     const eventsResult = await env.DB.prepare(eventsQuery)
       .bind(...eventsParams)
-      .all<EventRow>();
-    const events = eventsResult.results || [];
+      .all<EventRow & { payload_json?: string }>();
+    const events = (eventsResult.results || []).map(e => ({
+      type: e.type,
+      createdAt: e.createdAt,
+      payload: e.payload_json ? JSON.parse(e.payload_json) : null,
+    }));
 
     // =========================================================================
     // BUILD LOOKUPS

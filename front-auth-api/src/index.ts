@@ -300,11 +300,16 @@ export default {
         // Update D1
         await env.DB.prepare(`UPDATE api_keys SET secretKeyHash = ? WHERE publishableKey = ?`).bind(newHash, body.publishableKey).run();
 
-        // Update KV - remove old, add new
+        // Update KV - remove old hash lookup, add new
         await env.TOKENS_KV.delete(`secretkey:${existing.secretKeyHash}:publishableKey`).catch(() => {});
         await env.TOKENS_KV.put(`secretkey:${newHash}:publishableKey`, body.publishableKey);
-        // Update user-level secret key in KV
+
+        // Update user-level secret key in KV (dashboard reads from these)
         await env.TOKENS_KV.put(`user:${userId}:secretKey:${mode}`, newSecretKey);
+        // Also update the non-mode-suffixed key for backwards compat
+        if (mode === 'live') {
+          await env.TOKENS_KV.put(`user:${userId}:secretKey`, newSecretKey);
+        }
 
         return new Response(JSON.stringify({
           success: true,

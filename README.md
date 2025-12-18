@@ -45,13 +45,14 @@ const res = await fetch('https://api-multi.../api/cart/checkout', {
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
+| `/api/customers` | POST | Create end-user account |
 | `/api/data` | POST | Track usage (enforces limits) |
 | `/api/usage` | GET | Check current usage |
-| `/api/create-checkout` | POST | Subscription checkout |
+| `/api/create-checkout` | POST | Subscription upgrade checkout |
 | `/api/cart/checkout` | POST | One-off cart checkout |
 | `/api/products` | GET | List store products |
 | `/api/customer-portal` | POST | Stripe billing portal |
-| `/api/dashboard` | GET | Your platform data |
+| `/api/dashboard` | GET | Your platform metrics |
 
 **Base URL:** `https://api-multi.k-c-sheffield012376.workers.dev`
 
