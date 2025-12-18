@@ -149,7 +149,31 @@ curl -X POST .../api/create-checkout -H "Authorization: Bearer sk_live_xxx" \
 
 ## TODO
 
-- [ ] Better browser alerts on regen (not plain white)
-- [ ] Totals view - aggregate live revenue only
-- [ ] Store dashboard cleanup - product cards with images
+- [x] Better browser alerts on regen - replaced with dark themed toast notifications
+- [x] Store dashboard cleanup - product table with images, price IDs, stock status
+- [x] Sold out badge display on dashboard
+- [ ] Totals view - aggregate live revenue only (currently shows project counts)
 - [ ] PWA for mobile
+
+## Dashboard Improvements (Stripe Trust & Control)
+
+- [ ] Show Stripe Account ID (acct_xxx) in dashboard - copyable
+- [ ] "Open Stripe Dashboard" link (https://dashboard.stripe.com/acct_xxx)
+- [ ] Disconnect Stripe button with warning modal:
+      "This will revoke our access. Your products stay in Stripe.
+       Your dream-api project will be downgraded to limited mode.
+       You can reconnect anytime."
+- [ ] Handle revoked tokens gracefully:
+      - Detect on API call failure (401 from Stripe)
+      - Show "Stripe disconnected" banner in dashboard
+      - Prompt to reconnect, don't break everything
+- [ ] CSV export for transactions/customers
+
+## Future: Template Sites
+
+- [ ] "Try our template sites" button in dashboard
+- [ ] AI picks from 40 components based on description
+- [ ] Store hero/about images in R2
+- [ ] Deploy to CF Pages (our account)
+- [ ] Simple edit pages in dashboard (hero text, images, colors)
+- [ ] GitHub repo handoff with DREAM-API.md docs

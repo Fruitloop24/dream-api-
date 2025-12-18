@@ -1,18 +1,45 @@
 /**
- * Dashboard - dream-api
+ * ============================================================================
+ * DASHBOARD - dream-api Developer Dashboard
+ * ============================================================================
  *
- * - Project selector dropdown (each publishableKey = project)
- * - Shows selected project's data (SaaS or Store based on type)
- * - Test/Live mode toggle
- * - Totals tab for aggregate view across all projects
+ * Main dashboard for platform developers to manage their projects.
+ *
+ * STRUCTURE:
+ *   Lines 1-50      → Imports, types, constants
+ *   Lines 50-130    → State declarations & useEffects
+ *   Lines 130-250   → API functions (load projects, credentials, dashboard)
+ *   Lines 250-330   → Action handlers (delete, regenerate)
+ *   Lines 330-400   → Early returns (loading, no projects)
+ *   Lines 400-520   → Project selector bar & delete confirmation
+ *   Lines 520-630   → API Keys section
+ *   Lines 630-810   → SaaS view (metrics, tiers, customers)
+ *   Lines 810-1000  → Store view (products, orders)
+ *   Lines 1000-1110 → Webhook status, modals, toasts
+ *   Lines 1110-1280 → Helper components
+ *
+ * TO SPLIT LATER:
+ *   - SaaS section → components/SaasDashboard.tsx
+ *   - Store section → components/StoreDashboard.tsx
+ *   - Helper components → components/dashboard/
+ *
+ * ============================================================================
  */
 
 import { useUser, UserButton, useAuth } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
 const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
 const API_MULTI = 'https://api-multi.k-c-sheffield012376.workers.dev';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 type ModeType = 'test' | 'live';
 type ProjectType = 'saas' | 'store';
@@ -31,10 +58,18 @@ interface Credentials {
   liveSecretKey: string | null;
 }
 
+// ============================================================================
+// MAIN DASHBOARD COMPONENT
+// ============================================================================
+
 export default function Dashboard() {
   const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
   const navigate = useNavigate();
+
+  // --------------------------------------------------------------------------
+  // STATE
+  // --------------------------------------------------------------------------
 
   // Auth state
   const [hasPaid, setHasPaid] = useState(false);
@@ -67,8 +102,20 @@ export default function Dashboard() {
   // Modal for showing new secret key
   const [keyModal, setKeyModal] = useState<{ show: boolean; secretKey: string; mode: string }>({ show: false, secretKey: '', mode: '' });
 
-  // Selected project
+  // Toast notifications (replaces browser alerts)
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Derived state
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
+
+  // --------------------------------------------------------------------------
+  // EFFECTS
+  // --------------------------------------------------------------------------
 
   // Clear scoped state on project switch
   useEffect(() => {
@@ -121,6 +168,11 @@ export default function Dashboard() {
     }
   }, [selectedPk, selectedProject?.secretKey, credentials]);
 
+  // --------------------------------------------------------------------------
+  // API FUNCTIONS
+  // --------------------------------------------------------------------------
+
+  /** Generate platform ID on first login */
   const generatePlatformId = async () => {
     try {
       const token = await getToken({ template: 'dream-api' });
@@ -136,6 +188,7 @@ export default function Dashboard() {
     }
   };
 
+  /** Redirect to Stripe checkout for $15/mo platform fee */
   const handlePayment = async () => {
     try {
       const token = await getToken({ template: 'dream-api' });
@@ -154,6 +207,7 @@ export default function Dashboard() {
     }
   };
 
+  /** Load all projects for this platform from front-auth-api */
   const loadProjects = async () => {
     try {
       const token = await getToken({ template: 'dream-api' });
@@ -177,6 +231,7 @@ export default function Dashboard() {
     }
   };
 
+  /** Load test + live secret keys from KV */
   const loadCredentials = async () => {
     try {
       const token = await getToken({ template: 'dream-api' });
@@ -195,7 +250,8 @@ export default function Dashboard() {
     }
   };
 
-const loadDashboard = async (project: Project, sk: string) => {
+  /** Fetch dashboard data (metrics, customers, tiers) from api-multi */
+  const loadDashboard = async (project: Project, sk: string) => {
   try {
     setLoadingDashboard(true);
     const res = await fetch(`${API_MULTI}/api/dashboard`, {
@@ -216,7 +272,8 @@ const loadDashboard = async (project: Project, sk: string) => {
     }
   };
 
-const loadProducts = async (project: Project, sk: string) => {
+  /** Fetch store products (for store-type projects only) */
+  const loadProducts = async (project: Project, sk: string) => {
   try {
     const res = await fetch(`${API_MULTI}/api/products`, {
       headers: {
@@ -234,15 +291,25 @@ const loadProducts = async (project: Project, sk: string) => {
     }
   };
 
+  // --------------------------------------------------------------------------
+  // ACTION HANDLERS
+  // --------------------------------------------------------------------------
+
+  /** Redirect to Stripe Connect OAuth */
   const handleConnectStripe = () => {
     window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
   };
 
+  /** Copy text to clipboard */
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
 
-  // DELETE PROJECT - Nukes everything (test + live keys, tiers, data, assets)
+  /**
+   * DELETE PROJECT
+   * Nukes everything: test + live keys, all tiers, subscriptions,
+   * usage, events, end_users, and R2 assets. Irreversible.
+   */
   const handleDeleteProject = async () => {
     if (!selectedProject) return;
     setKeyActionLoading(true);
@@ -258,23 +325,28 @@ const loadProducts = async (project: Project, sk: string) => {
       });
       if (res.ok) {
         // Remove ALL keys for this project from list
+        const deletedName = selectedProject.name;
         setProjects(prev => prev.filter(p => p.name !== selectedProject.name));
         setSelectedPk(null);
         setShowDeleteConfirm(false);
-        alert('Project deleted permanently');
+        showToast(`"${deletedName}" deleted permanently`, 'success');
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to delete project');
+        showToast(err.error || 'Failed to delete project', 'error');
       }
     } catch (err) {
       console.error('[Dashboard] Delete error:', err);
-      alert('Failed to delete project');
+      showToast('Failed to delete project', 'error');
     } finally {
       setKeyActionLoading(false);
     }
   };
 
-  // REGENERATE SECRET - New secret key, same publishable key (per-key)
+  /**
+   * REGENERATE SECRET KEY
+   * Creates new sk_xxx, same pk_xxx. Old key dies instantly.
+   * Updates D1 hash + KV cache. Publishable key unchanged.
+   */
   const handleRegenerateSecret = async () => {
     if (!selectedProject) return;
     const mode = selectedProject.mode;
@@ -301,19 +373,24 @@ const loadProducts = async (project: Project, sk: string) => {
         await loadCredentials();
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to regenerate secret');
+        showToast(err.error || 'Failed to regenerate secret', 'error');
       }
     } catch (err) {
       console.error('[Dashboard] Regenerate error:', err);
-      alert('Failed to regenerate secret');
+      showToast('Failed to regenerate secret', 'error');
     } finally {
       setKeyActionLoading(false);
     }
   };
 
-  // Loading states
+  // --------------------------------------------------------------------------
+  // EARLY RETURNS (Loading states, no projects)
+  // --------------------------------------------------------------------------
+
+  // Not signed in - redirect handled by effect
   if (!isSignedIn) return null;
 
+  // Redirect to payment if not paid
   if (!hasPaid) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -326,7 +403,7 @@ const loadProducts = async (project: Project, sk: string) => {
     );
   }
 
-  // No projects yet - show connect Stripe
+  // No projects yet - prompt to connect Stripe
   if (projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-900 text-white">
@@ -354,13 +431,17 @@ const loadProducts = async (project: Project, sk: string) => {
     );
   }
 
-  // Main dashboard
+  // --------------------------------------------------------------------------
+  // MAIN RENDER
+  // --------------------------------------------------------------------------
+
+  // Extract dashboard data
   const metrics = dashboard?.metrics || {};
   const customers = dashboard?.customers || [];
   const tiers = dashboard?.tiers || [];
   const webhook = dashboard?.webhook || {};
 
-  // Filter customers
+  // Filter + sort customers by usage
   const filteredCustomers = customers
     .filter((c: any) => {
       if (statusFilter === 'active' && c.canceledAt) return false;
@@ -378,14 +459,22 @@ const loadProducts = async (project: Project, sk: string) => {
       <Header />
 
       <main className="container mx-auto px-4 py-8">
-        {/* Welcome + Platform ID */}
+        {/* ================================================================
+            HEADER: Welcome + Platform ID
+            ================================================================ */}
         <div className="mb-6">
           <h2 className="text-3xl font-bold mb-2">Welcome, {user?.firstName || 'there'}!</h2>
           <p className="text-gray-400">Your API is ready. Monitor customers, usage, and billing below.</p>
           {platformId && <PlatformIdBadge platformId={platformId} onCopy={copyToClipboard} />}
         </div>
 
-        {/* Project Selector + Actions */}
+        {/* ================================================================
+            PROJECT SELECTOR BAR
+            - Dropdown to switch projects
+            - Type badge (SaaS/Store)
+            - Mode badge (Test/Live)
+            - Totals toggle, New Project, Delete buttons
+            ================================================================ */}
         <div className="flex items-center gap-4 mb-6 border-b border-gray-700 pb-4">
           {/* Project Dropdown */}
           <div className="flex items-center gap-2">
@@ -461,7 +550,10 @@ const loadProducts = async (project: Project, sk: string) => {
           {loadingDashboard && <span className="text-xs text-gray-500">Loading...</span>}
         </div>
 
-        {/* Delete Confirmation Banner */}
+        {/* ================================================================
+            DELETE CONFIRMATION BANNER
+            Shows inline when delete is clicked
+            ================================================================ */}
         {showDeleteConfirm && selectedProject && (
           <div className="mb-4 flex items-center gap-3 bg-red-900/20 border border-red-800 rounded-lg p-4">
             <span className="text-red-300 font-medium">
@@ -488,12 +580,22 @@ const loadProducts = async (project: Project, sk: string) => {
           </div>
         )}
 
-        {/* Totals View */}
+        {/* ================================================================
+            CONTENT AREA
+            - Totals view OR
+            - Selected project view (API Keys + SaaS/Store content)
+            ================================================================ */}
         {showTotals ? (
           <TotalsView projects={projects} />
         ) : selectedProject ? (
           <>
-            {/* API Keys */}
+            {/* ==============================================================
+                API KEYS SECTION
+                - Publishable key (public, for frontend)
+                - Secret key (private, for backend)
+                - Rotate secret button
+                - Edit & Go Live button (test mode only)
+                ============================================================== */}
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">API Keys</h3>
@@ -612,10 +714,85 @@ const loadProducts = async (project: Project, sk: string) => {
               </div>
             </div>
 
-            {/* SaaS Content */}
+            {/* ==============================================================
+                STRIPE ACCOUNT SECTION
+                - Shows connected Stripe account ID
+                - Link to Stripe Dashboard
+                - Trust messaging - they control everything
+                ============================================================== */}
+            {dashboard?.keys?.stripeAccountId ? (
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {/* Stripe Logo */}
+                    <div className="w-10 h-10 bg-[#635BFF] rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Connected Stripe Account</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm font-mono text-white">{dashboard.keys.stripeAccountId}</code>
+                        <button
+                          onClick={() => copyToClipboard(dashboard.keys.stripeAccountId)}
+                          className="text-xs text-blue-400 hover:text-blue-300"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://dashboard.stripe.com/${dashboard.keys.stripeAccountId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-[#635BFF] hover:bg-[#5449E0] rounded text-sm font-medium text-white flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Open Stripe Dashboard
+                  </a>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <p className="text-xs text-gray-400">
+                    <span className="text-green-400 font-medium">You have full control.</span> All funds go directly to your Stripe account.
+                    You handle refunds, disputes, and payouts. We never touch your money.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p className="text-amber-200 font-medium">Stripe Not Connected</p>
+                      <p className="text-amber-300/70 text-sm">Connect your Stripe account to process payments</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleConnectStripe}
+                    className="px-4 py-2 bg-[#635BFF] hover:bg-[#5449E0] rounded font-medium text-white"
+                  >
+                    Connect Stripe
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ==============================================================
+                SAAS DASHBOARD
+                - Metrics: Active subs, canceling, MRR, usage
+                - Tiers: Subscription plans with Stripe IDs
+                - Customers: Table with search, filter, pagination
+                ============================================================== */}
             {selectedProject.type === 'saas' && (
               <>
-                {/* Metrics */}
+                {/* Metrics Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <MetricCard label="Active Subs" value={metrics.activeSubs || 0} />
                   <MetricCard label="Canceling" value={metrics.cancelingSubs || 0} />
@@ -623,7 +800,7 @@ const loadProducts = async (project: Project, sk: string) => {
                   <MetricCard label="Usage (Period)" value={metrics.usageThisPeriod || 0} />
                 </div>
 
-                {/* Tiers */}
+                {/* Subscription Tiers */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold">Subscription Tiers</h3>
@@ -685,7 +862,7 @@ const loadProducts = async (project: Project, sk: string) => {
                   )}
                 </div>
 
-                {/* Customers */}
+                {/* Customers Table */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -792,7 +969,12 @@ const loadProducts = async (project: Project, sk: string) => {
               </>
             )}
 
-            {/* Store Content */}
+            {/* ==============================================================
+                STORE DASHBOARD
+                - Metrics: Total sales, revenue, avg order
+                - Products: Table with images, prices, stock status
+                - Orders: Recent checkout events from webhook
+                ============================================================== */}
             {selectedProject.type === 'store' && (
               <>
                 {/* Sales Metrics Row */}
@@ -802,7 +984,7 @@ const loadProducts = async (project: Project, sk: string) => {
                   <MetricCard label="Avg Order" value={metrics.storeSalesCount > 0 ? `$${((metrics.storeTotalRevenue || 0) / metrics.storeSalesCount / 100).toFixed(2)}` : '$0.00'} />
                 </div>
 
-                {/* Products Table */}
+                {/* Products Table - with images, stock status, Stripe IDs */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -905,7 +1087,7 @@ const loadProducts = async (project: Project, sk: string) => {
                   )}
                 </div>
 
-                {/* Orders / Customers */}
+                {/* Orders Table - from webhook checkout events */}
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -984,7 +1166,10 @@ const loadProducts = async (project: Project, sk: string) => {
               </>
             )}
 
-            {/* Webhook Status */}
+            {/* ==============================================================
+                WEBHOOK STATUS
+                Shows webhook URL and recent events for debugging
+                ============================================================== */}
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
               <h3 className="text-lg font-bold mb-3">Webhook Status</h3>
               <div className="bg-gray-900 rounded p-3 mb-3">
@@ -1017,7 +1202,11 @@ const loadProducts = async (project: Project, sk: string) => {
         )}
       </main>
 
-      {/* New Secret Key Modal */}
+      {/* ================================================================
+          MODALS & OVERLAYS
+          ================================================================ */}
+
+      {/* New Secret Key Modal - shows after regenerating */}
       {keyModal.show && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl border border-gray-700 max-w-lg w-full shadow-2xl">
@@ -1060,14 +1249,46 @@ const loadProducts = async (project: Project, sk: string) => {
           </div>
         </div>
       )}
+
+      {/* Toast Notification - success/error feedback */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
+            toast.type === 'success'
+              ? 'bg-green-900/90 border-green-700 text-green-100'
+              : 'bg-red-900/90 border-red-700 text-red-100'
+          }`}>
+            {toast.type === 'success' ? (
+              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <span className="font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-current opacity-70 hover:opacity-100"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============================================================================
-// COMPONENTS
+// HELPER COMPONENTS
 // ============================================================================
+// These could be extracted to components/dashboard/ folder later
 
+/** Header with logo and user button */
 function Header() {
   return (
     <header className="bg-gray-800 border-b border-gray-700">
@@ -1079,6 +1300,7 @@ function Header() {
   );
 }
 
+/** Platform ID badge with copy button */
 function PlatformIdBadge({ platformId, onCopy }: { platformId: string; onCopy: (s: string) => void }) {
   return (
     <div className="mt-3 inline-flex items-center gap-2 text-sm text-gray-300 bg-gray-800 border border-gray-700 rounded px-3 py-1">
@@ -1091,6 +1313,7 @@ function PlatformIdBadge({ platformId, onCopy }: { platformId: string; onCopy: (
   );
 }
 
+/** Metric card for dashboard stats */
 function MetricCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -1100,6 +1323,7 @@ function MetricCard({ label, value }: { label: string; value: string | number })
   );
 }
 
+/** Usage progress bar with color coding */
 function UsageBar({ count, limit }: { count: number; limit: number | string }) {
   const numericLimit = limit === 'unlimited' ? 100 : Number(limit || 1);
   const pct = Math.min(100, Math.round((count / numericLimit) * 100));
@@ -1118,6 +1342,7 @@ function UsageBar({ count, limit }: { count: number; limit: number | string }) {
   );
 }
 
+/** Status badge (active/canceling/canceled) */
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     active: 'bg-green-900/40 border-green-700 text-green-200',
@@ -1132,6 +1357,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Expanded customer detail panel */
 function CustomerDetail({ customer, onClose, onCopy }: { customer: any; onClose: () => void; onCopy: (s: string) => void }) {
   return (
     <div className="mt-4 bg-gray-900 border border-gray-700 rounded-lg p-4">
@@ -1153,6 +1379,7 @@ function CustomerDetail({ customer, onClose, onCopy }: { customer: any; onClose:
   );
 }
 
+/** Single detail item with optional copy button */
 function DetailItem({ label, value, copyable, onCopy }: { label: string; value: string; copyable?: boolean; onCopy?: (s: string) => void }) {
   return (
     <div>
@@ -1167,6 +1394,11 @@ function DetailItem({ label, value, copyable, onCopy }: { label: string; value: 
   );
 }
 
+/**
+ * TOTALS VIEW
+ * Aggregate view across all projects
+ * TODO: Add actual MRR totals from api-multi/dashboard/totals endpoint
+ */
 function TotalsView({ projects }: { projects: Project[] }) {
   // Group by type
   const saasProjects = projects.filter(p => p.type === 'saas');
