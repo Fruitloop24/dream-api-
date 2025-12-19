@@ -74,3 +74,6 @@ temp/
 
 # Other
 value.txt
+
+# Templates (excluded until needed)
+fs-template/
