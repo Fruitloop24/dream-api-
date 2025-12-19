@@ -3,60 +3,37 @@
  * DASHBOARD - dream-api Developer Dashboard
  * ============================================================================
  *
- * Main dashboard for platform developers to manage their projects.
- *
- * STRUCTURE:
- *   Lines 1-50      → Imports, types, constants
- *   Lines 50-130    → State declarations & useEffects
- *   Lines 130-250   → API functions (load projects, credentials, dashboard)
- *   Lines 250-330   → Action handlers (delete, regenerate)
- *   Lines 330-400   → Early returns (loading, no projects)
- *   Lines 400-520   → Project selector bar & delete confirmation
- *   Lines 520-630   → API Keys section
- *   Lines 630-810   → SaaS view (metrics, tiers, customers)
- *   Lines 810-1000  → Store view (products, orders)
- *   Lines 1000-1110 → Webhook status, modals, toasts
- *   Lines 1110-1280 → Helper components
- *
- * TO SPLIT LATER:
- *   - SaaS section → components/SaasDashboard.tsx
- *   - Store section → components/StoreDashboard.tsx
- *   - Helper components → components/dashboard/
+ * Refactored from 1491 lines to ~200 lines using modular components and hooks.
+ * All extracted components are in frontend/src/components/
+ * All hooks are in frontend/src/hooks/
  *
  * ============================================================================
  */
 
-import { useUser, UserButton, useAuth } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
+// Hooks
+import { useToast, useProjects, useCredentials, useDashboardData, usePayment } from '@/hooks';
 
-const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
-const API_MULTI = 'https://api-multi.k-c-sheffield012376.workers.dev';
+// Layout components
+import { Header, ProjectSelector, DeleteConfirmBanner } from '@/components/layout';
 
-// ============================================================================
-// TYPES
-// ============================================================================
+// Shared components
+import { PlatformIdBadge, Toast } from '@/components/shared';
 
-type ModeType = 'test' | 'live';
-type ProjectType = 'saas' | 'store';
-
-interface Project {
-  publishableKey: string;
-  name: string;
-  type: ProjectType;
-  mode: ModeType;
-  status: string;
-  secretKey?: string | null;
-}
-
-interface Credentials {
-  testSecretKey: string | null;
-  liveSecretKey: string | null;
-}
+// Dashboard components
+import {
+  ApiKeysSection,
+  RegenerateConfirm,
+  StripeAccountSection,
+  WebhookStatus,
+  SaasDashboard,
+  StoreDashboard,
+  TotalsView,
+  KeyModal,
+} from '@/components/dashboard';
 
 // ============================================================================
 // MAIN DASHBOARD COMPONENT
@@ -64,51 +41,24 @@ interface Credentials {
 
 export default function Dashboard() {
   const { isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
   const navigate = useNavigate();
 
-  // --------------------------------------------------------------------------
-  // STATE
-  // --------------------------------------------------------------------------
+  // Hooks
+  const { toast, showToast, hideToast } = useToast();
+  const { projects, platformId, generatePlatformId, loadProjects, deleteProject, regenerateSecret } = useProjects();
+  const { credentials, showSecret, loadCredentials, toggleSecret, getSecretKey } = useCredentials();
+  const { dashboard, products, loading: loadingDashboard, loadDashboard, loadProducts, clearDashboard } = useDashboardData();
+  const { handlePayment, loading: paymentLoading } = usePayment();
 
-  // Auth state
+  // Local state
   const [hasPaid, setHasPaid] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [platformIdGenerated, setPlatformIdGenerated] = useState(false);
-  const [platformId, setPlatformId] = useState<string | null>(null);
-
-  // Projects + credentials
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedPk, setSelectedPk] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<Credentials>({ testSecretKey: null, liveSecretKey: null });
-
-  // Dashboard data for selected project
-  const [dashboard, setDashboard] = useState<any>(null);
-  const [products, setProducts] = useState<any[]>([]);
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
-
-  // UI state
   const [showTotals, setShowTotals] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'canceling'>('all');
-  const [search, setSearch] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
-  const [showSecret, setShowSecret] = useState(false);
-  const [keyActionLoading, setKeyActionLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
-  const [customerPage, setCustomerPage] = useState(0);
-  const CUSTOMERS_PER_PAGE = 10;
-
-  // Modal for showing new secret key
+  const [keyActionLoading, setKeyActionLoading] = useState(false);
   const [keyModal, setKeyModal] = useState<{ show: boolean; secretKey: string; mode: string }>({ show: false, secretKey: '', mode: '' });
-
-  // Toast notifications (replaces browser alerts)
-  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
 
   // Derived state
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
@@ -119,10 +69,8 @@ export default function Dashboard() {
 
   // Clear scoped state on project switch
   useEffect(() => {
-    setDashboard(null);
-    setProducts([]);
-    setSelectedCustomer(null);
-  }, [selectedPk]);
+    clearDashboard();
+  }, [selectedPk, clearDashboard]);
 
   // Redirect if not signed in
   useEffect(() => {
@@ -132,265 +80,110 @@ export default function Dashboard() {
   // Generate platformId immediately after login
   useEffect(() => {
     if (user && !platformIdGenerated) {
-      generatePlatformId();
+      generatePlatformId().then(success => {
+        if (success) setPlatformIdGenerated(true);
+      });
     }
-  }, [user, platformIdGenerated]);
+  }, [user, platformIdGenerated, generatePlatformId]);
 
   // Check payment status
   useEffect(() => {
     if (user?.publicMetadata?.plan === 'paid') {
       setHasPaid(true);
-    } else if (user && platformIdGenerated && !loading) {
-      setLoading(true);
+    } else if (user && platformIdGenerated && !paymentLoading) {
       handlePayment();
     }
-  }, [user, platformIdGenerated, loading]);
+  }, [user, platformIdGenerated, paymentLoading, handlePayment]);
 
   // Load projects + credentials once paid
   useEffect(() => {
     if (hasPaid && projects.length === 0) {
-      loadProjects();
+      loadProjects().then(list => {
+        if (list.length > 0 && !selectedPk) {
+          setSelectedPk(list[0].publishableKey);
+        }
+      });
       loadCredentials();
     }
-  }, [hasPaid]);
+  }, [hasPaid, projects.length, selectedPk, loadProjects, loadCredentials]);
 
   // Load dashboard when project selected
   useEffect(() => {
     if (selectedProject) {
-      const sk = selectedProject.secretKey || (selectedProject.mode === 'test' ? credentials.testSecretKey : credentials.liveSecretKey);
-      if (!sk) {
-        console.warn('[Dashboard] No secret key found for selected project; dashboard/products may be stale');
-      }
-      loadDashboard(selectedProject, sk || '');
-      if (selectedProject.type === 'store') {
-        loadProducts(selectedProject, sk || '');
+      const sk = selectedProject.secretKey || getSecretKey(selectedProject.mode);
+      if (sk) {
+        loadDashboard(selectedProject, sk);
+        if (selectedProject.type === 'store') {
+          loadProducts(selectedProject, sk);
+        }
       }
     }
-  }, [selectedPk, selectedProject?.secretKey, credentials]);
+  }, [selectedPk, selectedProject, credentials, getSecretKey, loadDashboard, loadProducts]);
 
   // --------------------------------------------------------------------------
-  // API FUNCTIONS
+  // HANDLERS
   // --------------------------------------------------------------------------
 
-  /** Generate platform ID on first login */
-  const generatePlatformId = async () => {
-    try {
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${FRONT_AUTH_API}/generate-platform-id`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setPlatformIdGenerated(true);
-      }
-    } catch (err) {
-      console.error('[Dashboard] Platform ID error:', err);
-    }
-  };
+  const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
 
-  /** Redirect to Stripe checkout for $15/mo platform fee */
-  const handlePayment = async () => {
-    try {
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${FRONT_AUTH_API}/create-checkout`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        window.location.href = data.checkoutUrl;
-      }
-    } catch (err) {
-      console.error('[Dashboard] Payment error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /** Load all projects for this platform from front-auth-api */
-  const loadProjects = async () => {
-    try {
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${FRONT_AUTH_API}/projects`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        console.error('[Dashboard] Projects failed:', res.status);
-        return;
-      }
-      const data = await res.json();
-      setPlatformId(data.platformId);
-      const list: Project[] = data.projects || [];
-      setProjects(list);
-      // Auto-select first project
-      if (list.length > 0 && !selectedPk) {
-        setSelectedPk(list[0].publishableKey);
-      }
-    } catch (err) {
-      console.error('[Dashboard] Projects error:', err);
-    }
-  };
-
-  /** Load test + live secret keys from KV */
-  const loadCredentials = async () => {
-    try {
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${FRONT_AUTH_API}/get-credentials`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCredentials({
-          testSecretKey: data.testSecretKey || null,
-          liveSecretKey: data.liveSecretKey || data.secretKey || null,
-        });
-      }
-    } catch (err) {
-      console.error('[Dashboard] Credentials error:', err);
-    }
-  };
-
-  /** Fetch dashboard data (metrics, customers, tiers) from api-multi */
-  const loadDashboard = async (project: Project, sk: string) => {
-  try {
-    setLoadingDashboard(true);
-    const res = await fetch(`${API_MULTI}/api/dashboard`, {
-      headers: {
-        'Authorization': `Bearer ${sk}`,
-        'X-Env': project.mode,
-        'X-Publishable-Key': project.publishableKey,
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setDashboard(data);
-      }
-    } catch (err) {
-      console.error('[Dashboard] Load error:', err);
-    } finally {
-      setLoadingDashboard(false);
-    }
-  };
-
-  /** Fetch store products (for store-type projects only) */
-  const loadProducts = async (project: Project, sk: string) => {
-  try {
-    const res = await fetch(`${API_MULTI}/api/products`, {
-      headers: {
-        'Authorization': `Bearer ${sk}`,
-        'X-Env': project.mode,
-        'X-Publishable-Key': project.publishableKey,
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setProducts(data.products || []);
-      }
-    } catch (err) {
-      console.error('[Dashboard] Products error:', err);
-    }
-  };
-
-  // --------------------------------------------------------------------------
-  // ACTION HANDLERS
-  // --------------------------------------------------------------------------
-
-  /** Redirect to Stripe Connect OAuth */
   const handleConnectStripe = () => {
     window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
   };
 
-  /** Copy text to clipboard */
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleSelectProject = (pk: string) => {
+    setSelectedPk(pk);
+    setShowTotals(false);
+    setShowDeleteConfirm(false);
   };
 
-  /**
-   * DELETE PROJECT
-   * Nukes everything: test + live keys, all tiers, subscriptions,
-   * usage, events, end_users, and R2 assets. Irreversible.
-   */
+  const handleRefresh = () => {
+    if (selectedProject) {
+      const sk = selectedProject.secretKey || getSecretKey(selectedProject.mode);
+      if (sk) {
+        loadDashboard(selectedProject, sk);
+        if (selectedProject.type === 'store') {
+          loadProducts(selectedProject, sk);
+        }
+        showToast('Dashboard refreshed', 'success');
+      }
+    }
+  };
+
   const handleDeleteProject = async () => {
     if (!selectedProject) return;
     setKeyActionLoading(true);
-    try {
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${FRONT_AUTH_API}/projects/delete`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ projectName: selectedProject.name }),
-      });
-      if (res.ok) {
-        // Remove ALL keys for this project from list
-        const deletedName = selectedProject.name;
-        setProjects(prev => prev.filter(p => p.name !== selectedProject.name));
-        setSelectedPk(null);
-        setShowDeleteConfirm(false);
-        showToast(`"${deletedName}" deleted permanently`, 'success');
-      } else {
-        const err = await res.json();
-        showToast(err.error || 'Failed to delete project', 'error');
-      }
-    } catch (err) {
-      console.error('[Dashboard] Delete error:', err);
-      showToast('Failed to delete project', 'error');
-    } finally {
-      setKeyActionLoading(false);
+    const result = await deleteProject(selectedProject.name);
+    setKeyActionLoading(false);
+    if (result.success) {
+      setSelectedPk(null);
+      setShowDeleteConfirm(false);
+      showToast(`"${selectedProject.name}" deleted permanently`, 'success');
+    } else {
+      showToast(result.error || 'Failed to delete project', 'error');
     }
   };
 
-  /**
-   * REGENERATE SECRET KEY
-   * Creates new sk_xxx, same pk_xxx. Old key dies instantly.
-   * Updates D1 hash + KV cache. Publishable key unchanged.
-   */
   const handleRegenerateSecret = async () => {
     if (!selectedProject) return;
-    const mode = selectedProject.mode;
     setKeyActionLoading(true);
-    try {
-      const token = await getToken({ template: 'dream-api' });
-      const res = await fetch(`${FRONT_AUTH_API}/projects/regenerate-secret`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ publishableKey: selectedProject.publishableKey }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        // Copy to clipboard automatically
-        try {
-          await navigator.clipboard.writeText(data.secretKey);
-        } catch {}
-        setShowRegenConfirm(false);
-        setKeyModal({ show: true, secretKey: data.secretKey, mode });
-        // Reload credentials to get new secret
-        await loadCredentials();
-      } else {
-        const err = await res.json();
-        showToast(err.error || 'Failed to regenerate secret', 'error');
-      }
-    } catch (err) {
-      console.error('[Dashboard] Regenerate error:', err);
-      showToast('Failed to regenerate secret', 'error');
-    } finally {
-      setKeyActionLoading(false);
+    const result = await regenerateSecret(selectedProject.publishableKey);
+    setKeyActionLoading(false);
+    if (result.success && result.secretKey) {
+      try { await navigator.clipboard.writeText(result.secretKey); } catch {}
+      setShowRegenConfirm(false);
+      setKeyModal({ show: true, secretKey: result.secretKey, mode: selectedProject.mode });
+      await loadCredentials();
+    } else {
+      showToast(result.error || 'Failed to regenerate secret', 'error');
     }
   };
 
   // --------------------------------------------------------------------------
-  // EARLY RETURNS (Loading states, no projects)
+  // EARLY RETURNS
   // --------------------------------------------------------------------------
 
-  // Not signed in - redirect handled by effect
   if (!isSignedIn) return null;
 
-  // Redirect to payment if not paid
   if (!hasPaid) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -403,7 +196,6 @@ export default function Dashboard() {
     );
   }
 
-  // No projects yet - prompt to connect Stripe
   if (projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-900 text-white">
@@ -416,13 +208,8 @@ export default function Dashboard() {
           </div>
           <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-6">
             <h3 className="text-xl font-bold mb-4">Step 1: Connect Your Stripe</h3>
-            <p className="text-gray-300 mb-4">
-              Connect your Stripe account so we can create billing products for your users.
-            </p>
-            <button
-              onClick={handleConnectStripe}
-              className="px-6 py-3 bg-purple-600 rounded font-bold hover:bg-purple-700"
-            >
+            <p className="text-gray-300 mb-4">Connect your Stripe account so we can create billing products for your users.</p>
+            <button onClick={handleConnectStripe} className="px-6 py-3 bg-purple-600 rounded font-bold hover:bg-purple-700">
               Connect Stripe Account
             </button>
           </div>
@@ -435,1056 +222,118 @@ export default function Dashboard() {
   // MAIN RENDER
   // --------------------------------------------------------------------------
 
-  // Extract dashboard data
   const metrics = dashboard?.metrics || {};
-  const customers = dashboard?.customers || [];
   const tiers = dashboard?.tiers || [];
+  const customers = dashboard?.customers || [];
   const webhook = dashboard?.webhook || {};
-
-  // Filter + sort customers by usage
-  const filteredCustomers = customers
-    .filter((c: any) => {
-      if (statusFilter === 'active' && c.canceledAt) return false;
-      if (statusFilter === 'canceling' && !c.canceledAt) return false;
-      if (search) {
-        const hay = `${c.email || ''} ${c.userId || ''}`.toLowerCase();
-        return hay.includes(search.toLowerCase());
-      }
-      return true;
-    })
-    .sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0));
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <Header />
-
       <main className="container mx-auto px-4 py-8">
-        {/* ================================================================
-            HEADER: Welcome + Platform ID
-            ================================================================ */}
+        {/* Welcome Header */}
         <div className="mb-6">
           <h2 className="text-3xl font-bold mb-2">Welcome, {user?.firstName || 'there'}!</h2>
           <p className="text-gray-400">Your API is ready. Monitor customers, usage, and billing below.</p>
           {platformId && <PlatformIdBadge platformId={platformId} onCopy={copyToClipboard} />}
         </div>
 
-        {/* ================================================================
-            PROJECT SELECTOR BAR
-            - Dropdown to switch projects
-            - Type badge (SaaS/Store)
-            - Mode badge (Test/Live)
-            - Totals toggle, New Project, Delete buttons
-            ================================================================ */}
-        <div className="flex items-center gap-4 mb-6 border-b border-gray-700 pb-4">
-          {/* Project Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">Project:</span>
-            <select
-              value={selectedPk || ''}
-              onChange={(e) => {
-                setSelectedPk(e.target.value);
-                setShowTotals(false);
-              }}
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm min-w-[200px]"
-            >
-              {projects.map((p) => (
-                <option key={p.publishableKey} value={p.publishableKey}>
-                  {p.name} ({p.type}) - {p.mode}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Project Selector */}
+        <ProjectSelector
+          projects={projects}
+          selectedPk={selectedPk}
+          selectedProject={selectedProject}
+          showTotals={showTotals}
+          loadingDashboard={loadingDashboard}
+          onSelectProject={handleSelectProject}
+          onToggleTotals={() => setShowTotals(!showTotals)}
+          onRefresh={handleRefresh}
+          onDeleteClick={() => setShowDeleteConfirm(true)}
+        />
 
-          {/* Type Badge */}
-          {selectedProject && (
-            <span className={`px-3 py-1 rounded text-sm font-medium ${
-              selectedProject.type === 'saas'
-                ? 'bg-blue-900/30 border border-blue-700 text-blue-200'
-                : 'bg-purple-900/30 border border-purple-700 text-purple-200'
-            }`}>
-              {selectedProject.type === 'saas' ? 'SaaS' : 'Store'}
-            </span>
-          )}
-
-          {/* Mode Badge */}
-          {selectedProject && (
-            <span className={`px-3 py-1 rounded text-sm font-medium ${
-              selectedProject.mode === 'test'
-                ? 'bg-amber-900/30 border border-amber-700 text-amber-200'
-                : 'bg-green-900/30 border border-green-700 text-green-200'
-            }`}>
-              {selectedProject.mode === 'test' ? 'Test' : 'Live'}
-            </span>
-          )}
-
-          {/* Totals Toggle */}
-          <button
-            onClick={() => setShowTotals(!showTotals)}
-            className={`ml-auto px-3 py-1.5 rounded text-sm font-medium ${
-              showTotals
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600'
-            }`}
-          >
-            Totals
-          </button>
-
-          {/* Actions */}
-          <button
-            onClick={() => navigate('/api-tier-config')}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold"
-          >
-            + New Project
-          </button>
-
-          {/* Refresh Button */}
-          {selectedProject && (
-            <button
-              onClick={() => {
-                const sk = selectedProject.secretKey || (selectedProject.mode === 'test' ? credentials.testSecretKey : credentials.liveSecretKey);
-                if (sk) {
-                  loadDashboard(selectedProject, sk);
-                  if (selectedProject.type === 'store') {
-                    loadProducts(selectedProject, sk);
-                  }
-                  showToast('Dashboard refreshed', 'success');
-                }
-              }}
-              disabled={loadingDashboard}
-              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white bg-gray-800 border border-gray-700 hover:border-gray-600 rounded transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              title="Refresh dashboard data"
-            >
-              <svg className={`w-4 h-4 ${loadingDashboard ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {loadingDashboard ? 'Refreshing...' : 'Refresh'}
-            </button>
-          )}
-
-          {/* Delete Project - Top Level */}
-          {selectedProject && !showDeleteConfirm && (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="px-3 py-1.5 text-sm text-gray-400 hover:text-red-400 hover:bg-red-900/20 border border-gray-700 hover:border-red-800 rounded transition-colors"
-            >
-              Delete Project
-            </button>
-          )}
-        </div>
-
-        {/* ================================================================
-            DELETE CONFIRMATION BANNER
-            Shows inline when delete is clicked
-            ================================================================ */}
+        {/* Delete Confirmation */}
         {showDeleteConfirm && selectedProject && (
-          <div className="mb-4 flex items-center gap-3 bg-red-900/20 border border-red-800 rounded-lg p-4">
-            <span className="text-red-300 font-medium">
-              Delete "{selectedProject.name}" permanently?
-            </span>
-            <span className="text-red-400/70 text-sm">
-              This removes both Test + Live keys, all customer data, usage, and assets.
-            </span>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={handleDeleteProject}
-                disabled={keyActionLoading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded font-medium text-sm"
-              >
-                {keyActionLoading ? 'Deleting...' : 'Yes, Delete Forever'}
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          <DeleteConfirmBanner
+            projectName={selectedProject.name}
+            loading={keyActionLoading}
+            onConfirm={handleDeleteProject}
+            onCancel={() => setShowDeleteConfirm(false)}
+          />
         )}
 
-        {/* ================================================================
-            CONTENT AREA
-            - Totals view OR
-            - Selected project view (API Keys + SaaS/Store content)
-            ================================================================ */}
+        {/* Content Area */}
         {showTotals ? (
           <TotalsView projects={projects} />
         ) : selectedProject ? (
           <>
-            {/* ==============================================================
-                API KEYS SECTION
-                - Publishable key (public, for frontend)
-                - Secret key (private, for backend)
-                - Rotate secret button
-                - Edit & Go Live button (test mode only)
-                ============================================================== */}
-            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold">API Keys</h3>
-{/* Only show "Edit & Go Live" if test mode AND no live version exists */}
-                {selectedProject.mode === 'test' && !projects.some(p => p.name === selectedProject.name && p.mode === 'live') && (
-                  <button
-                    onClick={() => navigate(`/api-tier-config?promote=true&mode=test&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}&projectName=${encodeURIComponent(selectedProject.name)}`)}
-                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold"
-                  >
-                    Edit & Go Live
-                  </button>
-                )}
-                {/* Show badge if already live */}
-                {selectedProject.mode === 'test' && projects.some(p => p.name === selectedProject.name && p.mode === 'live') && (
-                  <span className="px-3 py-1.5 bg-green-900/30 border border-green-700 rounded text-sm text-green-300">
-                    ✓ Live version exists
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Publishable Key</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-gray-900 px-2 py-1.5 rounded text-xs font-mono truncate">
-                      {selectedProject.publishableKey}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(selectedProject.publishableKey)}
-                      className="px-2 py-1 text-xs bg-gray-700 rounded hover:bg-gray-600"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Secret Key</p>
-                  {(() => {
-                    const sk = selectedProject.mode === 'test' ? credentials.testSecretKey : credentials.liveSecretKey;
-                    return (
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 bg-gray-900 px-2 py-1.5 rounded text-xs font-mono truncate">
-                          {showSecret ? (sk || 'Not available') : '••••••••••••••••'}
-                        </code>
-                        <button
-                          onClick={() => setShowSecret(!showSecret)}
-                          className="px-2 py-1 text-xs bg-gray-700 rounded hover:bg-gray-600"
-                        >
-                          {showSecret ? 'Hide' : 'Show'}
-                        </button>
-                        {sk && (
-                          <button
-                            onClick={() => copyToClipboard(sk)}
-                            className="px-2 py-1 text-xs bg-gray-700 rounded hover:bg-gray-600"
-                          >
-                            Copy
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Key Rotation */}
-              <div className="pt-3 border-t border-gray-700">
-                {!showRegenConfirm ? (
-                  <button
-                    onClick={() => setShowRegenConfirm(true)}
-                    className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded font-medium flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Rotate {selectedProject.mode === 'test' ? 'Test' : 'Live'} Secret
-                  </button>
-                ) : (
-                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 mt-0.5">
-                        <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-medium text-blue-200 mb-1">Rotate Secret Key</h4>
-                        <p className="text-sm text-blue-300/80 mb-3">
-                          This generates a new secret key for your <strong>{selectedProject.mode}</strong> environment.
-                          Your publishable key stays the same, so your frontend code won't break.
-                        </p>
-                        <ul className="text-xs text-blue-300/70 mb-3 space-y-1">
-                          <li>✓ Publishable key unchanged - frontend keeps working</li>
-                          <li>✓ Products & tiers unchanged - no Stripe reconfiguration</li>
-                          <li>✓ Customer data preserved - subscriptions continue</li>
-                          <li>• Only update: your backend's <code className="bg-blue-900/50 px-1 rounded">SECRET_KEY</code> env var</li>
-                        </ul>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={handleRegenerateSecret}
-                            disabled={keyActionLoading}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded font-medium text-sm"
-                          >
-                            {keyActionLoading ? 'Generating...' : 'Generate New Secret'}
-                          </button>
-                          <button
-                            onClick={() => setShowRegenConfirm(false)}
-                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ==============================================================
-                STRIPE ACCOUNT SECTION
-                - Shows connected Stripe account ID
-                - Link to Stripe Dashboard
-                - Trust messaging - they control everything
-                ============================================================== */}
-            {dashboard?.keys?.stripeAccountId ? (
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    {/* Stripe Logo */}
-                    <div className="w-10 h-10 bg-[#635BFF] rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400 mb-1">Connected Stripe Account</p>
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm font-mono text-white">{dashboard.keys.stripeAccountId}</code>
-                        <button
-                          onClick={() => copyToClipboard(dashboard.keys.stripeAccountId)}
-                          className="text-xs text-blue-400 hover:text-blue-300"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <a
-                    href={`https://dashboard.stripe.com/${dashboard.keys.stripeAccountId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-[#635BFF] hover:bg-[#5449E0] rounded text-sm font-medium text-white flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Open Stripe Dashboard
-                  </a>
-                </div>
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <p className="text-xs text-gray-400">
-                    <span className="text-green-400 font-medium">You have full control.</span> All funds go directly to your Stripe account.
-                    You handle refunds, disputes, and payouts. We never touch your money.
-                  </p>
-                </div>
-              </div>
+            {/* API Keys */}
+            {!showRegenConfirm ? (
+              <ApiKeysSection
+                project={selectedProject}
+                projects={projects}
+                credentials={credentials}
+                showSecret={showSecret}
+                onToggleSecret={toggleSecret}
+                onCopy={copyToClipboard}
+                onRegenerateClick={() => setShowRegenConfirm(true)}
+              />
             ) : (
-              <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-4 mb-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div>
-                      <p className="text-amber-200 font-medium">Stripe Not Connected</p>
-                      <p className="text-amber-300/70 text-sm">Connect your Stripe account to process payments</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleConnectStripe}
-                    className="px-4 py-2 bg-[#635BFF] hover:bg-[#5449E0] rounded font-medium text-white"
-                  >
-                    Connect Stripe
-                  </button>
-                </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+                <RegenerateConfirm
+                  mode={selectedProject.mode}
+                  loading={keyActionLoading}
+                  onConfirm={handleRegenerateSecret}
+                  onCancel={() => setShowRegenConfirm(false)}
+                />
               </div>
             )}
 
-            {/* ==============================================================
-                SAAS DASHBOARD
-                - Metrics: Active subs, canceling, MRR, usage
-                - Tiers: Subscription plans with Stripe IDs
-                - Customers: Table with search, filter, pagination
-                ============================================================== */}
+            {/* Stripe Account */}
+            <StripeAccountSection
+              stripeAccountId={dashboard?.keys?.stripeAccountId}
+              onCopy={copyToClipboard}
+            />
+
+            {/* Dashboard Content by Type */}
             {selectedProject.type === 'saas' && (
-              <>
-                {/* Metrics Row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <MetricCard label="Active Subs" value={metrics.activeSubs || 0} />
-                  <MetricCard label="Canceling" value={metrics.cancelingSubs || 0} />
-                  <MetricCard label="MRR" value={`$${((metrics.mrr || 0) / 100).toFixed(2)}`} />
-                  <MetricCard label="Usage (Period)" value={metrics.usageThisPeriod || 0} />
-                </div>
-
-                {/* Subscription Tiers */}
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold">Subscription Tiers</h3>
-                    <button
-                      onClick={() => navigate(`/api-tier-config?edit=true&mode=${selectedProject.mode}&projectType=${selectedProject.type}&pk=${selectedProject.publishableKey}`)}
-                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium"
-                    >
-                      Edit Tiers
-                    </button>
-                  </div>
-                  {tiers.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {tiers.map((tier: any) => (
-                        <div key={tier.name} className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-bold text-lg">{tier.displayName || tier.name}</h4>
-                            {tier.popular && (
-                              <span className="text-xs px-2 py-1 bg-blue-600 rounded-full font-medium">Popular</span>
-                            )}
-                          </div>
-                          <div className="mb-3">
-                            <span className="text-2xl font-bold">${tier.price}</span>
-                            <span className="text-gray-400 text-sm">/mo</span>
-                          </div>
-                          <p className="text-sm text-gray-300 mb-3">
-                            {tier.limit === 'unlimited' ? 'Unlimited API calls' : `${tier.limit} API calls/month`}
-                          </p>
-                          <div className="pt-3 border-t border-gray-800 space-y-1.5">
-                            {tier.productId && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 w-16">Product:</span>
-                                <code className="text-xs text-gray-400 font-mono truncate flex-1">{tier.productId}</code>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tier.productId); }}
-                                  className="text-xs text-blue-400 hover:text-blue-300"
-                                >
-                                  Copy
-                                </button>
-                              </div>
-                            )}
-                            {tier.priceId && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 w-16">Price:</span>
-                                <code className="text-xs text-gray-400 font-mono truncate flex-1">{tier.priceId}</code>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tier.priceId); }}
-                                  className="text-xs text-blue-400 hover:text-blue-300"
-                                >
-                                  Copy
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">No tiers configured yet.</p>
-                  )}
-                </div>
-
-                {/* Customers Table */}
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold">Customers</h3>
-                      <span className="text-sm text-gray-500">({filteredCustomers.length})</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <input
-                        value={search}
-                        onChange={(e) => { setSearch(e.target.value); setCustomerPage(0); }}
-                        placeholder="Search email or ID"
-                        className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm w-48"
-                      />
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => { setStatusFilter(e.target.value as any); setCustomerPage(0); }}
-                        className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm"
-                      >
-                        <option value="all">All</option>
-                        <option value="active">Active</option>
-                        <option value="canceling">Canceling</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-gray-400 border-b border-gray-700">
-                        <th className="py-2 pr-4">Email</th>
-                        <th className="py-2 pr-4">Plan</th>
-                        <th className="py-2 pr-4">Usage</th>
-                        <th className="py-2 pr-4">Status</th>
-                        <th className="py-2 pr-4">Renews</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredCustomers
-                        .slice(customerPage * CUSTOMERS_PER_PAGE, (customerPage + 1) * CUSTOMERS_PER_PAGE)
-                        .map((c: any) => (
-                        <tr
-                          key={c.userId}
-                          className="border-b border-gray-800 hover:bg-gray-900/50 cursor-pointer"
-                          onClick={() => setSelectedCustomer(c)}
-                        >
-                          <td className="py-2 pr-4">{c.email || c.userId}</td>
-                          <td className="py-2 pr-4">
-                            <span className="px-2 py-0.5 text-xs rounded bg-blue-900/50 border border-blue-700">
-                              {c.plan || 'free'}
-                            </span>
-                          </td>
-                          <td className="py-2 pr-4">
-                            <UsageBar count={c.usageCount || 0} limit={c.limit} />
-                          </td>
-                          <td className="py-2 pr-4">
-                            <StatusBadge status={c.canceledAt ? 'canceling' : c.status || 'active'} />
-                          </td>
-                          <td className="py-2 pr-4 text-gray-400">
-                            {c.currentPeriodEnd ? new Date(c.currentPeriodEnd).toLocaleDateString() : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredCustomers.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-gray-500">
-                            No customers yet
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-
-                  {/* Pagination */}
-                  {filteredCustomers.length > CUSTOMERS_PER_PAGE && (
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-700 mt-4">
-                      <span className="text-sm text-gray-500">
-                        Showing {customerPage * CUSTOMERS_PER_PAGE + 1}-{Math.min((customerPage + 1) * CUSTOMERS_PER_PAGE, filteredCustomers.length)} of {filteredCustomers.length}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setCustomerPage(p => Math.max(0, p - 1))}
-                          disabled={customerPage === 0}
-                          className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                        >
-                          Previous
-                        </button>
-                        <span className="text-sm text-gray-400">
-                          Page {customerPage + 1} of {Math.ceil(filteredCustomers.length / CUSTOMERS_PER_PAGE)}
-                        </span>
-                        <button
-                          onClick={() => setCustomerPage(p => p + 1)}
-                          disabled={(customerPage + 1) * CUSTOMERS_PER_PAGE >= filteredCustomers.length}
-                          className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedCustomer && (
-                    <CustomerDetail customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onCopy={copyToClipboard} />
-                  )}
-                </div>
-              </>
+              <SaasDashboard
+                project={selectedProject}
+                metrics={metrics}
+                tiers={tiers}
+                customers={customers}
+                onCopy={copyToClipboard}
+              />
             )}
 
-            {/* ==============================================================
-                STORE DASHBOARD
-                - Metrics: Total sales, revenue, avg order
-                - Products: Table with images, prices, stock status
-                - Orders: Recent checkout events from webhook
-                ============================================================== */}
             {selectedProject.type === 'store' && (
-              <>
-                {/* Sales Metrics Row */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <MetricCard label="Total Sales" value={metrics.storeSalesCount || 0} />
-                  <MetricCard label="Revenue" value={`$${((metrics.storeTotalRevenue || 0) / 100).toFixed(2)}`} />
-                  <MetricCard label="Avg Order" value={metrics.storeSalesCount > 0 ? `$${((metrics.storeTotalRevenue || 0) / metrics.storeSalesCount / 100).toFixed(2)}` : '$0.00'} />
-                </div>
-
-                {/* Products Table - with images, stock status, Stripe IDs */}
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold">Products</h3>
-                      <span className="text-sm text-gray-500">({products.length})</span>
-                    </div>
-                    <button
-                      onClick={() => navigate(`/api-tier-config?edit=true&mode=${selectedProject.mode}&projectType=store&pk=${selectedProject.publishableKey}`)}
-                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium"
-                    >
-                      Edit Products
-                    </button>
-                  </div>
-
-                  {products.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-gray-400 border-b border-gray-700">
-                            <th className="py-2 pr-4 w-16">Image</th>
-                            <th className="py-2 pr-4">Name</th>
-                            <th className="py-2 pr-4">Price</th>
-                            <th className="py-2 pr-4">Price ID</th>
-                            <th className="py-2 pr-4">Product ID</th>
-                            <th className="py-2 pr-4 text-right">Stock</th>
-                            <th className="py-2 pr-4">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {products.map((p: any) => (
-                            <tr key={p.priceId} className="border-b border-gray-800 hover:bg-gray-900/50">
-                              <td className="py-3 pr-4">
-                                {p.imageUrl ? (
-                                  <img src={p.imageUrl} alt={p.displayName} className="w-12 h-12 object-cover rounded" />
-                                ) : (
-                                  <div className="w-12 h-12 bg-gray-700 rounded flex items-center justify-center text-gray-500">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-3 pr-4 font-medium">{p.displayName || p.name}</td>
-                              <td className="py-3 pr-4">
-                                <span className="text-green-400 font-bold">${(p.price || 0).toFixed(2)}</span>
-                              </td>
-                              <td className="py-3 pr-4">
-                                <div className="flex items-center gap-1">
-                                  <code className="text-xs text-gray-400 font-mono truncate max-w-[120px]">{p.priceId}</code>
-                                  <button
-                                    onClick={() => copyToClipboard(p.priceId)}
-                                    className="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0"
-                                  >
-                                    Copy
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="py-3 pr-4">
-                                <div className="flex items-center gap-1">
-                                  <code className="text-xs text-gray-400 font-mono truncate max-w-[120px]">{p.productId}</code>
-                                  <button
-                                    onClick={() => copyToClipboard(p.productId)}
-                                    className="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0"
-                                  >
-                                    Copy
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="py-3 pr-4 text-right">
-                                {p.inventory !== null ? (
-                                  <span className={`font-mono ${p.inventory <= 5 ? 'text-amber-400' : 'text-gray-300'}`}>
-                                    {p.inventory}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-500">∞</span>
-                                )}
-                              </td>
-                              <td className="py-3 pr-4">
-                                {p.soldOut ? (
-                                  <span className="px-2 py-1 text-xs bg-red-900/50 border border-red-700 rounded text-red-200">
-                                    Sold Out
-                                  </span>
-                                ) : p.inventory !== null && p.inventory <= 5 ? (
-                                  <span className="px-2 py-1 text-xs bg-amber-900/50 border border-amber-700 rounded text-amber-200">
-                                    Low Stock
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-1 text-xs bg-green-900/50 border border-green-700 rounded text-green-200">
-                                    In Stock
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">No products yet.</p>
-                  )}
-                </div>
-
-                {/* Orders Table - from webhook checkout events */}
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold">Orders</h3>
-                      <span className="text-sm text-gray-500">
-                        ({(webhook.recent || []).filter((e: any) => e.type === 'checkout.session.completed' && e.payload?.data?.object?.mode === 'payment').length})
-                      </span>
-                    </div>
-                  </div>
-
-                  {(webhook.recent || []).filter((e: any) => e.type === 'checkout.session.completed' && e.payload?.data?.object?.mode === 'payment').length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-gray-400 border-b border-gray-700">
-                            <th className="py-2 pr-4">Customer</th>
-                            <th className="py-2 pr-4">Email</th>
-                            <th className="py-2 pr-4">Amount</th>
-                            <th className="py-2 pr-4">Payment ID</th>
-                            <th className="py-2 pr-4">Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(webhook.recent || [])
-                            .filter((e: any) => e.type === 'checkout.session.completed' && e.payload?.data?.object?.mode === 'payment')
-                            .slice(0, 15)
-                            .map((evt: any, i: number) => {
-                              const session = evt.payload?.data?.object || {};
-                              const customerDetails = session.customer_details || {};
-                              const name = customerDetails.name || '—';
-                              const email = session.customer_email || customerDetails.email || 'Guest';
-                              const paymentIntent = session.payment_intent || session.id || '—';
-                              return (
-                                <tr key={i} className="border-b border-gray-800 hover:bg-gray-900/50">
-                                  <td className="py-3 pr-4 font-medium">{name}</td>
-                                  <td className="py-3 pr-4">
-                                    <span className="text-blue-400">{email}</span>
-                                  </td>
-                                  <td className="py-3 pr-4">
-                                    <span className="text-green-400 font-bold">${((session.amount_total || 0) / 100).toFixed(2)}</span>
-                                  </td>
-                                  <td className="py-3 pr-4">
-                                    <div className="flex items-center gap-1">
-                                      <code className="text-xs text-gray-400 font-mono truncate max-w-[100px]">
-                                        {typeof paymentIntent === 'string' ? paymentIntent.slice(-8) : '—'}
-                                      </code>
-                                      {typeof paymentIntent === 'string' && (
-                                        <button
-                                          onClick={() => copyToClipboard(paymentIntent)}
-                                          className="text-xs text-blue-400 hover:text-blue-300"
-                                        >
-                                          Copy
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="py-3 pr-4 text-gray-400">
-                                    {evt.createdAt ? new Date(evt.createdAt).toLocaleString() : '—'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <svg className="w-12 h-12 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                      </svg>
-                      <p className="text-gray-500">No orders yet</p>
-                      <p className="text-gray-600 text-sm mt-1">Orders will appear here after customers complete checkout</p>
-                    </div>
-                  )}
-                </div>
-              </>
+              <StoreDashboard
+                project={selectedProject}
+                metrics={metrics}
+                products={products}
+                webhook={webhook}
+                onCopy={copyToClipboard}
+              />
             )}
 
-            {/* ==============================================================
-                WEBHOOK STATUS
-                Shows webhook URL and recent events for debugging
-                ============================================================== */}
-            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <h3 className="text-lg font-bold mb-3">Webhook Status</h3>
-              <div className="bg-gray-900 rounded p-3 mb-3">
-                <p className="text-xs text-gray-500 mb-1">Webhook URL</p>
-                <code className="text-sm text-gray-300 break-all">{API_MULTI}/webhook/stripe</code>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Last event:</span>
-                <span>{webhook.lastEventAt ? new Date(webhook.lastEventAt).toLocaleString() : 'None'}</span>
-              </div>
-              {(webhook.recent || []).length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <p className="text-xs text-gray-500 mb-2">Recent events</p>
-                  <div className="space-y-1">
-                    {webhook.recent.slice(0, 5).map((evt: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300">{evt.type}</span>
-                        <span className="text-gray-500">{evt.createdAt ? new Date(evt.createdAt).toLocaleTimeString() : ''}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Webhook Status */}
+            <WebhookStatus webhook={webhook} />
           </>
         ) : (
-          <div className="text-center py-12 text-gray-500">
-            Select a project to view its dashboard
-          </div>
+          <div className="text-center py-12 text-gray-500">Select a project to view its dashboard</div>
         )}
       </main>
 
-      {/* ================================================================
-          MODALS & OVERLAYS
-          ================================================================ */}
-
-      {/* New Secret Key Modal - shows after regenerating */}
+      {/* Key Modal */}
       {keyModal.show && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl border border-gray-700 max-w-lg w-full shadow-2xl">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">New {keyModal.mode.toUpperCase()} Secret Key</h3>
-                  <p className="text-sm text-gray-400">Copied to clipboard</p>
-                </div>
-              </div>
-
-              <div className="bg-gray-900 rounded-lg p-4 mb-4">
-                <p className="text-xs text-gray-500 mb-2">Your new secret key:</p>
-                <code className="text-sm text-green-400 font-mono break-all select-all">{keyModal.secretKey}</code>
-              </div>
-
-              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-4">
-                <p className="text-sm text-blue-200 font-medium mb-2">What to update:</p>
-                <ul className="text-sm text-blue-300/80 space-y-1">
-                  <li>• Your server's <code className="bg-blue-900/50 px-1 rounded">SECRET_KEY</code> environment variable</li>
-                  <li>• Any backend code that calls the dream-api</li>
-                </ul>
-                <p className="text-xs text-blue-400 mt-3">
-                  Your publishable key and frontend code remain unchanged.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setKeyModal({ show: false, secretKey: '', mode: '' })}
-                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-white"
-              >
-                Got it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast Notification - success/error feedback */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
-            toast.type === 'success'
-              ? 'bg-green-900/90 border-green-700 text-green-100'
-              : 'bg-red-900/90 border-red-700 text-red-100'
-          }`}>
-            {toast.type === 'success' ? (
-              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            )}
-            <span className="font-medium">{toast.message}</span>
-            <button
-              onClick={() => setToast(null)}
-              className="ml-2 text-current opacity-70 hover:opacity-100"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// HELPER COMPONENTS
-// ============================================================================
-// These could be extracted to components/dashboard/ folder later
-
-/** Header with logo and user button */
-function Header() {
-  return (
-    <header className="bg-gray-800 border-b border-gray-700">
-      <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">dream-api</h1>
-        <UserButton />
-      </div>
-    </header>
-  );
-}
-
-/** Platform ID badge with copy button */
-function PlatformIdBadge({ platformId, onCopy }: { platformId: string; onCopy: (s: string) => void }) {
-  return (
-    <div className="mt-3 inline-flex items-center gap-2 text-sm text-gray-300 bg-gray-800 border border-gray-700 rounded px-3 py-1">
-      <span className="text-xs uppercase text-gray-500">Platform ID</span>
-      <span className="font-mono">{platformId}</span>
-      <button onClick={() => onCopy(platformId)} className="text-xs text-blue-400 hover:text-blue-300">
-        Copy
-      </button>
-    </div>
-  );
-}
-
-/** Metric card for dashboard stats */
-function MetricCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-      <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
-    </div>
-  );
-}
-
-/** Usage progress bar with color coding */
-function UsageBar({ count, limit }: { count: number; limit: number | string }) {
-  const numericLimit = limit === 'unlimited' ? 100 : Number(limit || 1);
-  const pct = Math.min(100, Math.round((count / numericLimit) * 100));
-  return (
-    <div className="space-y-1">
-      <div className="h-2 w-24 bg-gray-800 rounded">
-        <div
-          className={`h-2 rounded ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-          style={{ width: `${pct}%` }}
+        <KeyModal
+          secretKey={keyModal.secretKey}
+          mode={keyModal.mode}
+          onClose={() => setKeyModal({ show: false, secretKey: '', mode: '' })}
         />
-      </div>
-      <span className="text-xs text-gray-400">
-        {count} / {limit === 'unlimited' ? '∞' : limit}
-      </span>
-    </div>
-  );
-}
+      )}
 
-/** Status badge (active/canceling/canceled) */
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    active: 'bg-green-900/40 border-green-700 text-green-200',
-    canceling: 'bg-yellow-900/40 border-yellow-700 text-yellow-200',
-    canceled: 'bg-red-900/40 border-red-700 text-red-200',
-    none: 'bg-gray-800 border-gray-700 text-gray-400',
-  };
-  return (
-    <span className={`px-2 py-0.5 text-xs rounded border ${styles[status] || styles.none}`}>
-      {status}
-    </span>
-  );
-}
-
-/** Expanded customer detail panel */
-function CustomerDetail({ customer, onClose, onCopy }: { customer: any; onClose: () => void; onCopy: (s: string) => void }) {
-  return (
-    <div className="mt-4 bg-gray-900 border border-gray-700 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-semibold">Customer Details</h4>
-        <button onClick={onClose} className="text-gray-400 hover:text-white text-sm">Close</button>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-        <DetailItem label="User ID" value={customer.userId} copyable onCopy={onCopy} />
-        <DetailItem label="Email" value={customer.email || '—'} />
-        <DetailItem label="Plan" value={customer.plan || 'free'} />
-        <DetailItem label="Status" value={customer.canceledAt ? 'Canceling' : customer.status || 'active'} />
-        <DetailItem label="Usage" value={`${customer.usageCount || 0} / ${customer.limit || 0}`} />
-        <DetailItem label="Period Ends" value={customer.currentPeriodEnd ? new Date(customer.currentPeriodEnd).toLocaleDateString() : '—'} />
-        <DetailItem label="Stripe Customer" value={customer.stripeCustomerId || '—'} copyable onCopy={onCopy} />
-        <DetailItem label="Subscription ID" value={customer.subscriptionId || '—'} copyable onCopy={onCopy} />
-      </div>
-    </div>
-  );
-}
-
-/** Single detail item with optional copy button */
-function DetailItem({ label, value, copyable, onCopy }: { label: string; value: string; copyable?: boolean; onCopy?: (s: string) => void }) {
-  return (
-    <div>
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <div className="flex items-center gap-1">
-        <p className="text-sm text-gray-200 truncate">{value}</p>
-        {copyable && value && value !== '—' && onCopy && (
-          <button onClick={() => onCopy(value)} className="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0">Copy</button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * TOTALS VIEW
- * Aggregate view across all projects
- * TODO: Add actual MRR totals from api-multi/dashboard/totals endpoint
- */
-function TotalsView({ projects }: { projects: Project[] }) {
-  // Group by type
-  const saasProjects = projects.filter(p => p.type === 'saas');
-  const storeProjects = projects.filter(p => p.type === 'store');
-  const liveProjects = projects.filter(p => p.mode === 'live');
-
-  return (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold">Totals Across All Projects</h3>
-
-      {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Total Projects" value={projects.length} />
-        <MetricCard label="SaaS Projects" value={saasProjects.length} />
-        <MetricCard label="Store Projects" value={storeProjects.length} />
-        <MetricCard label="Live Projects" value={liveProjects.length} />
-      </div>
-
-      {/* Projects List */}
-      <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-        <h4 className="text-lg font-bold mb-4">All Projects</h4>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-400 border-b border-gray-700">
-              <th className="py-2 pr-4">Name</th>
-              <th className="py-2 pr-4">Type</th>
-              <th className="py-2 pr-4">Mode</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2 pr-4">Key</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.publishableKey} className="border-b border-gray-800">
-                <td className="py-2 pr-4 font-medium">{p.name}</td>
-                <td className="py-2 pr-4">
-                  <span className={`px-2 py-0.5 text-xs rounded ${
-                    p.type === 'saas' ? 'bg-blue-900/50 text-blue-200' : 'bg-purple-900/50 text-purple-200'
-                  }`}>
-                    {p.type}
-                  </span>
-                </td>
-                <td className="py-2 pr-4">
-                  <span className={`px-2 py-0.5 text-xs rounded ${
-                    p.mode === 'test' ? 'bg-amber-900/50 text-amber-200' : 'bg-green-900/50 text-green-200'
-                  }`}>
-                    {p.mode}
-                  </span>
-                </td>
-                <td className="py-2 pr-4">
-                  <span className={`px-2 py-0.5 text-xs rounded ${
-                    p.status === 'active' ? 'bg-green-900/50 text-green-200' : 'bg-red-900/50 text-red-200'
-                  }`}>
-                    {p.status}
-                  </span>
-                </td>
-                <td className="py-2 pr-4 font-mono text-xs text-gray-400 truncate max-w-[200px]">
-                  {p.publishableKey}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Toast */}
+      {toast && <Toast toast={toast} onClose={hideToast} />}
     </div>
   );
 }
