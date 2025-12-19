@@ -69,6 +69,8 @@ export function getCorsHeaders(request: Request, env: Env): Record<string, strin
 		'http://localhost:5173',               // Vite dev (frontend-v2)
 		'http://localhost:5174',               // Vite dev (fact-saas)
 		'http://localhost:8787',               // Wrangler dev (api)
+		'http://127.0.0.1:5500',               // Live Server (test-app)
+		'http://localhost:5500',               // Live Server alt
 	];
 
 	console.log(`[CORS Debug] env.ALLOWED_ORIGINS: ${env.ALLOWED_ORIGINS}`);
@@ -97,7 +99,7 @@ export function getCorsHeaders(request: Request, env: Env): Record<string, strin
 		// If origin allowed, echo it back. Otherwise, use first allowed origin as safe fallback
 		'Access-Control-Allow-Origin': finalAllowOrigin,
 		'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-		'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform-User-Id, X-User-Id, X-User-Plan, X-Env, X-Publishable-Key',
+		'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform-User-Id, X-User-Id, X-User-Plan, X-Env, X-Publishable-Key, X-Clerk-Token',
 		'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
 		...getSecurityHeaders(), // Add security headers to all responses
 	};

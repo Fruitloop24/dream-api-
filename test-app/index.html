@@ -206,17 +206,17 @@
     </div>
     <label>API Base URL</label>
     <input type="text" id="apiUrl" value="https://api-multi.k-c-sheffield012376.workers.dev">
-    <div style="display: flex; gap: 10px; align-items: center;">
-      <button class="btn-primary" onclick="initClerk()">Initialize Clerk</button>
-      <span id="init-status" style="color: #64748b; font-size: 13px;"></span>
-    </div>
   </div>
 
   <!-- Auth Section -->
   <div class="card">
     <h2>1. Authentication</h2>
     <div id="clerk-auth">
-      <div class="status status-info">Enter your Clerk key above and click Initialize to sign in</div>
+      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <button onclick="signIn()" class="btn-primary">Sign In</button>
+        <button onclick="signUp()" class="btn-success">Sign Up</button>
+      </div>
+      <p style="color: #64748b; font-size: 13px; margin: 0;">Click to authenticate via hosted Clerk page</p>
     </div>
     <div id="auth-info" class="hidden">
       <div class="grid">
@@ -255,14 +255,14 @@
     </div>
 
     <div class="card">
-      <h2>3. Upgrade Flow <span class="badge badge-saas">SaaS</span></h2>
-      <div id="checkout-placeholder">
-        <div class="status status-info">Sign in to test checkout</div>
+      <h2>3. Pricing Tiers <span class="badge badge-saas">SaaS</span></h2>
+      <div id="tiers-placeholder">
+        <div class="status status-info">Loading tiers from API...</div>
       </div>
-      <div id="checkout-controls" class="hidden">
-        <p style="color: #94a3b8; margin-bottom: 15px;">Hit your limit? Upgrade your plan!</p>
-        <button class="btn-warning" onclick="createCheckout('pro')">Upgrade to Pro</button>
+      <div id="tiers-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px;"></div>
+      <div id="billing-controls" class="hidden">
         <button class="btn-secondary" onclick="openPortal()">Manage Billing</button>
+        <button class="btn-secondary" onclick="loadTiers()">Refresh Tiers</button>
       </div>
     </div>
   </div>
@@ -305,20 +305,49 @@
 
   <!-- Load config if exists -->
   <script src="config.js" onerror="console.log('No config.js - using manual input')"></script>
+
+  <!-- Clerk SDK just for session management (not UI) -->
+  <script
+    async
+    crossorigin="anonymous"
+    data-clerk-publishable-key="pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA"
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+    type="text/javascript"
+  ></script>
+
   <script>
-    let clerk = null;
     let currentToken = null;
     let currentMode = 'saas';
 
-    // Auto-load config if present
-    window.addEventListener('DOMContentLoaded', () => {
+    // Wait for Clerk to load, check if user returned from auth
+    window.addEventListener('load', async function() {
+      // Load config
       if (window.TEST_CONFIG) {
-        document.getElementById('clerkKey').value = window.TEST_CONFIG.clerkPublishableKey || '';
         document.getElementById('secretKey').value = window.TEST_CONFIG.secretKey || '';
         if (window.TEST_CONFIG.apiUrl) {
           document.getElementById('apiUrl').value = window.TEST_CONFIG.apiUrl;
         }
-        log('Config loaded from config.js', 'info');
+        log('Config loaded', 'info');
+      }
+
+      // Hide clerk key input (not needed with hosted auth)
+      document.getElementById('clerkKey').closest('div').style.display = 'none';
+
+      // Load tiers if secret key is available
+      if (document.getElementById('secretKey').value) {
+        await loadTiers();
+      }
+
+      // Wait for Clerk SDK to load
+      log('Loading Clerk...', 'info');
+      await Clerk.load();
+      log('Clerk ready', 'success');
+
+      // Check if user is signed in (came back from hosted auth)
+      if (Clerk.user && Clerk.session) {
+        await handleSignedIn();
+      } else {
+        log('Not signed in - click Sign In or Sign Up', 'info');
       }
     });
 
@@ -350,81 +379,55 @@
       log('Copied to clipboard!', 'success');
     }
 
-    async function initClerk() {
-      const clerkKey = document.getElementById('clerkKey').value.trim();
-      if (!clerkKey) {
-        alert('Enter your end-user Clerk publishable key first');
-        return;
-      }
-
-      document.getElementById('init-status').textContent = 'Loading...';
-
-      try {
-        log('Initializing Clerk...');
-
-        const { Clerk } = await import('https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm');
-        clerk = new Clerk(clerkKey);
-        await clerk.load();
-
-        document.getElementById('init-status').textContent = '';
-        document.getElementById('clerk-auth').innerHTML = '<div id="clerk-mount"></div>';
-
-        if (clerk.user) {
-          await handleSignedIn();
-        } else {
-          clerk.mountSignIn(document.getElementById('clerk-mount'), {
-            afterSignInUrl: window.location.href,
-            afterSignUpUrl: window.location.href,
-          });
-          log('Clerk loaded - please sign in', 'success');
-        }
-
-        clerk.addListener(async ({ user }) => {
-          if (user) await handleSignedIn();
-        });
-
-      } catch (err) {
-        document.getElementById('init-status').textContent = 'Failed';
-        log('Clerk init failed: ' + err.message, 'error');
-        console.error(err);
-      }
-    }
-
     async function handleSignedIn() {
-      currentToken = await clerk.session.getToken();
+      if (!Clerk.user || !Clerk.session) return;
+
+      currentToken = await Clerk.session.getToken();
 
       // Decode JWT payload (for display only)
       const payload = JSON.parse(atob(currentToken.split('.')[1]));
       const plan = payload.publicMetadata?.plan || 'free';
       const pk = payload.publicMetadata?.publishableKey || 'N/A';
 
+      // Track current plan for tier display
+      currentUserPlan = plan;
+
       // Update UI
       document.getElementById('clerk-auth').innerHTML = `
         <div class="status status-success">
-          Signed in as <strong>${clerk.user.primaryEmailAddress?.emailAddress}</strong>
+          Signed in as <strong>${Clerk.user.primaryEmailAddress?.emailAddress}</strong>
           <button class="btn-secondary" onclick="signOut()" style="margin-left: auto;">Sign Out</button>
         </div>
       `;
 
       document.getElementById('auth-info').classList.remove('hidden');
-      document.getElementById('userId').value = clerk.user.id;
+      document.getElementById('userId').value = Clerk.user.id;
       document.getElementById('jwtToken').value = currentToken;
       document.getElementById('userPlan').value = `${plan} (pk: ${pk.substring(0, 25)}...)`;
 
       // Show controls
       document.getElementById('usage-controls').classList.remove('hidden');
       document.getElementById('usage-placeholder').classList.add('hidden');
-      document.getElementById('checkout-controls').classList.remove('hidden');
-      document.getElementById('checkout-placeholder').classList.add('hidden');
 
-      log(`Signed in: ${clerk.user.id} | Plan: ${plan}`, 'success');
+      log(`Signed in: ${Clerk.user.id} | Plan: ${plan}`, 'success');
 
-      // Auto-check usage
+      // Auto-check usage and re-render tiers with current plan
       await checkUsage();
+      if (tiers.length > 0) renderTiers();
+    }
+
+    function signIn() {
+      const redirectUrl = encodeURIComponent(window.location.href.split('?')[0]);
+      window.location.href = `https://composed-blowfish-76.accounts.dev/sign-in?redirect_url=${redirectUrl}`;
+    }
+
+    function signUp() {
+      const redirectUrl = encodeURIComponent(window.location.href.split('?')[0]);
+      window.location.href = `https://composed-blowfish-76.accounts.dev/sign-up?redirect_url=${redirectUrl}`;
     }
 
     async function signOut() {
-      await clerk.signOut();
+      await Clerk.signOut();
       location.reload();
     }
 
@@ -437,9 +440,13 @@
         return null;
       }
 
-      if (needsJwt && !currentToken) {
-        log('Sign in first to get JWT', 'error');
-        return null;
+      if (needsJwt) {
+        // Always get fresh token before API calls
+        if (!Clerk.session) {
+          log('Sign in first', 'error');
+          return null;
+        }
+        currentToken = await Clerk.session.getToken();
       }
 
       const headers = {
@@ -526,6 +533,70 @@
         log('Opening billing portal...', 'success');
         window.open(result.data.url, '_blank');
       }
+    }
+
+    // Tier Functions
+    let tiers = [];
+    let currentUserPlan = 'free';
+
+    async function loadTiers() {
+      const result = await apiCall('GET', '/api/tiers', null, false);
+      if (result?.data?.tiers) {
+        tiers = result.data.tiers;
+        renderTiers();
+        document.getElementById('tiers-placeholder').classList.add('hidden');
+        document.getElementById('billing-controls').classList.remove('hidden');
+      } else {
+        document.getElementById('tiers-placeholder').innerHTML =
+          '<div class="status status-error">Failed to load tiers. Check your secret key.</div>';
+      }
+    }
+
+    function renderTiers() {
+      const container = document.getElementById('tiers-grid');
+      const sortedTiers = [...tiers].sort((a, b) => a.price - b.price);
+
+      container.innerHTML = sortedTiers.map(tier => {
+        const isCurrentPlan = tier.id === currentUserPlan || tier.name?.toLowerCase() === currentUserPlan;
+        const limitText = tier.limit === 'unlimited' || tier.limit === null
+          ? 'Unlimited requests'
+          : `${tier.limit} requests/mo`;
+
+        // Parse features
+        let features = [];
+        if (Array.isArray(tier.features)) {
+          features = tier.features;
+        } else if (typeof tier.features === 'string') {
+          try {
+            const parsed = JSON.parse(tier.features);
+            features = parsed.features || [];
+          } catch {
+            features = tier.features.split(',').map(f => f.trim());
+          }
+        }
+
+        return `
+          <div class="product-card" style="border: ${isCurrentPlan ? '2px solid #3b82f6' : '1px solid #334155'}; position: relative;">
+            ${isCurrentPlan ? '<div style="position: absolute; top: -10px; right: 10px; background: #3b82f6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">CURRENT</div>' : ''}
+            <h4 style="margin: 0 0 5px 0; color: #f8fafc;">${tier.displayName || tier.name}</h4>
+            <p class="product-price" style="margin: 0 0 8px 0;">$${tier.price}<span style="font-size: 14px; color: #94a3b8;">/mo</span></p>
+            <p style="color: #64748b; font-size: 12px; margin: 0 0 10px 0;">${limitText}</p>
+            ${features.length > 0 ? `
+              <ul style="margin: 0 0 12px 0; padding-left: 16px; font-size: 12px; color: #94a3b8;">
+                ${features.slice(0, 3).map(f => `<li>${f}</li>`).join('')}
+              </ul>
+            ` : ''}
+            <button
+              class="${isCurrentPlan ? 'btn-secondary' : 'btn-primary'}"
+              onclick="createCheckout('${tier.id}')"
+              ${isCurrentPlan ? 'disabled' : ''}
+              style="width: 100%; ${isCurrentPlan ? 'opacity: 0.6; cursor: not-allowed;' : ''}"
+            >
+              ${isCurrentPlan ? 'Current Plan' : tier.price === 0 ? 'Downgrade' : 'Upgrade'}
+            </button>
+          </div>
+        `;
+      }).join('');
     }
 
     // Store Functions

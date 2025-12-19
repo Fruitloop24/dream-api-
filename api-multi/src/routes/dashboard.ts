@@ -272,11 +272,14 @@ export async function handleDashboard(
     // FETCH STRIPE ACCOUNT INFO
     // =========================================================================
 
+    // Get Stripe token for this platform (OAuth token works for both test/live)
     const stripeResult = await env.DB.prepare(`
-      SELECT stripeUserId FROM stripe_tokens WHERE platformId = ? LIMIT 1
+      SELECT stripeUserId, accessToken FROM stripe_tokens
+      WHERE platformId = ?
+      LIMIT 1
     `)
       .bind(platformId)
-      .first<StripeTokenRow>();
+      .first<StripeTokenRow & { accessToken?: string }>();
 
     // =========================================================================
     // FETCH RECENT EVENTS

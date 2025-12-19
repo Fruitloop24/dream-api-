@@ -22,7 +22,7 @@
 import { Env, PlanTier } from '../types';
 import { getTierConfig } from '../config/configLoader';
 import { getCurrentPeriod } from '../services/kv';
-import { ensureUsageSchema } from '../services/d1';
+import { ensureUsageSchema, upsertEndUser } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -34,13 +34,30 @@ export async function handleDataRequest(
 	env: Env,
 	corsHeaders: Record<string, string>,
 	mode: string = 'live',
-	publishableKey: string | null = null
+	publishableKey: string | null = null,
+	userEmail: string | null = null
 ): Promise<Response> {
 	await ensureUsageSchema(env);
 
+	// Register user in end_users table (if not already there)
+	// This ensures users who sign in via OAuth show up in dashboard
+	if (publishableKey) {
+		await upsertEndUser(env, platformId, publishableKey, userId, userEmail, 'active');
+	}
+
+	// Check D1 for actual subscription plan (more authoritative than JWT which may be stale)
+	const subscription = await env.DB.prepare(
+		'SELECT plan FROM subscriptions WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL) AND status = \'active\' LIMIT 1'
+	)
+		.bind(platformId, userId, publishableKey)
+		.first<{ plan: string }>();
+
+	// Use D1 plan if active subscription exists, otherwise fall back to JWT plan
+	const actualPlan = (subscription?.plan as PlanTier) || plan;
+
 	// Get tier limit from config
 	const tierConfigs = await getTierConfig(env, platformId, mode, publishableKey);
-	const tierLimit = tierConfigs[plan]?.limit ?? 0;
+	const tierLimit = tierConfigs[actualPlan]?.limit ?? 0;
 	const isUnlimited = tierLimit === Infinity;
 	const limitNumber = isUnlimited ? Number.MAX_SAFE_INTEGER : tierLimit;
 
@@ -51,7 +68,7 @@ export async function handleDataRequest(
 		`INSERT OR IGNORE INTO usage_counts (platformId, publishableKey, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
      VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`
 	)
-		.bind(platformId, publishableKey, userId, plan, currentPeriod.start, currentPeriod.end)
+		.bind(platformId, publishableKey, userId, actualPlan, currentPeriod.start, currentPeriod.end)
 		.run();
 
 	// Load current usage
@@ -99,7 +116,7 @@ export async function handleDataRequest(
 	const updated = await env.DB.prepare(
 		'UPDATE usage_counts SET usageCount = usageCount + 1, plan = ?, periodStart = ?, periodEnd = ?, updatedAt = CURRENT_TIMESTAMP WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL) RETURNING usageCount'
 	)
-		.bind(plan, periodStart, periodEnd, platformId, userId, publishableKey)
+		.bind(actualPlan, periodStart, periodEnd, platformId, userId, publishableKey)
 		.first<{ usageCount: number }>();
 
 	usageCount = updated?.usageCount ?? usageCount + 1;
@@ -112,7 +129,7 @@ export async function handleDataRequest(
 			usage: {
 				count: usageCount,
 				limit: isUnlimited ? 'unlimited' : tierLimit,
-				plan,
+				plan: actualPlan,
 			},
 		}),
 		{
@@ -137,6 +154,16 @@ export async function handleUsageCheck(
 	await ensureUsageSchema(env);
 	const currentPeriod = getCurrentPeriod();
 
+	// Check D1 for actual subscription plan (more authoritative than JWT which may be stale)
+	const subscription = await env.DB.prepare(
+		'SELECT plan FROM subscriptions WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL) AND status = \'active\' LIMIT 1'
+	)
+		.bind(platformId, userId, publishableKey)
+		.first<{ plan: string }>();
+
+	// Use D1 plan if active subscription exists, otherwise fall back to JWT plan
+	const actualPlan = (subscription?.plan as PlanTier) || plan;
+
 	const fromDb = await env.DB.prepare(
 		'SELECT usageCount, plan, periodStart, periodEnd FROM usage_counts WHERE platformId = ? AND userId = ? AND (publishableKey = ? OR publishableKey IS NULL)'
 	)
@@ -147,14 +174,14 @@ export async function handleUsageCheck(
 	const periodStart = fromDb?.periodStart || currentPeriod.start;
 	const periodEnd = fromDb?.periodEnd || currentPeriod.end;
 
-	// Get tier limit from config
+	// Get tier limit from config using actual plan
 	const tierConfigs = await getTierConfig(env, platformId, mode, publishableKey);
-	const tierLimit = tierConfigs[plan]?.limit || 0;
+	const tierLimit = tierConfigs[actualPlan]?.limit || 0;
 
 	return new Response(
 		JSON.stringify({
 			userId,
-			plan,
+			plan: actualPlan,
 			usageCount,
 			limit: tierLimit === Infinity ? 'unlimited' : tierLimit,
 			remaining: tierLimit === Infinity ? 'unlimited' : Math.max(0, tierLimit - usageCount),

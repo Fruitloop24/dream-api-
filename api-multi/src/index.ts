@@ -11,7 +11,7 @@
  * ============================================================================
  */
 
-import { createClerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { handleStripeWebhook } from './stripe-webhook';
 
 // Type definitions
@@ -57,20 +57,29 @@ async function verifyEndUserToken(
 		throw new Error('Missing end-user token (send X-Clerk-Token with a valid JWT)');
 	}
 
-	const clerkClient = createClerkClient({
+	// Verify the JWT signature using standalone verifyToken function
+	// Returns { data, error } in newer Clerk SDK versions
+	const result = await verifyToken(token, {
 		secretKey: env.CLERK_SECRET_KEY,
-		publishableKey: env.CLERK_PUBLISHABLE_KEY,
 	});
 
-	const verified = await clerkClient.verifyToken(token, {
-		template: env.CLERK_JWT_TEMPLATE,
-	});
+	// Handle new { data, error } return format
+	const verified = 'data' in result ? result.data : result;
+	if (!verified || ('error' in result && result.error)) {
+		throw new Error('Token verification failed');
+	}
 
 	const publicMeta = (verified as any).publicMetadata || {};
 	const plan = (publicMeta.plan as PlanTier) || 'free';
 	const publishableKeyFromToken = (publicMeta.publishableKey as string) || null;
 
-	return { userId: verified.sub, plan, publishableKeyFromToken };
+	// Try to get email from various places in the token
+	const email = (verified as any).email ||
+		(verified as any).primary_email ||
+		publicMeta.email ||
+		null;
+
+	return { userId: verified.sub, plan, publishableKeyFromToken, email };
 }
 
 /**
@@ -125,15 +134,6 @@ export default {
 		// Health check
 		if (url.pathname === '/health') {
 			return new Response(JSON.stringify({ status: 'ok' }), {
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-			});
-		}
-
-		// Get available tiers (public pricing info)
-		if (url.pathname === '/api/tiers' && request.method === 'GET') {
-			const tiers = await getAllTiers(env);
-			return new Response(JSON.stringify({ tiers }), {
-				status: 200,
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});
 		}
@@ -223,6 +223,16 @@ export default {
 				return await handleUpdateCustomer(customerId, platformId, publishableKey, clerkClient, corsHeaders, request);
 			}
 
+			// Get tiers - Dev fetching their pricing tiers
+			if (url.pathname === '/api/tiers' && request.method === 'GET') {
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Tiers list`);
+				const tiers = await getAllTiers(env, platformId, mode, pkForFilter);
+				return new Response(JSON.stringify({ tiers }), {
+					status: 200,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				});
+			}
+
 			// Dashboard - Dev viewing their own metrics
 			if (url.pathname === '/api/dashboard' && request.method === 'GET') {
 				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Dashboard`);
@@ -269,12 +279,14 @@ export default {
 				let userId: string;
 				let plan: PlanTier;
 				let publishableKeyFromToken: string | null | undefined;
+				let userEmail: string | null = null;
 
 				try {
 					const verified = await verifyEndUserToken(request, env);
 					userId = verified.userId;
 					plan = verified.plan;
 					publishableKeyFromToken = verified.publishableKeyFromToken;
+					userEmail = verified.email || null;
 				} catch (tokenError: any) {
 					return new Response(
 						JSON.stringify({
@@ -326,7 +338,7 @@ export default {
 
 				// Process request and track usage
 				if (url.pathname === '/api/data' && request.method === 'POST') {
-					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, mode, pkForFilter);
+					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, mode, pkForFilter, userEmail);
 				}
 
 				// Get current usage and limits
