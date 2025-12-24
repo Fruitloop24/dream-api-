@@ -204,19 +204,44 @@
         <input type="text" id="secretKey" placeholder="sk_test_... (from your project)">
       </div>
     </div>
-    <label>API Base URL</label>
-    <input type="text" id="apiUrl" value="https://api-multi.k-c-sheffield012376.workers.dev">
+    <div class="grid">
+      <div>
+        <label>Project Publishable Key <button class="copy-btn" onclick="copyText('publishableKey')">Copy</button></label>
+        <input type="text" id="publishableKey" placeholder="pk_test_... (from your project)">
+      </div>
+      <div>
+        <label>API Base URL</label>
+        <input type="text" id="apiUrl" value="https://api-multi.k-c-sheffield012376.workers.dev">
+      </div>
+    </div>
   </div>
 
   <!-- Auth Section -->
   <div class="card">
     <h2>1. Authentication</h2>
     <div id="clerk-auth">
-      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-        <button onclick="signIn()" class="btn-primary">Sign In</button>
-        <button onclick="signUp()" class="btn-success">Sign Up</button>
+      <!-- Sign Up Form -->
+      <div id="signup-form" style="margin-bottom: 15px; padding: 15px; background: #0f172a; border-radius: 8px; border: 1px solid #334155;">
+        <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #10b981;">Create Customer (POST /api/customers)</h3>
+        <div class="grid">
+          <div>
+            <label>Email</label>
+            <input type="email" id="signup-email" placeholder="user@example.com">
+          </div>
+          <div>
+            <label>Password</label>
+            <input type="password" id="signup-password" placeholder="SecurePass123!">
+          </div>
+        </div>
+        <button onclick="createCustomer()" class="btn-success">Create & Sign Up</button>
+        <p style="color: #64748b; font-size: 12px; margin: 10px 0 0 0;">Creates user via API with metadata set, then sign in below</p>
       </div>
-      <p style="color: #64748b; font-size: 13px; margin: 0;">Click to authenticate via hosted Clerk page</p>
+      <!-- Sign In / Sign Up -->
+      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <button onclick="signIn()" class="btn-primary">Sign In (Clerk)</button>
+        <button onclick="signUpOAuth()" class="btn-success">Sign Up (OAuth/Email)</button>
+      </div>
+      <p style="color: #64748b; font-size: 13px; margin: 0;">Use "Sign Up (OAuth/Email)" for new users - sets metadata automatically!</p>
     </div>
     <div id="auth-info" class="hidden">
       <div class="grid">
@@ -306,28 +331,53 @@
   <!-- Load config if exists -->
   <script src="config.js" onerror="console.log('No config.js - using manual input')"></script>
 
-  <!-- Clerk SDK just for session management (not UI) -->
-  <script
-    async
-    crossorigin="anonymous"
-    data-clerk-publishable-key="pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA"
-    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
-    type="text/javascript"
-  ></script>
+  <!-- Clerk SDK loaded dynamically only when needed (after signup) to avoid dev browser tracking -->
+  <script>
+    // Only load Clerk if we came back from auth (have session) or user clicks sign in
+    // This prevents Clerk from setting dev browser cookies that mess up OAuth redirects
+    window.loadClerk = function() {
+      if (window.Clerk) return Promise.resolve();
+      return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+        script.async = true;
+        script.crossOrigin = 'anonymous';
+        script.setAttribute('data-clerk-publishable-key', 'pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA');
+        script.onload = resolve;
+        document.head.appendChild(script);
+      });
+    };
+  </script>
 
   <script>
     let currentToken = null;
     let currentMode = 'saas';
 
-    // Wait for Clerk to load, check if user returned from auth
+    // Wait for page to load, only load Clerk if returning from auth
     window.addEventListener('load', async function() {
-      // Load config
+      // First, restore keys from localStorage (persists across redirects)
+      const savedPk = localStorage.getItem('dream_pk');
+      const savedSk = localStorage.getItem('dream_sk');
+      if (savedPk) document.getElementById('publishableKey').value = savedPk;
+      if (savedSk) document.getElementById('secretKey').value = savedSk;
+
+      // Then load from config (if exists and fields still empty)
       if (window.TEST_CONFIG) {
-        document.getElementById('secretKey').value = window.TEST_CONFIG.secretKey || '';
+        if (window.TEST_CONFIG.secretKey && !document.getElementById('secretKey').value) {
+          document.getElementById('secretKey').value = window.TEST_CONFIG.secretKey;
+        }
+        if (window.TEST_CONFIG.publishableKey && !document.getElementById('publishableKey').value) {
+          document.getElementById('publishableKey').value = window.TEST_CONFIG.publishableKey;
+        }
         if (window.TEST_CONFIG.apiUrl) {
           document.getElementById('apiUrl').value = window.TEST_CONFIG.apiUrl;
         }
-        log('Config loaded', 'info');
+      }
+
+      if (savedPk || savedSk) {
+        log('Keys restored from previous session', 'info');
+      } else {
+        log('Ready - paste your keys to test', 'info');
       }
 
       // Hide clerk key input (not needed with hosted auth)
@@ -338,16 +388,25 @@
         await loadTiers();
       }
 
-      // Wait for Clerk SDK to load
-      log('Loading Clerk...', 'info');
-      await Clerk.load();
-      log('Clerk ready', 'success');
+      // Only load Clerk SDK if we might have a session (returning from auth)
+      // Check for clerk-related URL params or cookies that indicate we came back from auth
+      const hasClerkParams = window.location.search.includes('__clerk') ||
+                             document.cookie.includes('__clerk') ||
+                             document.cookie.includes('__session');
 
-      // Check if user is signed in (came back from hosted auth)
-      if (Clerk.user && Clerk.session) {
-        await handleSignedIn();
+      if (hasClerkParams) {
+        log('Loading Clerk (returning from auth)...', 'info');
+        await loadClerk();
+        await Clerk.load();
+        log('Clerk ready', 'success');
+
+        if (Clerk.user && Clerk.session) {
+          await handleSignedIn();
+        } else {
+          log('Not signed in - click Sign In or Sign Up', 'info');
+        }
       } else {
-        log('Not signed in - click Sign In or Sign Up', 'info');
+        log('Ready - click Sign In (loads Clerk) or Sign Up (OAuth)', 'info');
       }
     });
 
@@ -382,7 +441,7 @@
     async function handleSignedIn() {
       if (!Clerk.user || !Clerk.session) return;
 
-      currentToken = await Clerk.session.getToken();
+      currentToken = await Clerk.session.getToken({ template: 'end-user-api' });
 
       // Decode JWT payload (for display only)
       const payload = JSON.parse(atob(currentToken.split('.')[1]));
@@ -416,14 +475,83 @@
       if (tiers.length > 0) renderTiers();
     }
 
-    function signIn() {
+    async function createCustomer() {
+      const apiUrl = document.getElementById('apiUrl').value;
+      const secretKey = document.getElementById('secretKey').value;
+      const publishableKey = document.getElementById('publishableKey').value;
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+
+      if (!secretKey) {
+        log('Enter your secret key first', 'error');
+        return;
+      }
+      if (!publishableKey) {
+        log('Enter your publishable key first', 'error');
+        return;
+      }
+      if (!email || !password) {
+        log('Enter email and password', 'error');
+        return;
+      }
+
+      log('Creating customer via POST /api/customers...', 'info');
+
+      try {
+        const resp = await fetch(`${apiUrl}/api/customers`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${secretKey}`,
+            'Content-Type': 'application/json',
+            'X-Publishable-Key': publishableKey,
+          },
+          body: JSON.stringify({ email, password, plan: 'free' }),
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok && data.success) {
+          log(`✅ Customer created: ${data.customer.id} | Email: ${email} | Plan: ${data.customer.plan}`, 'success');
+          log('Now click "Sign In" to authenticate with same email/password', 'info');
+        } else {
+          log(`❌ Failed: ${data.error || data.message || JSON.stringify(data)}`, 'error');
+        }
+      } catch (err) {
+        log(`❌ Error: ${err.message}`, 'error');
+      }
+    }
+
+    async function signIn() {
+      // Load Clerk first (this sets up dev browser for sign-in flow)
+      log('Loading Clerk for sign in...', 'info');
+      await loadClerk();
+      await Clerk.load();
       const redirectUrl = encodeURIComponent(window.location.href.split('?')[0]);
       window.location.href = `https://composed-blowfish-76.accounts.dev/sign-in?redirect_url=${redirectUrl}`;
     }
 
-    function signUp() {
-      const redirectUrl = encodeURIComponent(window.location.href.split('?')[0]);
-      window.location.href = `https://composed-blowfish-76.accounts.dev/sign-up?redirect_url=${redirectUrl}`;
+    function signUpOAuth() {
+      const publishableKey = document.getElementById('publishableKey').value;
+      const secretKey = document.getElementById('secretKey').value;
+
+      if (!publishableKey) {
+        log('Enter your publishable key first', 'error');
+        return;
+      }
+
+      // Save keys to localStorage so they persist after redirect
+      localStorage.setItem('dream_pk', publishableKey);
+      if (secretKey) localStorage.setItem('dream_sk', secretKey);
+
+      // Build redirect URL - ensure it's the full path to this file
+      const baseUrl = window.location.origin + window.location.pathname;
+      const redirectBack = baseUrl.endsWith('.html') ? baseUrl : baseUrl + (baseUrl.endsWith('/') ? 'index.html' : '/index.html');
+
+      const signupUrl = `https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=${encodeURIComponent(publishableKey)}&redirect=${encodeURIComponent(redirectBack)}`;
+
+      log(`Redirect URL: ${redirectBack}`, 'info');
+      log(`Redirecting to signup page...`, 'info');
+      window.location.href = signupUrl;
     }
 
     async function signOut() {
@@ -446,7 +574,7 @@
           log('Sign in first', 'error');
           return null;
         }
-        currentToken = await Clerk.session.getToken();
+        currentToken = await Clerk.session.getToken({ template: 'end-user-api' });
       }
 
       const headers = {

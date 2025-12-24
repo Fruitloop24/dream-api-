@@ -1,203 +1,67 @@
 # dream-api
 
-**API-as-a-Service for indie devs.** $15/mo gets you auth, billing, usage tracking, and a dashboard.
+API-as-a-Service platform built on Cloudflare Workers. Provides auth, billing, usage tracking via API keys.
 
-## What You Get
-
-- **API Keys** - Publishable + Secret key pair
-- **Stripe Billing** - On YOUR Stripe account via Connect
-- **Usage Tracking** - Limits enforced per tier
-- **Dashboard** - Customers, MRR, usage metrics
-- **Webhooks Handled** - We handle everything internally
-
-## Quick Start
-
-1. Sign up at https://dream-frontend-dyn.pages.dev
-2. Connect Stripe via OAuth
-3. Choose: **SaaS** or **Store** (locked per project)
-4. Configure tiers/products
-5. Get your API keys
-6. Integrate into your app
-
-## API Base URL
+## Project Structure
 
 ```
-https://api-multi.k-c-sheffield012376.workers.dev
+dream-api/
+├── frontend/          # React dashboard for devs
+├── front-auth-api/    # Dev authentication, credentials
+├── oauth-api/         # Stripe Connect OAuth, products/tiers
+├── api-multi/         # Main API - usage, checkouts, webhooks
+├── sign-up/           # End-user signup worker
+└── test-app/          # Local testing client
 ```
 
-## Authentication
+## What It Does
 
-All API calls require your secret key:
+1. **Dev signs up** → Gets platformId, connects Stripe
+2. **Creates project** → Gets pk/sk keys (test + live)
+3. **Configures tiers** → Sets limits, prices in Stripe
+4. **End-users sign up** → Via sign-up worker, metadata set automatically
+5. **Dev's app calls API** → Usage tracked, limits enforced
+6. **Users upgrade** → Checkout via Stripe, plan updated
+
+## Current State (Dec 2025)
+
+### Working
+- SaaS flow: signup → usage → limits → checkout → subscription
+- Store flow: products → cart → checkout → inventory
+- Project management: create, edit, delete, regen keys
+- Dashboard: metrics, customers, tiers
+- Sign-up worker: OAuth + email/password with metadata
+
+### Known Issues
+- End-users must sign in again at dev's app after signup (cross-domain limitation)
+- Clerk CAPTCHA required for email signup
+
+## API Endpoints
+
+Base: `https://api-multi.k-c-sheffield012376.workers.dev`
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `POST /api/customers` | SK | Create end-user |
+| `POST /api/data` | SK + JWT | Track usage |
+| `GET /api/usage` | SK + JWT | Check usage |
+| `POST /api/create-checkout` | SK + JWT | Upgrade subscription |
+| `POST /api/customer-portal` | SK + JWT | Billing management |
+| `GET /api/products` | SK | List products |
+| `POST /api/cart/checkout` | SK | Cart checkout |
+| `GET /api/dashboard` | SK | Platform metrics |
+
+## Sign-Up Worker
+
+Handles end-user registration with multi-tenant metadata.
 
 ```
-Authorization: Bearer sk_test_xxx
+https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=https://yourapp.com
 ```
 
-## Test vs Live
+See `sign-up/oauth.md` for implementation details.
 
-- `pk_test_` / `sk_test_` - Stripe test mode
-- `pk_live_` / `sk_live_` - Real payments
-
-## SaaS Mode - Subscription Tiers
-
-### 1. Create Customer
-
-```bash
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customers \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123!",
-    "firstName": "John",
-    "lastName": "Doe",
-    "plan": "free"
-  }'
-```
-
-Response:
-```json
-{
-  "success": true,
-  "customer": {
-    "id": "user_abc123",
-    "email": "user@example.com",
-    "plan": "free"
-  }
-}
-```
-
-### 2. Track Usage
-
-Call this on every API request to track and enforce limits. **Requires end-user JWT** (from Clerk after user logs in):
-
-```bash
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/data \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
-Success Response:
-```json
-{
-  "success": true,
-  "data": { "message": "Request processed successfully" },
-  "usage": { "count": 1, "limit": 100, "plan": "free" }
-}
-```
-
-Limit Reached (403):
-```json
-{
-  "error": "Tier limit reached",
-  "usageCount": 100,
-  "limit": 100,
-  "message": "Please upgrade to unlock more requests"
-}
-```
-
-### 3. Check Usage
-
-**Requires end-user JWT:**
-
-```bash
-curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/usage \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
-### 4. Create Upgrade Checkout
-
-**Requires end-user JWT:**
-
-```bash
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -H "Origin: https://yourapp.com" \
-  -d '{"tier": "pro"}'
-```
-
-Or with explicit priceId:
-```bash
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/create-checkout \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -H "Origin: https://yourapp.com" \
-  -d '{"priceId": "price_xxx"}'
-```
-
-Response:
-```json
-{ "url": "https://checkout.stripe.com/c/pay/..." }
-```
-
-### 5. Customer Portal (Billing Management)
-
-**Requires end-user JWT:**
-
-```bash
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/customer-portal \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-Clerk-Token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Origin: https://yourapp.com"
-```
-
-## Store Mode - One-Off Products
-
-### List Products
-
-```bash
-curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/products \
-  -H "Authorization: Bearer sk_test_xxx"
-```
-
-### Cart Checkout
-
-```bash
-curl -X POST https://api-multi.k-c-sheffield012376.workers.dev/api/cart/checkout \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "Content-Type: application/json" \
-  -H "Origin: https://yourapp.com" \
-  -d '{
-    "email": "buyer@example.com",
-    "items": [
-      { "priceId": "price_xxx", "quantity": 1 }
-    ],
-    "successUrl": "https://yourapp.com/success",
-    "cancelUrl": "https://yourapp.com/cancel"
-  }'
-```
-
-## Dashboard Endpoint
-
-Get metrics for your platform:
-
-```bash
-curl -X GET https://api-multi.k-c-sheffield012376.workers.dev/api/dashboard \
-  -H "Authorization: Bearer sk_test_xxx" \
-  -H "X-Publishable-Key: pk_test_xxx"
-```
-
-## Authentication Summary
-
-| Endpoint | Required Auth | Notes |
-|----------|---------------|-------|
-| `POST /api/customers` | SK only | Dev creating a new customer |
-| `GET /api/products` | SK only | Public product catalog |
-| `POST /api/cart/checkout` | SK + Origin | Guest checkout |
-| `GET /api/dashboard` | SK + X-Publishable-Key | Dev metrics |
-| `POST /api/data` | SK + JWT | Usage tracking - needs real user identity |
-| `GET /api/usage` | SK + JWT | Usage check - needs real user identity |
-| `POST /api/create-checkout` | SK + JWT + Origin | Subscription upgrade |
-| `POST /api/customer-portal` | SK + JWT + Origin | Billing management |
-
-**SK** = Secret key (`Authorization: Bearer sk_xxx`)
-**JWT** = End-user Clerk token (`X-Clerk-Token: eyJ...`)
-
-## Local Development
+## Local Dev
 
 ```bash
 cd frontend && npm run dev        # :5173
@@ -208,11 +72,21 @@ cd api-multi && npm run dev       # :8787
 
 ## Deploy
 
-Auto-deploy via GitHub → Cloudflare:
 ```bash
-git add -A && git commit -m "message" && git push
+cd front-auth-api && npx wrangler deploy
+cd oauth-api && npx wrangler deploy
+cd api-multi && npx wrangler deploy
+cd sign-up && npx wrangler deploy
+# Frontend auto-deploys via Cloudflare Pages
 ```
 
 ## Technical Reference
 
-See [CLAUDE.md](./CLAUDE.md) for architecture, database schemas, and debugging.
+See `CLAUDE.md` for schemas, bindings, debugging.
+
+## TODO
+
+- [ ] SDK wrapper for devs
+- [ ] Auto-sign-in after signup (requires SDK in dev's app)
+- [ ] Totals view (aggregate live revenue)
+- [ ] CSV export
