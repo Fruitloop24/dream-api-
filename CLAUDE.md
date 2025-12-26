@@ -9,10 +9,41 @@ Frontend (React) → front-auth-api (Dev Auth) → oauth-api (Stripe Connect)
                             ↓
                     D1 + KV + R2
                             ↓
-                    api-multi ← Dev's App
+                    api-multi ← Dev's App (via SDK or direct)
                             ↓
                     sign-up ← End-user signup
 ```
+
+## SDK
+
+```bash
+npm install @dream-api/sdk
+```
+
+```typescript
+import { DreamAPI } from '@dream-api/sdk';
+
+const api = new DreamAPI({
+  secretKey: 'sk_test_xxx',
+  publishableKey: 'pk_test_xxx',
+});
+
+// Backend (SK only)
+await api.customers.create({ email: 'user@example.com' });
+await api.customers.delete(userId);
+await api.dashboard.get();
+
+// Frontend (needs user token)
+api.setUserToken(clerkJWT);
+await api.usage.track();
+await api.usage.check();
+await api.billing.createCheckout({ tier: 'pro' });
+
+// Auth URLs
+api.auth.getSignUpUrl({ redirect: '/dashboard' });
+```
+
+See `dream-sdk/README.md` for full documentation.
 
 ## Workers
 
@@ -73,12 +104,16 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 
 | Endpoint | Auth | Notes |
 |----------|------|-------|
-| `POST /api/customers` | SK | Dev creating customer |
+| `POST /api/customers` | SK | Create customer |
+| `GET /api/customers/:id` | SK | Get customer |
+| `PATCH /api/customers/:id` | SK | Update customer plan |
+| `DELETE /api/customers/:id` | SK | Delete customer + cleanup D1 |
 | `GET /api/products` | SK | Product catalog |
-| `POST /api/cart/checkout` | SK | Guest checkout |
+| `GET /api/tiers` | SK | List subscription tiers |
+| `POST /api/cart/checkout` | SK | Guest checkout (store) |
 | `GET /api/dashboard` | SK | Dev metrics |
-| `POST /api/data` | SK + JWT | Usage tracking |
-| `GET /api/usage` | SK + JWT | Usage check |
+| `POST /api/data` | SK + JWT | Track usage |
+| `GET /api/usage` | SK + JWT | Check usage |
 | `POST /api/create-checkout` | SK + JWT | Subscription upgrade |
 | `POST /api/customer-portal` | SK + JWT | Billing portal |
 
@@ -89,14 +124,25 @@ JWT = `X-Clerk-Token: eyJ...` (end-user token with publishableKey + plan in meta
 
 Handles end-user signup with metadata for multi-tenant isolation.
 
+**URL:** `https://sign-up.k-c-sheffield012376.workers.dev`
+
+**SDK Usage:**
+```typescript
+const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
+// → https://sign-up.../signup?pk=pk_xxx&redirect=...
+```
+
 **Routes:**
-- `GET /signup?pk=xxx&redirect=url` - Signup page
-- `GET /complete` - OAuth callback
+- `GET /signup?pk=xxx&redirect=url` - Signup page (OAuth + email/password)
+- `GET /complete` - OAuth callback (Google)
 - `POST /oauth/complete` - Set metadata + D1 sync
+- `GET /verify` - Email link verification callback
 
 **Flows:**
 - OAuth: Clerk SDK `authenticateWithRedirect()` → Google → `/complete` → set metadata → redirect
 - Email: Clerk SDK `signUp.create()` → email_code verification → set metadata → redirect
+
+**After Signup:** User must sign in at dev's app (cross-domain = separate Clerk session)
 
 **See:** `sign-up/oauth.md` for full implementation details.
 

@@ -1,6 +1,6 @@
 # Sign-Up Worker - Technical Implementation
 
-## Status: Working (Dec 24, 2025)
+## Status: Working (Dec 26, 2025)
 
 OAuth (Google) and Email/Password signup both functional. Users created with correct metadata, synced to D1.
 
@@ -197,22 +197,33 @@ https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=h
 
 ---
 
-## Future: SDK Integration
+## SDK Integration (Available Now)
 
-When SDK is built, devs will use:
 ```javascript
 import { DreamAPI } from '@dream-api/sdk';
 
-const signupUrl = DreamAPI.getSignUpUrl({
+const api = new DreamAPI({
+    secretKey: 'sk_test_xxx',
     publishableKey: 'pk_test_xxx',
+});
+
+// Get signup URL
+const signupUrl = api.auth.getSignUpUrl({
     redirect: 'https://myapp.com/dashboard'
 });
-// Redirect user to signupUrl
+// Returns: https://sign-up.../signup?pk=pk_test_xxx&redirect=...
+
+// After user signs in, set their token
+api.setUserToken(clerkJWT);
+
+// Now make authenticated calls
+await api.usage.track();
+const usage = await api.usage.check();
 ```
 
-SDK will handle:
-- Construct signup URL
-- Token management after sign-in
-- API call authentication
+SDK handles:
+- Signup URL construction
+- Auth header injection (SK + JWT)
+- TypeScript types for all responses
 
-Devs won't need Clerk SDK directly.
+See `dream-sdk/README.md` for full documentation.

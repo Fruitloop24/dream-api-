@@ -2,10 +2,39 @@
 
 API-as-a-Service platform built on Cloudflare Workers. Provides auth, billing, usage tracking via API keys.
 
+## Quick Start (For Devs Using This API)
+
+```bash
+npm install @dream-api/sdk
+```
+
+```typescript
+import { DreamAPI } from '@dream-api/sdk';
+
+const api = new DreamAPI({
+  secretKey: process.env.DREAM_API_SECRET_KEY,
+  publishableKey: process.env.DREAM_API_PUBLISHABLE_KEY,
+});
+
+// Track usage
+api.setUserToken(clerkJWT);
+await api.usage.track();
+
+// Check limits
+const usage = await api.usage.check();
+if (usage.remaining <= 0) {
+  const { url } = await api.billing.createCheckout({ tier: 'pro' });
+  window.location.href = url;
+}
+```
+
+See `dream-sdk/README.md` for full SDK documentation.
+
 ## Project Structure
 
 ```
 dream-api/
+├── dream-sdk/         # Official TypeScript SDK (@dream-api/sdk)
 ├── frontend/          # React dashboard for devs
 ├── front-auth-api/    # Dev authentication, credentials
 ├── oauth-api/         # Stripe Connect OAuth, products/tiers
@@ -42,22 +71,35 @@ Base: `https://api-multi.k-c-sheffield012376.workers.dev`
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `POST /api/customers` | SK | Create end-user |
+| `POST /api/customers` | SK | Create customer |
+| `GET /api/customers/:id` | SK | Get customer |
+| `PATCH /api/customers/:id` | SK | Update customer |
+| `DELETE /api/customers/:id` | SK | Delete customer |
+| `GET /api/tiers` | SK | List subscription tiers |
+| `GET /api/products` | SK | List products (store) |
+| `POST /api/cart/checkout` | SK | Cart checkout (store) |
+| `GET /api/dashboard` | SK | Platform metrics |
 | `POST /api/data` | SK + JWT | Track usage |
 | `GET /api/usage` | SK + JWT | Check usage |
-| `POST /api/create-checkout` | SK + JWT | Upgrade subscription |
-| `POST /api/customer-portal` | SK + JWT | Billing management |
-| `GET /api/products` | SK | List products |
-| `POST /api/cart/checkout` | SK | Cart checkout |
-| `GET /api/dashboard` | SK | Platform metrics |
+| `POST /api/create-checkout` | SK + JWT | Subscription upgrade |
+| `POST /api/customer-portal` | SK + JWT | Billing portal |
 
 ## Sign-Up Worker
 
-Handles end-user registration with multi-tenant metadata.
+Handles end-user registration with multi-tenant metadata. Supports OAuth (Google) and email/password.
 
+**With SDK:**
+```typescript
+const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
+// Redirect new users to signupUrl
+```
+
+**Direct URL:**
 ```
 https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=https://yourapp.com
 ```
+
+After signup, users must sign in at your app (cross-domain = separate session).
 
 See `sign-up/oauth.md` for implementation details.
 
@@ -86,7 +128,9 @@ See `CLAUDE.md` for schemas, bindings, debugging.
 
 ## TODO
 
-- [ ] SDK wrapper for devs
+- [x] SDK wrapper for devs (`dream-sdk/`)
+- [ ] Publish SDK to npm (`npm publish`)
 - [ ] Auto-sign-in after signup (requires SDK in dev's app)
 - [ ] Totals view (aggregate live revenue)
 - [ ] CSV export
+- [ ] Framework-specific guides (React, Next.js, Vue)
