@@ -15,6 +15,8 @@ export interface DreamAPIConfig {
   baseUrl?: string;
   /** Sign-up worker URL override */
   signupUrl?: string;
+  /** Clerk base URL override (for production) */
+  clerkBaseUrl?: string;
 }
 
 // ============================================================================

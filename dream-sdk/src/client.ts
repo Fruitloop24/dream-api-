@@ -9,12 +9,14 @@ import { DreamAPIConfig, DreamAPIError, DreamAPIException } from './types';
 
 const DEFAULT_BASE_URL = 'https://api-multi.k-c-sheffield012376.workers.dev';
 const DEFAULT_SIGNUP_URL = 'https://sign-up.k-c-sheffield012376.workers.dev';
+const DEFAULT_CLERK_URL = 'https://composed-blowfish-76.accounts.dev';
 
 export class DreamClient {
   private secretKey: string;
   private publishableKey: string | undefined;
   private baseUrl: string;
   private signupUrl: string;
+  private clerkUrl: string;
   private userToken: string | null = null;
 
   constructor(config: DreamAPIConfig) {
@@ -26,6 +28,7 @@ export class DreamClient {
     this.publishableKey = config.publishableKey;
     this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
     this.signupUrl = config.signupUrl || DEFAULT_SIGNUP_URL;
+    this.clerkUrl = config.clerkBaseUrl || DEFAULT_CLERK_URL;
   }
 
   /**
@@ -55,6 +58,13 @@ export class DreamClient {
    */
   getSignupBaseUrl(): string {
     return this.signupUrl;
+  }
+
+  /**
+   * Get the Clerk base URL for hosted auth pages
+   */
+  getClerkBaseUrl(): string {
+    return this.clerkUrl;
   }
 
   /**

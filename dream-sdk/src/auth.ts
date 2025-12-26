@@ -1,7 +1,8 @@
 /**
  * Dream API SDK - Auth Helpers
  *
- * URL builders for sign-up and sign-in flows.
+ * URL builders for sign-up, sign-in, and account management flows.
+ * All URLs point to dream-api's shared Clerk app (end-user-api).
  */
 
 import { DreamClient } from './client';
@@ -21,13 +22,14 @@ export class AuthHelpers {
   /**
    * Get the sign-up URL for new users.
    *
-   * Redirect new users to this URL to create an account.
-   * After sign-up, they'll be redirected to your specified URL.
+   * Redirects to the sign-up worker which handles user creation
+   * and sets the required metadata (publishableKey, plan).
    *
    * @example
    * ```typescript
    * const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
-   * // Returns: https://sign-up.../signup?pk=pk_xxx&redirect=https://yourapp.com/dashboard
+   * // Returns: https://sign-up.../signup?pk=pk_xxx&redirect=...
+   * window.location.href = signupUrl;
    * ```
    */
   getSignUpUrl(options: AuthUrlOptions): string {
@@ -48,23 +50,37 @@ export class AuthHelpers {
   /**
    * Get the sign-in URL for returning users.
    *
-   * Uses Clerk's hosted sign-in page. After sign-in,
+   * Redirects to Clerk's hosted sign-in page. After sign-in,
    * users are redirected to your specified URL.
    *
    * @example
    * ```typescript
    * const signinUrl = api.auth.getSignInUrl({ redirect: '/dashboard' });
+   * window.location.href = signinUrl;
    * ```
    */
   getSignInUrl(options: AuthUrlOptions): string {
-    // Clerk hosted sign-in URL
-    // Users should configure this via Clerk dashboard
-    const params = new URLSearchParams({
-      redirect_url: options.redirect,
-    });
+    const clerkBaseUrl = this.client.getClerkBaseUrl();
+    return `${clerkBaseUrl}/sign-in?redirect_url=${encodeURIComponent(options.redirect)}`;
+  }
 
-    // Default to Clerk's hosted sign-in
-    // In practice, devs will use their Clerk instance
-    return `https://accounts.clerk.dev/sign-in?${params.toString()}`;
+  /**
+   * Get the customer portal URL for account management.
+   *
+   * Redirects to Clerk's hosted account page where users can
+   * manage their profile, password, and security settings.
+   *
+   * Note: This is separate from billing management.
+   * For billing, use api.billing.openPortal().
+   *
+   * @example
+   * ```typescript
+   * const portalUrl = api.auth.getCustomerPortalUrl();
+   * window.location.href = portalUrl;
+   * ```
+   */
+  getCustomerPortalUrl(): string {
+    const clerkBaseUrl = this.client.getClerkBaseUrl();
+    return `${clerkBaseUrl}/user`;
   }
 }
