@@ -249,7 +249,7 @@ export async function handleCreateProducts(
   env: Env,
   authenticatedUserId: string
 ): Promise<Response> {
-  const corsHeaders = getCorsHeaders();
+  const corsHeaders = getCorsHeaders(request, env);
 
   // Parse and validate request body
   const body = await request.json() as {

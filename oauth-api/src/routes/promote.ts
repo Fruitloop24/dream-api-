@@ -87,7 +87,7 @@ export async function handlePromoteToLive(
   env: Env,
   authenticatedUserId: string
 ): Promise<Response> {
-  const corsHeaders = getCorsHeaders();
+  const corsHeaders = getCorsHeaders(request, env);
 
   const body = await request.json() as {
     userId?: string;

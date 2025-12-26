@@ -8,6 +8,7 @@ export interface Env {
   CLERK_PUBLISHABLE_KEY: string;
   FRONTEND_URL: string;
   CLERK_JWT_TEMPLATE?: string;
+  ALLOWED_ORIGINS?: string; // Comma-separated list of allowed origins
 }
 
 export type ProjectType = 'saas' | 'store';

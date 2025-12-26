@@ -27,14 +27,42 @@ import { ensurePlatform } from '../lib/schema';
 import { saveStripeToken } from '../lib/stripe';
 
 /**
- * Build standard CORS headers for responses.
- * We allow all origins since this is a public API.
+ * Build CORS headers with origin validation.
+ * Only allows requests from configured origins (your frontend).
+ *
+ * Configure via ALLOWED_ORIGINS env var (comma-separated) or uses defaults.
  */
-export function getCorsHeaders(): Record<string, string> {
+export function getCorsHeaders(request?: Request, env?: { ALLOWED_ORIGINS?: string }): Record<string, string> {
+  const origin = request?.headers.get('Origin') || '';
+
+  // Default allowed origins (dev + production)
+  const defaultAllowedOrigins = [
+    'http://localhost:5173',               // Vite dev
+    'http://localhost:5174',               // Vite alt
+    'http://localhost:8787',               // Wrangler dev
+    'http://127.0.0.1:5500',               // Live Server
+    'http://localhost:5500',               // Live Server alt
+  ];
+
+  // Parse from env or use defaults
+  const allowedOrigins = env?.ALLOWED_ORIGINS
+    ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : defaultAllowedOrigins;
+
+  // Check if origin is allowed (exact match OR Cloudflare Pages preview)
+  const isAllowedOrigin =
+    allowedOrigins.includes(origin) ||
+    /^https:\/\/[a-z0-9-]+\.dream-frontend-dyn\.pages\.dev$/.test(origin) ||
+    origin === 'https://dream-frontend-dyn.pages.dev';
+
+  // Echo back allowed origin, or use first default as safe fallback
+  const finalOrigin = isAllowedOrigin ? origin : allowedOrigins[0];
+
   return {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': finalOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
   };
 }
 

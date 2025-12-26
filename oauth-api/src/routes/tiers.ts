@@ -83,12 +83,12 @@ async function getStripeCredentials(
  *   - platformId: The platform these belong to
  */
 export async function handleGetTiers(
-  _request: Request,
+  request: Request,
   env: Env,
   url: URL,
   userId: string
 ): Promise<Response> {
-  const corsHeaders = getCorsHeaders();
+  const corsHeaders = getCorsHeaders(request, env);
 
   const mode = url.searchParams.get('mode') || 'test';
   const publishableKey = url.searchParams.get('publishableKey');
@@ -163,7 +163,7 @@ export async function handleUpdateTier(
   env: Env,
   authenticatedUserId: string
 ): Promise<Response> {
-  const corsHeaders = getCorsHeaders();
+  const corsHeaders = getCorsHeaders(request, env);
 
   const body = await request.json() as {
     userId?: string;
@@ -288,7 +288,7 @@ export async function handleAddTier(
   env: Env,
   authenticatedUserId: string
 ): Promise<Response> {
-  const corsHeaders = getCorsHeaders();
+  const corsHeaders = getCorsHeaders(request, env);
 
   try {
   const body = await request.json() as {
@@ -522,7 +522,7 @@ export async function handleDeleteTier(
   env: Env,
   authenticatedUserId: string
 ): Promise<Response> {
-  const corsHeaders = getCorsHeaders();
+  const corsHeaders = getCorsHeaders(request, env);
 
   const body = await request.json() as {
     userId?: string;

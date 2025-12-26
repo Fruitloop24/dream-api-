@@ -208,6 +208,7 @@ export async function handleUpdateCustomer(
 	platformId: string,
 	publishableKey: string,
 	clerkClient: ClerkClient,
+	env: Env,
 	corsHeaders: Record<string, string>,
 	request: Request
 ): Promise<Response> {
@@ -262,6 +263,110 @@ export async function handleUpdateCustomer(
 		return new Response(
 			JSON.stringify({
 				error: 'Failed to update customer',
+				message: error.message || 'Unknown error',
+			}),
+			{
+				status: 500,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			}
+		);
+	}
+}
+
+/**
+ * Handle DELETE /api/customers/:id - Delete a customer
+ *
+ * Removes customer from:
+ * 1. Clerk (end-user-api shared app)
+ * 2. D1 end_users table
+ * 3. D1 usage_counts table
+ * 4. D1 subscriptions table
+ *
+ * SECURITY: Verifies customer belongs to caller's publishableKey before deletion.
+ */
+export async function handleDeleteCustomer(
+	customerId: string,
+	platformId: string,
+	publishableKey: string,
+	clerkClient: ClerkClient,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		// First verify this customer belongs to this dev
+		const user = await clerkClient.users.getUser(customerId);
+		if (user.publicMetadata?.publishableKey !== publishableKey) {
+			return new Response(
+				JSON.stringify({
+					error: 'Not found',
+					message: 'Customer not found or does not belong to your platform',
+				}),
+				{
+					status: 404,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				}
+			);
+		}
+
+		const email = user.emailAddresses[0]?.emailAddress || '';
+		console.log(`[Customers] Deleting customer ${customerId} (${email}) from platform ${platformId}`);
+
+		// Delete from Clerk (shared end-user-api app)
+		await clerkClient.users.deleteUser(customerId);
+		console.log(`[Customers] Deleted user ${customerId} from Clerk`);
+
+		// Clean up D1 tables
+		// Delete from end_users
+		await env.DB.prepare(
+			'DELETE FROM end_users WHERE clerkUserId = ? AND publishableKey = ?'
+		).bind(customerId, publishableKey).run();
+
+		// Delete from usage_counts
+		await env.DB.prepare(
+			'DELETE FROM usage_counts WHERE userId = ? AND publishableKey = ?'
+		).bind(customerId, publishableKey).run();
+
+		// Delete from subscriptions
+		await env.DB.prepare(
+			'DELETE FROM subscriptions WHERE userId = ? AND publishableKey = ?'
+		).bind(customerId, publishableKey).run();
+
+		console.log(`[Customers] Cleaned up D1 records for ${customerId}`);
+
+		return new Response(
+			JSON.stringify({
+				success: true,
+				message: 'Customer deleted successfully',
+				deleted: {
+					id: customerId,
+					email: email,
+				},
+			}),
+			{
+				status: 200,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			}
+		);
+	} catch (error: any) {
+		console.error('[Customers] Error deleting customer:', error);
+
+		// Handle Clerk "user not found" as already deleted
+		if (error.status === 404 || error.message?.includes('not found')) {
+			return new Response(
+				JSON.stringify({
+					error: 'Customer not found',
+					message: 'Customer may have already been deleted',
+				}),
+				{
+					status: 404,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				}
+			);
+		}
+
+		return new Response(
+			JSON.stringify({
+				error: 'Failed to delete customer',
 				message: error.message || 'Unknown error',
 			}),
 			{

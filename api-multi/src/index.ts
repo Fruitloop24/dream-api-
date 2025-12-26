@@ -29,7 +29,7 @@ import { verifyApiKey } from './middleware/apiKey';
 // Routes
 import { handleDataRequest, handleUsageCheck } from './routes/usage';
 import { handleCreateCheckout, handleCustomerPortal } from './routes/checkout';
-import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer } from './routes/customers';
+import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer, handleDeleteCustomer } from './routes/customers';
 import { handleDashboard, handleDashboardTotals } from './routes/dashboard';
 import { handleCartCheckout, handleGetProducts } from './routes/products';
 import { handleAssetGet, handleAssetUpload } from './routes/assets';
@@ -220,7 +220,14 @@ export default {
 			if (url.pathname.startsWith('/api/customers/') && request.method === 'PATCH') {
 				const customerId = url.pathname.replace('/api/customers/', '');
 				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Updating customer: ${customerId}`);
-				return await handleUpdateCustomer(customerId, platformId, publishableKey, clerkClient, corsHeaders, request);
+				return await handleUpdateCustomer(customerId, platformId, publishableKey, clerkClient, env, corsHeaders, request);
+			}
+
+			// Delete customer - Dev deleting a customer
+			if (url.pathname.startsWith('/api/customers/') && request.method === 'DELETE') {
+				const customerId = url.pathname.replace('/api/customers/', '');
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Deleting customer: ${customerId}`);
+				return await handleDeleteCustomer(customerId, platformId, publishableKey, clerkClient, env, corsHeaders);
 			}
 
 			// Get tiers - Dev fetching their pricing tiers
