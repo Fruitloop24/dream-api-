@@ -68,13 +68,18 @@ export interface Tier {
 }
 
 export interface Product {
+  id?: string;
   name: string;
+  displayName?: string;
+  description?: string;
   price: number;
+  currency?: string;
   priceId: string;
   productId: string;
-  description?: string;
   imageUrl?: string;
-  inventory?: number;
+  inventory?: number | null;
+  soldOut?: boolean;
+  features?: string[];
 }
 
 export interface CheckoutResult {

@@ -129,7 +129,9 @@ export async function handleCartCheckout(
         );
       }
 
-      if (product.soldOut || (typeof product.inventory === 'number' && product.inventory <= 0)) {
+      // Compute soldOut from inventory (don't trust DB value - may be stale after inventory update)
+      const isSoldOut = typeof product.inventory === 'number' && product.inventory <= 0;
+      if (isSoldOut) {
         return new Response(
           JSON.stringify({ error: `Item sold out: ${product.displayName || product.name}` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

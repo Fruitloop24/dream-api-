@@ -258,15 +258,34 @@ class ProductAPI {
 
   /**
    * Create a cart checkout (guest checkout for store)
+   *
+   * @example
+   * ```typescript
+   * const { url } = await api.products.cartCheckout({
+   *   items: [{ priceId: 'price_xxx', quantity: 1 }],
+   *   customerEmail: 'customer@example.com',
+   *   successUrl: '/success',
+   *   cancelUrl: '/cart',
+   * });
+   * window.location.href = url;
+   * ```
    */
   async cartCheckout(params: {
     items: Array<{ priceId: string; quantity: number }>;
-    customerEmail: string;
+    customerEmail?: string;
     customerName?: string;
     successUrl?: string;
     cancelUrl?: string;
   }): Promise<CheckoutResult> {
-    return this.client.post('/api/cart/checkout', params);
+    // Transform SDK-friendly names to API field names
+    const apiParams = {
+      items: params.items,
+      email: params.customerEmail,
+      name: params.customerName,
+      successUrl: params.successUrl,
+      cancelUrl: params.cancelUrl,
+    };
+    return this.client.post('/api/cart/checkout', apiParams);
   }
 }
 
