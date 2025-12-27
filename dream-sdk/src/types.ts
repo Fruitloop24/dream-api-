@@ -42,13 +42,13 @@ export interface CreateCustomerParams {
 }
 
 export interface Usage {
-  used: number;
-  limit: number;
+  userId: string;
   plan: string;
+  usageCount: number;
+  limit: number | 'unlimited';
+  remaining: number | 'unlimited';
   periodStart: string;
   periodEnd: string;
-  remaining: number;
-  percentUsed: number;
 }
 
 export interface UsageTrackResult {

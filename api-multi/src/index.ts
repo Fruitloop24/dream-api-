@@ -59,8 +59,10 @@ async function verifyEndUserToken(
 
 	// Verify the JWT signature using standalone verifyToken function
 	// Returns { data, error } in newer Clerk SDK versions
+	// Allow 5 minutes clock skew to handle timezone/clock sync issues
 	const result = await verifyToken(token, {
 		secretKey: env.CLERK_SECRET_KEY,
+		clockSkewInMs: 5 * 60 * 1000, // 5 minutes
 	});
 
 	// Handle new { data, error } return format

@@ -26,7 +26,7 @@
  */
 
 import { DreamClient } from './client';
-import { AuthHelpers } from './auth';
+import { AuthHelpers, ClerkUser } from './auth';
 import {
   DreamAPIConfig,
   Customer,
@@ -42,6 +42,7 @@ import {
 
 // Re-export types
 export * from './types';
+export type { ClerkUser };
 
 /**
  * Dream API SDK Client
@@ -160,13 +161,17 @@ class UsageAPI {
    *
    * @example
    * ```typescript
-   * api.setUserToken(clerkJWT);
    * const { usage } = await api.usage.track();
-   * console.log(`Used ${usage.used} of ${usage.limit}`);
+   * console.log(`Used ${usage.usageCount} of ${usage.limit}`);
    * ```
    */
   async track(): Promise<UsageTrackResult> {
-    return this.client.post('/api/data', null, true);
+    const response = await this.client.post<UsageTrackResult | Usage>('/api/data', null, true);
+    // Handle both { success, usage } and direct usage response
+    if ('success' in response) {
+      return response as UsageTrackResult;
+    }
+    return { success: true, usage: response as Usage };
   }
 
   /**
@@ -181,8 +186,9 @@ class UsageAPI {
    * ```
    */
   async check(): Promise<Usage> {
-    const response = await this.client.get<{ usage: Usage }>('/api/usage', true);
-    return response.usage;
+    const response = await this.client.get<Usage | { usage: Usage }>('/api/usage', true);
+    // Handle both { usage: {...} } and direct usage object
+    return (response as { usage: Usage }).usage || response as Usage;
   }
 }
 

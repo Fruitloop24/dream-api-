@@ -18,6 +18,7 @@ export class DreamClient {
   private signupUrl: string;
   private clerkUrl: string;
   private userToken: string | null = null;
+  private tokenRefresher: (() => Promise<string | null>) | null = null;
 
   constructor(config: DreamAPIConfig) {
     if (!config.secretKey) {
@@ -44,6 +45,25 @@ export class DreamClient {
    */
   clearUserToken(): void {
     this.userToken = null;
+  }
+
+  /**
+   * Set a function to refresh the token before API calls
+   */
+  setTokenRefresher(refresher: () => Promise<string | null>): void {
+    this.tokenRefresher = refresher;
+  }
+
+  /**
+   * Refresh token if we have a refresher set
+   */
+  private async ensureFreshToken(): Promise<void> {
+    if (this.tokenRefresher) {
+      const newToken = await this.tokenRefresher();
+      if (newToken) {
+        this.userToken = newToken;
+      }
+    }
   }
 
   /**
