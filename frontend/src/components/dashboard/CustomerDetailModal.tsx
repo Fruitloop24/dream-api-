@@ -2,7 +2,7 @@
  * CustomerDetailModal - Full customer details in a modal overlay
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface CustomerDetailModalProps {
   customer: {
@@ -20,6 +20,8 @@ interface CustomerDetailModalProps {
   };
   onClose: () => void;
   onCopy: (text: string) => void;
+  onDelete?: (customerId: string) => Promise<void>;
+  deleting?: boolean;
 }
 
 function DetailRow({
@@ -55,15 +57,23 @@ function DetailRow({
   );
 }
 
-export function CustomerDetailModal({ customer, onClose, onCopy }: CustomerDetailModalProps) {
+export function CustomerDetailModal({ customer, onClose, onCopy, onDelete, deleting }: CustomerDetailModalProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   // Close on escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (showDeleteConfirm) {
+          setShowDeleteConfirm(false);
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
+  }, [onClose, showDeleteConfirm]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -73,6 +83,16 @@ export function CustomerDetailModal({ customer, onClose, onCopy }: CustomerDetai
 
   const status = customer.canceledAt ? 'Canceling' : (customer.status || 'active');
   const statusColor = status === 'active' ? 'bg-green-500' : status === 'Canceling' ? 'bg-yellow-500' : 'bg-red-500';
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (onDelete) {
+      await onDelete(customer.userId);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -161,31 +181,75 @@ export function CustomerDetailModal({ customer, onClose, onCopy }: CustomerDetai
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-gray-700 bg-gray-800/50 rounded-b-xl">
-          <div className="text-xs text-gray-500">
-            Press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">Esc</kbd> to close
-          </div>
-          <div className="flex items-center gap-2">
-            {customer.stripeCustomerId && (
-              <a
-                href={`https://dashboard.stripe.com/customers/${customer.stripeCustomerId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-sm font-medium flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                Stripe
-              </a>
-            )}
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium"
-            >
-              Close
-            </button>
-          </div>
+        <div className="p-4 border-t border-gray-700 bg-gray-800/50 rounded-b-xl">
+          {showDeleteConfirm ? (
+            <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
+              <p className="text-sm text-red-200 mb-3">
+                Delete <strong>{customer.email || customer.userId}</strong>? This will permanently remove this customer and all their usage data.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded text-sm font-medium flex items-center gap-1.5"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Yes, Delete Customer'
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-gray-500">
+                Press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">Esc</kbd> to close
+              </div>
+              <div className="flex items-center gap-2">
+                {onDelete && (
+                  <button
+                    onClick={handleDeleteClick}
+                    className="px-3 py-1.5 bg-red-900/50 hover:bg-red-800 text-red-200 rounded text-sm font-medium flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                  </button>
+                )}
+                {customer.stripeCustomerId && (
+                  <a
+                    href={`https://dashboard.stripe.com/customers/${customer.stripeCustomerId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-sm font-medium flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Stripe
+                  </a>
+                )}
+                <button
+                  onClick={onClose}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

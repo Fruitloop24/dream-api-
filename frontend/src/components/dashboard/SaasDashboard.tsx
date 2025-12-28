@@ -19,6 +19,8 @@ interface SaasDashboardProps {
   tiers: any[];
   customers: any[];
   onCopy: (text: string) => void;
+  onDeleteCustomer?: (customerId: string) => Promise<void>;
+  deletingCustomer?: boolean;
 }
 
 export function SaasDashboard({
@@ -27,6 +29,8 @@ export function SaasDashboard({
   tiers,
   customers,
   onCopy,
+  onDeleteCustomer,
+  deletingCustomer,
 }: SaasDashboardProps) {
   const navigate = useNavigate();
 
@@ -63,7 +67,12 @@ export function SaasDashboard({
       </div>
 
       {/* Customers Table */}
-      <CustomerTable customers={customers} onCopy={onCopy} />
+      <CustomerTable
+        customers={customers}
+        onCopy={onCopy}
+        onDelete={onDeleteCustomer}
+        deleting={deletingCustomer}
+      />
     </>
   );
 }

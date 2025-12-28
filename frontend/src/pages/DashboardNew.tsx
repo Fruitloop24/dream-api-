@@ -47,7 +47,7 @@ export default function Dashboard() {
   const { toast, showToast, hideToast } = useToast();
   const { projects, platformId, generatePlatformId, loadProjects, deleteProject, regenerateSecret } = useProjects();
   const { credentials, showSecret, loadCredentials, toggleSecret, getSecretKey } = useCredentials();
-  const { dashboard, products, loading: loadingDashboard, loadDashboard, loadProducts, clearDashboard, liveTotals, loadingTotals, loadLiveTotals } = useDashboardData();
+  const { dashboard, products, loading: loadingDashboard, loadDashboard, loadProducts, clearDashboard, liveTotals, loadingTotals, loadLiveTotals, deleteCustomer } = useDashboardData();
   const { handlePayment, loading: paymentLoading } = usePayment();
 
   // Local state
@@ -59,6 +59,7 @@ export default function Dashboard() {
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const [keyActionLoading, setKeyActionLoading] = useState(false);
   const [keyModal, setKeyModal] = useState<{ show: boolean; secretKey: string; mode: string }>({ show: false, secretKey: '', mode: '' });
+  const [deletingCustomer, setDeletingCustomer] = useState(false);
 
   // Derived state
   const selectedProject = projects.find(p => p.publishableKey === selectedPk) || null;
@@ -183,6 +184,25 @@ export default function Dashboard() {
       await loadCredentials();
     } else {
       showToast(result.error || 'Failed to regenerate secret', 'error');
+    }
+  };
+
+  const handleDeleteCustomer = async (customerId: string) => {
+    if (!selectedProject) return;
+    const sk = selectedProject.secretKey || getSecretKey(selectedProject.mode);
+    if (!sk) {
+      showToast('No secret key available', 'error');
+      return;
+    }
+    setDeletingCustomer(true);
+    const result = await deleteCustomer(selectedProject, sk, customerId);
+    setDeletingCustomer(false);
+    if (result.success) {
+      showToast('Customer deleted', 'success');
+      // Refresh dashboard to update customer list
+      loadDashboard(selectedProject, sk);
+    } else {
+      showToast(result.error || 'Failed to delete customer', 'error');
     }
   };
 
@@ -314,6 +334,8 @@ export default function Dashboard() {
                 tiers={tiers}
                 customers={customers}
                 onCopy={copyToClipboard}
+                onDeleteCustomer={handleDeleteCustomer}
+                deletingCustomer={deletingCustomer}
               />
             )}
 

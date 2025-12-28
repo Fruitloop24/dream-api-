@@ -10,6 +10,8 @@ import { CUSTOMERS_PER_PAGE } from '@/constants';
 interface CustomerTableProps {
   customers: any[];
   onCopy: (text: string) => void;
+  onDelete?: (customerId: string) => Promise<void>;
+  deleting?: boolean;
 }
 
 /** Generate CSV content from customer array */
@@ -49,7 +51,7 @@ function downloadCSV(customers: any[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function CustomerTable({ customers, onCopy }: CustomerTableProps) {
+export function CustomerTable({ customers, onCopy, onDelete, deleting }: CustomerTableProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'canceling'>('all');
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
@@ -190,6 +192,11 @@ export function CustomerTable({ customers, onCopy }: CustomerTableProps) {
           customer={selectedCustomer}
           onClose={() => setSelectedCustomer(null)}
           onCopy={onCopy}
+          onDelete={onDelete ? async (customerId) => {
+            await onDelete(customerId);
+            setSelectedCustomer(null);
+          } : undefined}
+          deleting={deleting}
         />
       )}
     </div>

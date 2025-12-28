@@ -175,6 +175,35 @@ export function useDashboardData() {
     }
   }, []);
 
+  /** Delete a customer by ID */
+  const deleteCustomer = useCallback(async (
+    project: Project,
+    sk: string,
+    customerId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!sk) {
+      return { success: false, error: 'No secret key provided' };
+    }
+    try {
+      const res = await fetch(`${API_MULTI}/api/customers/${customerId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${sk}`,
+          'X-Env': project.mode,
+          'X-Publishable-Key': project.publishableKey,
+        },
+      });
+      if (res.ok) {
+        return { success: true };
+      }
+      const data = await res.json().catch(() => ({}));
+      return { success: false, error: data.error || `Failed to delete (${res.status})` };
+    } catch (err) {
+      console.error('[useDashboardData] Delete customer error:', err);
+      return { success: false, error: 'Network error' };
+    }
+  }, []);
+
   return {
     dashboard,
     products,
@@ -185,5 +214,6 @@ export function useDashboardData() {
     loadProducts,
     loadLiveTotals,
     clearDashboard,
+    deleteCustomer,
   };
 }
