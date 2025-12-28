@@ -102,7 +102,7 @@ export function useDashboardData() {
   /** Fetch aggregated live metrics across all live projects */
   const loadLiveTotals = useCallback(async (
     liveProjects: Project[],
-    getSecretKey: (mode: string) => string | null
+    getSecretKey: (mode: 'test' | 'live') => string | null
   ) => {
     if (liveProjects.length === 0) {
       setLiveTotals({ totalRevenue: 0, totalCustomers: 0, activeSubscriptions: 0, totalSales: 0 });
