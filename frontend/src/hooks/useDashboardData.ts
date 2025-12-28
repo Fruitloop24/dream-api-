@@ -32,6 +32,9 @@ export interface LiveTotals {
   totalCustomers: number;
   activeSubscriptions: number;
   totalSales: number;
+  // Separated by type
+  saasRevenue: number;
+  storeRevenue: number;
 }
 
 export function useDashboardData() {
@@ -105,7 +108,7 @@ export function useDashboardData() {
     getSecretKey: (mode: 'test' | 'live') => string | null
   ) => {
     if (liveProjects.length === 0) {
-      setLiveTotals({ totalRevenue: 0, totalCustomers: 0, activeSubscriptions: 0, totalSales: 0 });
+      setLiveTotals({ totalRevenue: 0, totalCustomers: 0, activeSubscriptions: 0, totalSales: 0, saasRevenue: 0, storeRevenue: 0 });
       return;
     }
 
@@ -142,6 +145,8 @@ export function useDashboardData() {
         totalCustomers: 0,
         activeSubscriptions: 0,
         totalSales: 0,
+        saasRevenue: 0,
+        storeRevenue: 0,
       };
 
       results.forEach((result) => {
@@ -149,11 +154,15 @@ export function useDashboardData() {
         const { metrics, customers } = result.data;
 
         if (result.type === 'saas') {
-          totals.totalRevenue += metrics.mrr || 0;
+          const mrr = metrics.mrr || 0;
+          totals.saasRevenue += mrr;
+          totals.totalRevenue += mrr;
           totals.activeSubscriptions += metrics.activeSubs || 0;
           totals.totalCustomers += customers?.length || 0;
         } else if (result.type === 'store') {
-          totals.totalRevenue += metrics.storeTotalRevenue || 0;
+          const storeRev = metrics.storeTotalRevenue || 0;
+          totals.storeRevenue += storeRev;
+          totals.totalRevenue += storeRev;
           totals.totalSales += metrics.storeSalesCount || 0;
         }
       });

@@ -15,4 +15,5 @@ export { TotalsView } from './TotalsView';
 export { CustomerTable } from './CustomerTable';
 export { CustomerDetail } from './CustomerDetail';
 export { CustomerDetailModal } from './CustomerDetailModal';
+export { OrderDetailModal } from './OrderDetailModal';
 export { KeyModal } from './KeyModal';
