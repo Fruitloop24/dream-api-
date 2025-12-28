@@ -295,6 +295,7 @@ export async function handleDeleteCustomer(
 	try {
 		// First verify this customer belongs to this dev
 		const user = await clerkClient.users.getUser(customerId);
+
 		if (user.publicMetadata?.publishableKey !== publishableKey) {
 			return new Response(
 				JSON.stringify({
@@ -309,7 +310,7 @@ export async function handleDeleteCustomer(
 		}
 
 		const email = user.emailAddresses[0]?.emailAddress || '';
-		console.log(`[Customers] Deleting customer ${customerId} (${email}) from platform ${platformId}`);
+		console.log(`[Customers] Deleting ${customerId} (${email})`);
 
 		// Delete from Clerk (shared end-user-api app)
 		await clerkClient.users.deleteUser(customerId);

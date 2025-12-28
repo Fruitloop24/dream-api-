@@ -228,8 +228,8 @@ export default {
 			// Delete customer - Dev deleting a customer
 			if (url.pathname.startsWith('/api/customers/') && request.method === 'DELETE') {
 				const customerId = url.pathname.replace('/api/customers/', '');
-				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Deleting customer: ${customerId}`);
-				return await handleDeleteCustomer(customerId, platformId, publishableKey, clerkClient, env, corsHeaders);
+				console.log(`[Auth] ✅ SK-only - Platform: ${platformId}, Deleting customer: ${customerId}, PK: ${pkForFilter}`);
+				return await handleDeleteCustomer(customerId, platformId, pkForFilter || publishableKey, clerkClient, env, corsHeaders);
 			}
 
 			// Get tiers - Dev fetching their pricing tiers
