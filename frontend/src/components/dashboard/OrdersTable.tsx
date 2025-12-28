@@ -1,5 +1,5 @@
 /**
- * OrdersTable - Store orders from webhook checkout events
+ * OrdersTable - Store orders from webhook checkout events with CSV export
  */
 
 interface OrdersTableProps {
@@ -7,6 +7,41 @@ interface OrdersTableProps {
     recent?: any[];
   };
   onCopy: (text: string) => void;
+}
+
+/** Generate CSV from orders */
+function generateOrdersCSV(orders: any[]): string {
+  const headers = ['Customer', 'Email', 'Amount', 'Payment ID', 'Date'];
+  const rows = orders.map((evt: any) => {
+    const session = evt.payload?.data?.object || {};
+    const customerDetails = session.customer_details || {};
+    return [
+      customerDetails.name || '',
+      session.customer_email || customerDetails.email || 'Guest',
+      ((session.amount_total || 0) / 100).toFixed(2),
+      session.payment_intent || session.id || '',
+      evt.createdAt ? new Date(evt.createdAt).toISOString() : '',
+    ];
+  });
+
+  return [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+}
+
+/** Download CSV file */
+function downloadCSV(orders: any[], filename: string) {
+  const csv = generateOrdersCSV(orders);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export function OrdersTable({ webhook, onCopy }: OrdersTableProps) {
@@ -21,6 +56,18 @@ export function OrdersTable({ webhook, onCopy }: OrdersTableProps) {
           <h3 className="text-lg font-bold">Orders</h3>
           <span className="text-sm text-gray-500">({orders.length})</span>
         </div>
+        {orders.length > 0 && (
+          <button
+            onClick={() => downloadCSV(orders, `orders-${new Date().toISOString().split('T')[0]}.csv`)}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium flex items-center gap-1.5"
+            title="Export to CSV"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
+        )}
       </div>
 
       {orders.length > 0 ? (

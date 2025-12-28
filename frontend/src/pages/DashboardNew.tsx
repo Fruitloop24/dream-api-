@@ -47,7 +47,7 @@ export default function Dashboard() {
   const { toast, showToast, hideToast } = useToast();
   const { projects, platformId, generatePlatformId, loadProjects, deleteProject, regenerateSecret } = useProjects();
   const { credentials, showSecret, loadCredentials, toggleSecret, getSecretKey } = useCredentials();
-  const { dashboard, products, loading: loadingDashboard, loadDashboard, loadProducts, clearDashboard } = useDashboardData();
+  const { dashboard, products, loading: loadingDashboard, loadDashboard, loadProducts, clearDashboard, liveTotals, loadingTotals, loadLiveTotals } = useDashboardData();
   const { handlePayment, loading: paymentLoading } = usePayment();
 
   // Local state
@@ -119,6 +119,14 @@ export default function Dashboard() {
       }
     }
   }, [selectedPk, selectedProject, credentials, getSecretKey, loadDashboard, loadProducts]);
+
+  // Load live totals when Totals view is shown
+  useEffect(() => {
+    if (showTotals && projects.length > 0) {
+      const liveProjects = projects.filter(p => p.mode === 'live');
+      loadLiveTotals(liveProjects, getSecretKey);
+    }
+  }, [showTotals, projects, getSecretKey, loadLiveTotals]);
 
   // --------------------------------------------------------------------------
   // HANDLERS
@@ -263,7 +271,11 @@ export default function Dashboard() {
 
         {/* Content Area */}
         {showTotals ? (
-          <TotalsView projects={projects} />
+          <TotalsView
+            projects={projects}
+            liveMetrics={liveTotals || undefined}
+            loading={loadingTotals}
+          />
         ) : selectedProject ? (
           <>
             {/* API Keys */}

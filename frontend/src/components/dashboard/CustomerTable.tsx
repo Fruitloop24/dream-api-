@@ -1,15 +1,52 @@
 /**
- * CustomerTable - Paginated customer list with search and filter
+ * CustomerTable - Paginated customer list with search, filter, and CSV export
  */
 
 import { useState, useMemo } from 'react';
 import { UsageBar, StatusBadge } from '@/components/shared';
-import { CustomerDetail } from './CustomerDetail';
+import { CustomerDetailModal } from './CustomerDetailModal';
 import { CUSTOMERS_PER_PAGE } from '@/constants';
 
 interface CustomerTableProps {
   customers: any[];
   onCopy: (text: string) => void;
+}
+
+/** Generate CSV content from customer array */
+function generateCSV(customers: any[]): string {
+  const headers = ['Email', 'User ID', 'Plan', 'Status', 'Usage', 'Limit', 'Stripe Customer ID', 'Subscription ID', 'Period End'];
+  const rows = customers.map((c: any) => [
+    c.email || '',
+    c.userId || '',
+    c.plan || 'free',
+    c.canceledAt ? 'canceling' : (c.status || 'active'),
+    String(c.usageCount || 0),
+    String(c.limit || 0),
+    c.stripeCustomerId || '',
+    c.subscriptionId || '',
+    c.currentPeriodEnd ? new Date(c.currentPeriodEnd).toISOString() : '',
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+
+  return csvContent;
+}
+
+/** Download CSV file */
+function downloadCSV(customers: any[], filename: string) {
+  const csv = generateCSV(customers);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export function CustomerTable({ customers, onCopy }: CustomerTableProps) {
@@ -62,6 +99,17 @@ export function CustomerTable({ customers, onCopy }: CustomerTableProps) {
             <option value="active">Active</option>
             <option value="canceling">Canceling</option>
           </select>
+          <button
+            onClick={() => downloadCSV(filteredCustomers, `customers-${new Date().toISOString().split('T')[0]}.csv`)}
+            disabled={filteredCustomers.length === 0}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-sm font-medium flex items-center gap-1.5"
+            title="Export to CSV"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
         </div>
       </div>
 
@@ -138,7 +186,7 @@ export function CustomerTable({ customers, onCopy }: CustomerTableProps) {
       )}
 
       {selectedCustomer && (
-        <CustomerDetail
+        <CustomerDetailModal
           customer={selectedCustomer}
           onClose={() => setSelectedCustomer(null)}
           onCopy={onCopy}

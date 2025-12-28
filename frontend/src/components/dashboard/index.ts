@@ -14,4 +14,5 @@ export { OrdersTable } from './OrdersTable';
 export { TotalsView } from './TotalsView';
 export { CustomerTable } from './CustomerTable';
 export { CustomerDetail } from './CustomerDetail';
+export { CustomerDetailModal } from './CustomerDetailModal';
 export { KeyModal } from './KeyModal';
