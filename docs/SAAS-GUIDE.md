@@ -221,6 +221,37 @@ async function openBillingPortal() {
 
 ---
 
+## Customer Management (Dashboard)
+
+The dev dashboard provides customer management features:
+
+### Customer Detail Modal
+
+Click any customer row to open details:
+- Usage bar: visual progress toward limit
+- Plan and status info
+- Stripe Connect link (opens customer in Stripe dashboard)
+- Delete button with confirmation
+
+### Delete Customer
+
+```typescript
+// Via SDK (requires SK)
+await api.customers.delete('user_xxx');
+
+// Removes from:
+// - Clerk (end-user-api)
+// - D1 end_users table
+// - D1 usage_counts table
+// - D1 subscriptions table
+```
+
+### CSV Export
+
+Click "Export CSV" on the customers table to download all customer data.
+
+---
+
 ## Gotchas
 
 | Issue | Solution |

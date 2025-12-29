@@ -129,8 +129,9 @@ See `CLAUDE.md` for schemas, bindings, debugging.
 ## TODO
 
 - [x] SDK wrapper for devs (`dream-sdk/`)
-- [ ] Publish SDK to npm (`npm publish`)
+- [x] Totals view (aggregate live revenue)
+- [x] CSV export (customers, orders)
+- [x] Delete customer endpoint
+- [x] Publish SDK to npm (`@dream-api/sdk`)
 - [ ] Auto-sign-in after signup (requires SDK in dev's app)
-- [ ] Totals view (aggregate live revenue)
-- [ ] CSV export
 - [ ] Framework-specific guides (React, Next.js, Vue)

@@ -256,6 +256,37 @@ const api = new DreamAPI({
 
 ---
 
+## Dashboard Features
+
+The store dashboard provides order management and metrics:
+
+### Enhanced Metrics
+
+- Today's Revenue: sales from the current day
+- Unique Customers: distinct buyers count
+- Total Sales: all-time order count
+- Total Revenue: all-time revenue
+
+### Order History
+
+Orders table shows all completed purchases with:
+- Customer name and email
+- Amount and payment status
+- Date/time
+
+### Order Detail Modal
+
+Click any order row to see:
+- Full order details
+- Billing/shipping addresses (if provided)
+- Stripe link (opens payment in Stripe dashboard)
+
+### CSV Export
+
+Click "Export CSV" on the orders table to download order history.
+
+---
+
 ## Gotchas
 
 | Issue | Solution |
