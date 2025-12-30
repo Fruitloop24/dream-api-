@@ -71,23 +71,55 @@ export function getCorsHeaders(request?: Request, env?: { ALLOWED_ORIGINS?: stri
  *
  * Starts the Stripe Connect OAuth flow.
  *
- * SECURITY: userId comes from verified Clerk JWT (not query params!)
- * The caller (index.ts) must call requireClerkUser() first.
+ * SECURITY: Token passed in query param (for browser redirect compatibility).
+ * We verify the Clerk session token server-side to extract userId.
+ *
+ * Query params:
+ *   - token: Clerk session token from frontend
  *
  * What happens:
- *   1. Generate random state for CSRF protection
- *   2. Store userId in KV keyed by state (10 min TTL)
- *   3. Redirect to Stripe's OAuth authorize URL
+ *   1. Verify Clerk token to get userId
+ *   2. Generate random state for CSRF protection
+ *   3. Store userId in KV keyed by state (10 min TTL)
+ *   4. Redirect to Stripe's OAuth authorize URL
  *
  * After this, Stripe shows their authorization page to the developer.
  */
 export async function handleAuthorize(
   request: Request,
   env: Env,
-  url: URL,
-  userId: string
+  url: URL
 ): Promise<Response> {
-  // userId is now verified from JWT - no need to check query params
+  // Get token from query param (browser redirect can't send headers)
+  const token = url.searchParams.get('token');
+
+  if (!token) {
+    return new Response(JSON.stringify({
+      error: 'Missing token parameter',
+      hint: 'Frontend must pass Clerk session token as ?token=xxx'
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Verify token with Clerk
+  let userId: string;
+  try {
+    const { verifyToken } = await import('@clerk/backend');
+    const verified = await verifyToken(token, {
+      secretKey: env.CLERK_SECRET_KEY,
+    });
+    userId = verified.sub;
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: 'Invalid or expired token',
+      message: error instanceof Error ? error.message : 'Token verification failed'
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
   // Generate random state for CSRF protection
   // This gets verified in the callback to ensure the request came from us

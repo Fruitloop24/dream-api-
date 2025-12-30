@@ -10,7 +10,7 @@
  * ============================================================================
  */
 
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
@@ -41,6 +41,7 @@ import {
 
 export default function Dashboard() {
   const { isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
   const navigate = useNavigate();
 
   // Hooks
@@ -135,8 +136,13 @@ export default function Dashboard() {
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
 
-  const handleConnectStripe = () => {
-    window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
+  const handleConnectStripe = async () => {
+    const token = await getToken();
+    if (!token) {
+      showToast('Please sign in to connect Stripe', 'error');
+      return;
+    }
+    window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?token=${token}`;
   };
 
   const handleSelectProject = (pk: string) => {

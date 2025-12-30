@@ -2,7 +2,7 @@
  * StripeAccountSection - Shows connected Stripe account or connect prompt
  */
 
-import { useUser } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 
 interface StripeAccountSectionProps {
   stripeAccountId: string | null | undefined;
@@ -10,10 +10,15 @@ interface StripeAccountSectionProps {
 }
 
 export function StripeAccountSection({ stripeAccountId, onCopy }: StripeAccountSectionProps) {
-  const { user } = useUser();
+  const { getToken } = useAuth();
 
-  const handleConnectStripe = () => {
-    window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?userId=${user?.id}`;
+  const handleConnectStripe = async () => {
+    const token = await getToken();
+    if (!token) {
+      alert('Please sign in to connect Stripe');
+      return;
+    }
+    window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?token=${token}`;
   };
 
   if (stripeAccountId) {
