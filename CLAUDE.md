@@ -120,6 +120,14 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 SK = `Authorization: Bearer sk_xxx`
 JWT = `X-Clerk-Token: eyJ...` (end-user token with publishableKey + plan in metadata)
 
+## Security Model
+
+- **OAuth `/authorize`** requires Clerk JWT - userId extracted from verified token
+- **Sign-up `/oauth/complete`** requires session token in Authorization header
+- **API endpoints** use SK (secret key) + optional JWT for user context
+- **Stripe webhooks** verified via signature when `STRIPE_WEBHOOK_SECRET` set
+- **D1 queries** parameterized via `.bind()` (SQL injection protected)
+
 ## Sign-Up Worker
 
 Handles end-user signup with metadata for multi-tenant isolation.

@@ -75,9 +75,10 @@ export default {
       // Handle Stripe Connect authorization flow
       // =========================================================================
 
-      // GET /authorize - Start OAuth flow
+      // GET /authorize - Start OAuth flow (requires Clerk auth)
       if (url.pathname === '/authorize' && request.method === 'GET') {
-        return handleAuthorize(request, env, url);
+        const userId = await requireClerkUser(request, env);
+        return handleAuthorize(request, env, url, userId);
       }
 
       // GET /callback - Stripe redirects here after authorization

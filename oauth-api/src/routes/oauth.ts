@@ -71,8 +71,8 @@ export function getCorsHeaders(request?: Request, env?: { ALLOWED_ORIGINS?: stri
  *
  * Starts the Stripe Connect OAuth flow.
  *
- * Query params:
- *   - userId: The Clerk user ID of the developer
+ * SECURITY: userId comes from verified Clerk JWT (not query params!)
+ * The caller (index.ts) must call requireClerkUser() first.
  *
  * What happens:
  *   1. Generate random state for CSRF protection
@@ -84,13 +84,10 @@ export function getCorsHeaders(request?: Request, env?: { ALLOWED_ORIGINS?: stri
 export async function handleAuthorize(
   request: Request,
   env: Env,
-  url: URL
+  url: URL,
+  userId: string
 ): Promise<Response> {
-  const userId = url.searchParams.get('userId');
-
-  if (!userId) {
-    return new Response('Missing userId parameter', { status: 400 });
-  }
+  // userId is now verified from JWT - no need to check query params
 
   // Generate random state for CSRF protection
   // This gets verified in the callback to ensure the request came from us

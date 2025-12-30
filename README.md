@@ -59,11 +59,13 @@ dream-api/
 - Store flow: products → cart → checkout → inventory
 - Project management: create, edit, delete, regen keys
 - Dashboard: metrics, customers, tiers
-- Sign-up worker: OAuth + email/password with metadata
+- Sign-up worker: OAuth (Google) + email/password with metadata
+- OAuth flows secured with Clerk JWT verification
+- Session token validation on signup completion
 
-### Known Issues
-- End-users must sign in again at dev's app after signup (cross-domain limitation)
-- Clerk CAPTCHA required for email signup
+### Notes
+- End-users sign in at dev's app after signup (cross-domain = separate Clerk session)
+- Auto-deploy via Cloudflare Pages (frontend) and Workers (API)
 
 ## API Endpoints
 
@@ -133,5 +135,10 @@ See `CLAUDE.md` for schemas, bindings, debugging.
 - [x] CSV export (customers, orders)
 - [x] Delete customer endpoint
 - [x] Publish SDK to npm (`@dream-api/sdk`)
-- [ ] Auto-sign-in after signup (requires SDK in dev's app)
+- [x] OAuth flow security hardening (JWT verification)
+- [x] Sign-up session token validation
+- [ ] Auto-sign-in after signup (sign-in token already generated)
+- [ ] Facebook OAuth (in addition to Google)
 - [ ] Framework-specific guides (React, Next.js, Vue)
+- [ ] Store template with SDK integration
+- [ ] SaaS template with SDK integration

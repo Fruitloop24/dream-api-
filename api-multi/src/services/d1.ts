@@ -283,8 +283,8 @@ export async function upsertEndUser(
 // ============================================================================
 
 /**
- * Insert or update a usage snapshot
- * Used for recording usage at a point in time
+ * Insert or update a usage count record
+ * Used for initializing usage when creating customers
  */
 export async function upsertUsageSnapshot(
   env: Env,
@@ -296,7 +296,7 @@ export async function upsertUsageSnapshot(
   usageCount: number
 ) {
   await env.DB.prepare(`
-    INSERT OR REPLACE INTO usage_snapshots (
+    INSERT OR REPLACE INTO usage_counts (
       platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt
     ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   `)
@@ -332,18 +332,18 @@ export async function upsertUsageInDb(
   // Upsert + atomic increment with guard
   // The WHERE clause prevents increment if it would exceed limit
   await env.DB.prepare(`
-    INSERT INTO usage_snapshots (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
+    INSERT INTO usage_counts (platformId, userId, plan, periodStart, periodEnd, usageCount, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(platformId, userId) DO UPDATE SET
       plan=excluded.plan,
       periodStart=excluded.periodStart,
       periodEnd=excluded.periodEnd,
       usageCount=CASE
-        WHEN usage_snapshots.usageCount + ? > ? THEN usage_snapshots.usageCount
-        ELSE usage_snapshots.usageCount + ?
+        WHEN usage_counts.usageCount + ? > ? THEN usage_counts.usageCount
+        ELSE usage_counts.usageCount + ?
       END,
       updatedAt=CURRENT_TIMESTAMP
-    WHERE usage_snapshots.usageCount + ? <= ?
+    WHERE usage_counts.usageCount + ? <= ?
   `)
     .bind(
       platformId,
@@ -362,7 +362,7 @@ export async function upsertUsageInDb(
 
   // Get current count to return to caller
   const row = await env.DB.prepare(`
-    SELECT usageCount FROM usage_snapshots
+    SELECT usageCount FROM usage_counts
     WHERE platformId = ? AND userId = ?
   `)
     .bind(platformId, userId)

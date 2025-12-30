@@ -226,18 +226,48 @@ export default {
 
 		// ===========================================
 		// POST /oauth/complete - Set user metadata via API
+		// Security: Requires valid Clerk session token (userId extracted from JWT)
 		// Security: Rejects if user already has a publishableKey (prevents project hopping)
 		// ===========================================
 		if (path === '/oauth/complete' && request.method === 'POST') {
 			try {
-				const body = (await request.json()) as { userId: string; publishableKey: string };
+				// SECURITY: Extract userId from verified Clerk session token
+				const authHeader = request.headers.get('Authorization') || '';
+				if (!authHeader.startsWith('Bearer ')) {
+					return jsonResponse({ error: 'Missing Authorization header' }, 401);
+				}
 
-				if (!body.userId || !body.publishableKey) {
-					return jsonResponse({ error: 'Missing userId or publishableKey' }, 400);
+				const sessionToken = authHeader.replace('Bearer ', '');
+
+				// Verify the session token with Clerk
+				const verifyResponse = await fetch('https://api.clerk.com/v1/sessions/verify', {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${env.CLERK_SECRET_KEY}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({ token: sessionToken }),
+				});
+
+				if (!verifyResponse.ok) {
+					return jsonResponse({ error: 'Invalid session token' }, 401);
+				}
+
+				const sessionData = await verifyResponse.json() as { user_id?: string; id?: string };
+				const userId = sessionData.user_id;
+
+				if (!userId) {
+					return jsonResponse({ error: 'Could not extract userId from token' }, 401);
+				}
+
+				const body = (await request.json()) as { publishableKey: string };
+
+				if (!body.publishableKey) {
+					return jsonResponse({ error: 'Missing publishableKey' }, 400);
 				}
 
 				// First, check if user already has metadata set (prevent project hopping)
-				const checkResponse = await fetch(`https://api.clerk.com/v1/users/${body.userId}`, {
+				const checkResponse = await fetch(`https://api.clerk.com/v1/users/${userId}`, {
 					headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
 				});
 
@@ -262,7 +292,7 @@ export default {
 
 				// Only update Clerk metadata if not already set
 				if (needsMetadataUpdate) {
-					const updateResponse = await fetch(`https://api.clerk.com/v1/users/${body.userId}`, {
+					const updateResponse = await fetch(`https://api.clerk.com/v1/users/${userId}`, {
 						method: 'PATCH',
 						headers: {
 							'Authorization': `Bearer ${env.CLERK_SECRET_KEY}`,
@@ -281,7 +311,7 @@ export default {
 
 				// Sync to D1
 				await syncUserToD1(env, {
-					userId: body.userId,
+					userId: userId,
 					email: userData.email_addresses?.[0]?.email_address || '',
 					publishableKey: body.publishableKey,
 					plan: 'free',
@@ -297,7 +327,7 @@ export default {
 							'Content-Type': 'application/json',
 						},
 						body: JSON.stringify({
-							user_id: body.userId,
+							user_id: userId,
 							expires_in_seconds: 300, // 5 min expiry
 						}),
 					});
@@ -754,11 +784,20 @@ function getCompletePageHTML(pk: string, redirect: string, clerkPk: string): str
 
         updateStatus('Setting up your account...');
 
-        // Call our API to set metadata
+        // Get session token for secure API call
+        const sessionToken = await clerk.session.getToken();
+        if (!sessionToken) {
+          throw new Error('No session token available');
+        }
+
+        // Call our API to set metadata (userId extracted from verified token server-side)
         const res = await fetch('/oauth/complete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: clerk.user.id, publishableKey: PK }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + sessionToken,
+          },
+          body: JSON.stringify({ publishableKey: PK }),
         });
 
         const data = await res.json();
