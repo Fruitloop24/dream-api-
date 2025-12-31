@@ -1,23 +1,18 @@
-# Sign-Up Worker - Technical Implementation
+# Sign-Up Worker
 
-## Status: Working (Dec 26, 2025)
+## Status: Production Ready (Dec 30, 2025)
 
-OAuth (Google) and Email/Password signup both functional. Users created with correct metadata, synced to D1.
+Frictionless signup using Clerk hosted pages. Users sign up, get metadata set automatically, and land in the app logged in.
 
 ---
 
 ## The Problem
 
-Shared multi-tenant Clerk app (`end-user-api`) for all devs' end customers. When users sign up via Clerk's hosted pages or OAuth, we can't set `publicMetadata` (publishableKey, plan) at creation time. This breaks tenant isolation.
+Multi-tenant Clerk app (`end-user-api`) for all devs' end customers. Need to set `publicMetadata` (publishableKey, plan) at signup for tenant isolation.
 
 ## The Solution
 
-Custom sign-up worker that:
-1. Intercepts signup before Clerk
-2. Uses Clerk SDK for authentication
-3. Sets metadata immediately after user creation
-4. Syncs to D1 database
-5. Redirects to dev's app
+Redirect to Clerk hosted pages, set metadata on callback. **332 lines of code.**
 
 ---
 
@@ -25,161 +20,78 @@ Custom sign-up worker that:
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/signup` | GET | Serve signup page, set session cookie |
-| `/signup/email` | POST | Legacy - Backend API user creation |
-| `/complete` | GET | OAuth callback - completes Google auth |
-| `/verify` | GET | Email link verification callback |
-| `/oauth/complete` | POST | Set metadata + sync D1 |
-| `/sync` | POST | Manual D1 sync endpoint |
+| `/signup` | GET | Redirect to Clerk hosted signup |
+| `/callback` | GET | Return from Clerk, set metadata, redirect |
+| `/oauth/complete` | POST | API: verify token, set metadata, sync D1 |
 
 ---
 
-## Flows
-
-### OAuth (Google)
+## Flow
 
 ```
 Dev's App
-    |
-    | Link: /signup?pk=xxx&redirect=https://app.com/dashboard
-    v
-/signup page
-    |
-    | 1. Cookie set with {pk, redirect}
-    | 2. Clerk SDK loaded
-    | 3. User clicks "Continue with Google"
-    v
-Clerk SDK: signUp.authenticateWithRedirect({
-    strategy: 'oauth_google',
-    redirectUrl: WORKER_URL + '/complete',
-    redirectUrlComplete: WORKER_URL + '/complete',
-})
-    |
-    | Google OAuth (Clerk manages)
-    v
-/complete page
-    |
-    | 1. handleRedirectCallback() - completes OAuth
-    | 2. POST /oauth/complete - set metadata + sync D1
-    | 3. Redirect to dev's app
-    v
-Dev's App (user must sign in again - different domain)
-```
-
-### Email/Password
-
-```
-Dev's App
-    |
-    | Link: /signup?pk=xxx&redirect=https://app.com/dashboard
-    v
-/signup page
-    |
-    | 1. Cookie set with {pk, redirect}
-    | 2. User enters email/password
-    | 3. Clerk SDK: signUp.create()
-    | 4. prepareEmailAddressVerification({ strategy: 'email_code' })
-    v
-Code Entry Form (same page)
-    |
-    | 1. User gets 6-digit code via email
-    | 2. Enters code
-    | 3. attemptEmailAddressVerification({ code })
-    | 4. POST /oauth/complete - set metadata + sync D1
-    | 5. Redirect to dev's app
-    v
-Dev's App (user must sign in again)
+    │
+    │ Link: /signup?pk=xxx&redirect=/dashboard
+    ▼
+/signup
+    │
+    │ 1. Validate pk exists in D1
+    │ 2. Set cookie with {pk, redirect}
+    │ 3. Redirect to Clerk hosted signup
+    ▼
+Clerk Hosted Page (accounts.*.clerk.dev)
+    │
+    │ User signs up (email OR Google - Clerk handles all)
+    │ Email verification, OAuth, CAPTCHA - all Clerk
+    ▼
+/callback
+    │
+    │ 1. Read cookie
+    │ 2. Load Clerk SDK
+    │ 3. Get session token
+    │ 4. POST /oauth/complete
+    ▼
+/oauth/complete (API)
+    │
+    │ 1. Verify token with Clerk Backend API
+    │ 2. Extract userId from verified session
+    │ 3. Check for project hopping (reject if different pk)
+    │ 4. Set metadata: { publishableKey, plan: 'free' }
+    │ 5. Sync to D1 (end_users + usage_counts)
+    ▼
+Dev's App (user is logged in!)
 ```
 
 ---
 
-## Key Implementation Details
+## Security
 
-### Why email_code, not email_link?
-
-`email_link` verification fails if user opens link in different browser - signup state is lost. `email_code` keeps user on same page throughout.
-
-### Session Cookie
-
-Stores `{pk, redirect}` for OAuth flow (different browser context loses JS vars):
-```javascript
-Set-Cookie: signup_session={base64}; Path=/; Max-Age=600; SameSite=Lax; Secure
-```
-
-### Metadata Setting
-
-```javascript
-// /oauth/complete endpoint
-const existingPk = userData.public_metadata?.publishableKey;
-
-// Security: Can't reassign user to different project
-if (existingPk && existingPk !== body.publishableKey) {
-    return { error: 'User already associated with different project' };
-}
-
-// Only set metadata if not already set
-if (!existingPk) {
-    await updateClerkMetadata(userId, publishableKey, 'free');
-}
-
-// Always sync to D1 (idempotent)
-await syncUserToD1(userId, email, publishableKey, 'free');
-```
-
-### D1 Sync
-
-```javascript
-// end_users table - composite primary key
-INSERT INTO end_users (publishableKey, platformId, clerkUserId, email, createdAt)
-VALUES (?, ?, ?, ?, ?)
-ON CONFLICT(platformId, publishableKey, clerkUserId) DO UPDATE SET email = excluded.email
-
-// usage_counts table
-INSERT INTO usage_counts (publishableKey, platformId, userId, plan, usageCount, periodStart, periodEnd, updatedAt)
-VALUES (?, ?, ?, ?, 0, ?, ?, ?)
-ON CONFLICT(platformId, userId) DO NOTHING
-```
+1. **Token verified server-side** - `/oauth/complete` verifies session token with Clerk Backend API using our secret key
+2. **UserId from verified token** - Extracted from Clerk's response, not user input
+3. **PublishableKey validated** - Must exist in D1 `api_keys` table
+4. **No project hopping** - If user has different pk in metadata, request rejected
+5. **Cookie is convenience only** - Security comes from Clerk token verification
 
 ---
 
-## Known Limitations / Concerns
+## Why This Works
 
-### 1. Double Sign-In Required
-
-User must sign in again at dev's app after signup. Different domains = different Clerk sessions. This is standard behavior for cross-domain auth.
-
-**Standard flow:** Sign up at central auth → Redirect to app → User signs in at app
-
-**Not supported:** Auto-sign-in at dev's app (would require `__clerk_ticket` + Clerk SDK in dev's app, defeats purpose of our SDK)
-
-### 2. CAPTCHA Requirement
-
-Clerk's bot protection requires `<div id="clerk-captcha">` in the form. Without it, signups may fail silently.
-
-### 3. Email Verification Methods
-
-Clerk dashboard must have "Email verification code" enabled under Configure > User & Authentication > Email.
-
-### 4. Dev Browser Tracking
-
-Clerk's `__clerk_db_jwt` cookie can override redirects in hosted pages. Using SDK with `authenticateWithRedirect()` bypasses this.
+- Clerk handles all auth complexity (passwords, OAuth, email verification, CAPTCHA)
+- We only set authorization metadata (which project does user belong to)
+- Same Clerk instance across signup and app = session carries over
+- No double sign-in required
 
 ---
 
-## Clerk Dashboard Settings (end-user-api)
+## Adding OAuth Providers
 
-Required configuration:
-- Sign-up with email: ON
-- Verify at sign-up: ON
-- Email verification code: ON (required for email_code strategy)
-- Email verification link: Optional
-- Bot sign-up protection: Ensure `clerk-captcha` div exists or disable
+Just enable them in Clerk dashboard. Google, GitHub, Apple, etc. Zero code changes - Clerk hosted page shows all enabled providers.
 
 ---
 
 ## Files
 
-- `sign-up/src/index.ts` - Main worker (all routes + HTML pages)
+- `sign-up/src/index.ts` - Main worker (332 lines)
 - `sign-up/wrangler.toml` - D1/KV bindings
 - `sign-up/oauth.md` - This file
 
@@ -192,38 +104,24 @@ cd sign-up && npx wrangler deploy
 ## Test URL
 
 ```
-https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=http://127.0.0.1:5500/test-app/index.html
+https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=http://localhost:5173/dashboard
 ```
 
 ---
 
-## SDK Integration (Available Now)
+## SDK Integration
 
-```javascript
+```typescript
 import { DreamAPI } from '@dream-api/sdk';
 
 const api = new DreamAPI({
-    secretKey: 'sk_test_xxx',
-    publishableKey: 'pk_test_xxx',
+  secretKey: 'sk_test_xxx',
+  publishableKey: 'pk_test_xxx',
 });
 
 // Get signup URL
 const signupUrl = api.auth.getSignUpUrl({
-    redirect: 'https://myapp.com/dashboard'
+  redirect: 'https://myapp.com/dashboard'
 });
-// Returns: https://sign-up.../signup?pk=pk_test_xxx&redirect=...
-
-// After user signs in, set their token
-api.setUserToken(clerkJWT);
-
-// Now make authenticated calls
-await api.usage.track();
-const usage = await api.usage.check();
+// → https://sign-up.../signup?pk=pk_test_xxx&redirect=...
 ```
-
-SDK handles:
-- Signup URL construction
-- Auth header injection (SK + JWT)
-- TypeScript types for all responses
-
-See `dream-sdk/README.md` for full documentation.

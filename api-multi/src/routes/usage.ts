@@ -55,9 +55,10 @@ export async function handleDataRequest(
 	// Use D1 plan if active subscription exists, otherwise fall back to JWT plan
 	const actualPlan = (subscription?.plan as PlanTier) || plan;
 
-	// Get tier limit from config
+	// Get tier limit from config (normalize plan name for case-insensitive lookup)
 	const tierConfigs = await getTierConfig(env, platformId, mode, publishableKey);
-	const tierLimit = tierConfigs[actualPlan]?.limit ?? 0;
+	const planKey = actualPlan?.toLowerCase() || 'free';
+	const tierLimit = tierConfigs[planKey]?.limit ?? tierConfigs[actualPlan]?.limit ?? 0;
 	const isUnlimited = tierLimit === Infinity;
 	const limitNumber = isUnlimited ? Number.MAX_SAFE_INTEGER : tierLimit;
 
@@ -174,9 +175,10 @@ export async function handleUsageCheck(
 	const periodStart = fromDb?.periodStart || currentPeriod.start;
 	const periodEnd = fromDb?.periodEnd || currentPeriod.end;
 
-	// Get tier limit from config using actual plan
+	// Get tier limit from config (normalize plan name for case-insensitive lookup)
 	const tierConfigs = await getTierConfig(env, platformId, mode, publishableKey);
-	const tierLimit = tierConfigs[actualPlan]?.limit || 0;
+	const planKey = actualPlan?.toLowerCase() || 'free';
+	const tierLimit = tierConfigs[planKey]?.limit ?? tierConfigs[actualPlan]?.limit ?? 0;
 
 	return new Response(
 		JSON.stringify({

@@ -130,7 +130,7 @@ JWT = `X-Clerk-Token: eyJ...` (end-user token with publishableKey + plan in meta
 
 ## Sign-Up Worker
 
-Handles end-user signup with metadata for multi-tenant isolation.
+Frictionless signup using Clerk hosted pages. Users sign up, get metadata set automatically, and land in the app logged in.
 
 **URL:** `https://sign-up.k-c-sheffield012376.workers.dev`
 
@@ -141,16 +141,24 @@ const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
 ```
 
 **Routes:**
-- `GET /signup?pk=xxx&redirect=url` - Signup page (OAuth + email/password)
-- `GET /complete` - OAuth callback (Google)
-- `POST /oauth/complete` - Set metadata + D1 sync
-- `GET /verify` - Email link verification callback
+- `GET /signup?pk=xxx&redirect=url` - Validate pk, set cookie, redirect to Clerk hosted signup
+- `GET /callback` - Return from Clerk, load SDK, call /oauth/complete, redirect
+- `POST /oauth/complete` - Verify token with Clerk API, set metadata, sync D1
 
-**Flows:**
-- OAuth: Clerk SDK `authenticateWithRedirect()` → Google → `/complete` → set metadata → redirect
-- Email: Clerk SDK `signUp.create()` → email_code verification → set metadata → redirect
+**Flow:**
+1. Dev's app links to `/signup?pk=xxx&redirect=/dashboard`
+2. We set cookie, redirect to Clerk hosted signup
+3. User signs up (email OR Google - Clerk handles all auth)
+4. Clerk redirects to `/callback`
+5. Callback page loads Clerk SDK, gets token, calls `/oauth/complete`
+6. We verify token, set metadata, sync D1
+7. Redirect to dev's app - user is logged in!
 
-**After Signup:** User must sign in at dev's app (cross-domain = separate Clerk session)
+**Security:**
+- Token verified server-side with Clerk Backend API
+- UserId extracted from verified token, not user input
+- PublishableKey validated against D1
+- No project hopping (rejects if user has different pk)
 
 **See:** `sign-up/oauth.md` for full implementation details.
 

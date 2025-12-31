@@ -140,27 +140,26 @@ front-auth-api/
 
 **URL:** `https://sign-up.k-c-sheffield012376.workers.dev`
 
-**Purpose:** End-user registration with metadata for multi-tenant isolation.
+**Purpose:** Frictionless signup using Clerk hosted pages. Users sign up, get metadata set, land in app logged in.
 
 ```
 sign-up/
 ├── src/
-│   └── index.ts              # Single file worker
-│                             # - GET /signup (render page)
-│                             # - GET /complete (OAuth callback)
-│                             # - POST /oauth/complete (set metadata)
-│                             # - GET /verify (email link callback)
-│                             # Contains embedded HTML templates
+│   └── index.ts              # Single file worker (332 lines)
+│                             # - GET /signup → redirect to Clerk hosted
+│                             # - GET /callback → load SDK, set metadata
+│                             # - POST /oauth/complete → verify token, sync D1
+│                             # Minimal HTML for callback page only
 │
 ├── oauth.md                  # Technical implementation docs
-└── wrangler.toml             # Bindings: TOKENS_KV, DB
+└── wrangler.toml             # Bindings: KV, DB
 ```
 
 ---
 
 ## dream-sdk (TypeScript SDK)
 
-**NPM:** `@dream-api/sdk` (not published yet)
+**NPM:** `@dream-api/sdk`
 
 **Purpose:** Official SDK for devs using the API.
 

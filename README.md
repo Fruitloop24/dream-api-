@@ -59,12 +59,11 @@ dream-api/
 - Store flow: products → cart → checkout → inventory
 - Project management: create, edit, delete, regen keys
 - Dashboard: metrics, customers, tiers
-- Sign-up worker: OAuth (Google) + email/password with metadata
+- Sign-up worker: Clerk hosted pages, frictionless (no double sign-in)
 - OAuth flows secured with Clerk JWT verification
 - Session token validation on signup completion
 
 ### Notes
-- End-users sign in at dev's app after signup (cross-domain = separate Clerk session)
 - Auto-deploy via Cloudflare Pages (frontend) and Workers (API)
 
 ## API Endpoints
@@ -88,7 +87,7 @@ Base: `https://api-multi.k-c-sheffield012376.workers.dev`
 
 ## Sign-Up Worker
 
-Handles end-user registration with multi-tenant metadata. Supports OAuth (Google) and email/password.
+Frictionless signup using Clerk hosted pages. Users sign up (email or Google), get metadata set automatically, and land in your app logged in. No double sign-in required.
 
 **With SDK:**
 ```typescript
@@ -100,8 +99,6 @@ const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
 ```
 https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=https://yourapp.com
 ```
-
-After signup, users must sign in at your app (cross-domain = separate session).
 
 See `sign-up/oauth.md` for implementation details.
 
@@ -137,7 +134,7 @@ See `CLAUDE.md` for schemas, bindings, debugging.
 - [x] Publish SDK to npm (`@dream-api/sdk`)
 - [x] OAuth flow security hardening (JWT verification)
 - [x] Sign-up session token validation
-- [ ] Auto-sign-in after signup (sign-in token already generated)
+- [x] Frictionless signup (no double sign-in required)
 - [ ] Facebook OAuth (in addition to Google)
 - [ ] Framework-specific guides (React, Next.js, Vue)
 - [ ] Store template with SDK integration
