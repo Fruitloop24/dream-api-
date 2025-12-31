@@ -18,11 +18,13 @@ SaaS billing requires a signed-in user. Here's the flow:
 
 ```
 1. User clicks "Sign Up" → redirects to sign-up worker
-2. User creates account (email/password or OAuth)
-3. User redirected back to your app with session
-4. User clicks "Upgrade to Pro" → now billing.createCheckout() works
+2. User creates account (Clerk hosted page handles email/OAuth)
+3. User redirected back to your app - already logged in!
+4. User clicks "Upgrade to Pro" → billing.createCheckout() works
 5. After payment, webhook updates their plan in metadata
 ```
+
+**Note:** The sign-up worker uses Clerk hosted pages, so there's no double sign-in required. Users land in your app logged in and ready to go.
 
 ### Getting the Sign-Up URL
 
@@ -149,20 +151,26 @@ interface Tier {
 ## Environment Setup
 
 ```env
-# .env.local (gitignored)
+# Backend .env (server-side only - NEVER in frontend!)
 DREAM_SECRET_KEY=sk_test_xxx
+
+# Frontend .env (compiled into bundle, that's OK)
 VITE_DREAM_PUBLISHABLE_KEY=pk_test_xxx
 ```
 
 ```typescript
-// Backend (Node/API routes)
+// FRONTEND (React, Vue, browser) - PK only
+const api = new DreamAPI({
+  publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
+});
+// After user auth:
+api.setUserToken(await clerk.session.getToken());
+
+// BACKEND (Node, Workers, API routes) - Full access
 const api = new DreamAPI({
   secretKey: process.env.DREAM_SECRET_KEY!,
-  publishableKey: process.env.VITE_DREAM_PUBLISHABLE_KEY,
+  publishableKey: 'pk_test_xxx',
 });
-
-// Frontend (after user auth)
-api.setUserToken(await clerk.session.getToken());
 ```
 
 ---
@@ -172,8 +180,8 @@ api.setUserToken(await clerk.session.getToken());
 ```typescript
 import { DreamAPI } from '@dream-api/sdk';
 
+// Frontend: PK only (secret key stays on your backend!)
 const api = new DreamAPI({
-  secretKey: import.meta.env.VITE_DREAM_SECRET_KEY,
   publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
 });
 

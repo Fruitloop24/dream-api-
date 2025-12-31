@@ -7,9 +7,17 @@
 // ============================================================================
 
 export interface DreamAPIConfig {
-  /** Your secret key (sk_test_xxx or sk_live_xxx) */
-  secretKey: string;
-  /** Your publishable key (pk_test_xxx or pk_live_xxx) - used for auth URL helpers */
+  /**
+   * Your secret key (sk_test_xxx or sk_live_xxx)
+   * Required for backend/admin operations (customers, dashboard)
+   * Optional for frontend operations (tiers, products, usage with JWT)
+   */
+  secretKey?: string;
+  /**
+   * Your publishable key (pk_test_xxx or pk_live_xxx)
+   * Required for frontend-only mode (when no secretKey provided)
+   * Also used for auth URL helpers
+   */
   publishableKey?: string;
   /** Base URL override (for testing) */
   baseUrl?: string;

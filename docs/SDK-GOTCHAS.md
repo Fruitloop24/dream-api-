@@ -23,14 +23,32 @@ Common issues encountered when building with `@dream-api/sdk`.
 
 ### Key Placement
 ```
-.env (server-side):
-  DREAM_SECRET_KEY=sk_test_xxx
+Backend .env (server-side only):
+  DREAM_SECRET_KEY=sk_test_xxx      # NEVER in frontend!
 
-Frontend code (safe to expose):
-  publishableKey: 'pk_test_xxx'
+Frontend .env (compiled into bundle, that's OK):
+  VITE_DREAM_PUBLISHABLE_KEY=pk_test_xxx
 ```
 
 **Never commit `.env` files. Never put SK in frontend code.**
+
+### Two SDK Modes
+
+```typescript
+// FRONTEND (React, Vue, browser) - PK only, safe to expose
+const api = new DreamAPI({
+  publishableKey: 'pk_test_xxx',
+});
+// Can access: tiers, products, usage (with JWT), billing (with JWT)
+// Cannot access: customers, dashboard (requires SK)
+
+// BACKEND (Node, Workers, API routes) - Full access
+const api = new DreamAPI({
+  secretKey: process.env.DREAM_SECRET_KEY,
+  publishableKey: 'pk_test_xxx',
+});
+// Can access: everything
+```
 
 ---
 

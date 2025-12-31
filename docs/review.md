@@ -25,10 +25,11 @@ This is a real product, not a toy MVP. The architecture is coherent (Workers + D
 - **Now:** Requires Clerk JWT, extracts userId from verified token
 - **Files:** `oauth-api/src/index.ts`, `oauth-api/src/routes/oauth.ts`
 
-### 2. Sign-up `/oauth/complete` - FIXED
-- **Was:** Accepted `userId` from POST body without verification
-- **Now:** Requires `Authorization: Bearer <session_token>`, verifies with Clerk API
-- **Files:** `sign-up/src/index.ts` (backend + frontend HTML)
+### 2. Sign-up Worker - SIMPLIFIED & FIXED
+- **Was:** Complex 900+ line worker with custom forms, multiple verification strategies
+- **Now:** 332 lines, redirects to Clerk hosted pages, sets metadata on callback
+- **Security:** Session token verified with Clerk Backend API, userId from token not user input
+- **Files:** `sign-up/src/index.ts`, `sign-up/oauth.md`
 
 ### 3. Build blockers - FIXED/CLARIFIED
 - **`ensureProjectSchema`:** The importing file (`oauth-api/src/lib/projects.ts`) was orphaned/unused. Deleted.
@@ -79,8 +80,42 @@ This is a real product, not a toy MVP. The architecture is coherent (Workers + D
 ---
 
 ## Next Steps
-1. Full end-to-end test of OAuth flow
-2. Test sign-up flow (OAuth + email/password)
+1. ~~Full end-to-end test of OAuth flow~~ ✓
+2. ~~Test sign-up flow (OAuth + email/password)~~ ✓ Using Clerk hosted pages
 3. Test store template with SDK
 4. Test SaaS template with SDK
-5. Deploy updated workers
+5. ~~Deploy updated workers~~ ✓ sign-up worker deployed
+
+---
+
+## Addendum (2025-12-31) - Template + Redirect Notes
+
+### 1) Client-side secret key exposure in templates - FIXED
+- **Where:** `fs-template/frontend/src/hooks/useDreamAPI.tsx`, `test-paywall/src/App.tsx`
+- **Issue:** `import.meta.env.VITE_DREAM_SECRET_KEY` was compiled into the browser bundle.
+- **Fix Applied:**
+  1. Added `verifyPublishableKey()` function to api-multi
+  2. Modified api-multi router to accept PK-only auth for public routes (tiers, products)
+  3. Modified api-multi router to accept PK+JWT auth for user routes (usage, billing)
+  4. Updated SDK to work without secretKey (frontend-only mode)
+  5. Updated templates to use PK-only: `new DreamAPI({ publishableKey: 'pk_xxx' })`
+  6. SK-only endpoints (customers, dashboard) remain protected
+- **Security Model:** Same as Stripe - PK is public, SK stays on backend
+
+### 2) Sign-up redirect is not escaped or allowlisted
+- **Where:** `sign-up/src/index.ts` (`/signup` redirect param, `callbackPage` JS interpolation)
+- **Issue:** Arbitrary `redirect` is interpolated into JS without escaping.
+- **Why it matters:** Enables open redirect phishing and potential script injection on the callback page, before any JWT validation.
+- **Fix:** Embed via `JSON.stringify(redirect)` and validate redirect against a per-project allowlist. Optional: signed state in cookie.
+
+### 3) Publishable-key override is not validated
+- **Where:** `api-multi/src/index.ts` (`X-Publishable-Key` header override)
+- **Issue:** Override is accepted without verifying it belongs to the platformId derived from the SK.
+- **Why it matters:** If an SK leaks, override expands blast radius across projects.
+- **Fix:** Verify override against D1/KV mapping for the platformId before use (otherwise ignore).
+
+### 4) Demo checkout without JWT
+- **Where:** `test-paywall/src/App.tsx`
+- **Issue:** Calls `api.billing.createCheckout()` without a user JWT.
+- **Why it matters:** Works in demo but fails in production; can confuse template users.
+- **Fix:** Wire sign-in and call `setUserToken()` before billing calls, or mark as demo-only.

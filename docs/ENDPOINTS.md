@@ -2,13 +2,33 @@
 
 ## Authentication
 
-All endpoints require authentication via headers:
+Two authentication modes are supported:
 
+### Mode 1: Secret Key (Full Access - Backend Only)
 | Header | Value | Required For |
 |--------|-------|--------------|
-| `Authorization` | `Bearer sk_xxx` | All endpoints |
+| `Authorization` | `Bearer sk_xxx` | All endpoints (full access) |
 | `X-Clerk-Token` | JWT from Clerk | User-specific endpoints |
-| `X-Publishable-Key` | `pk_xxx` | Override project filter |
+| `X-Publishable-Key` | `pk_xxx` | Optional project filter override |
+
+### Mode 2: Publishable Key (Limited Access - Frontend Safe)
+| Header | Value | Required For |
+|--------|-------|--------------|
+| `X-Publishable-Key` | `pk_xxx` | Required (replaces SK) |
+| `X-Clerk-Token` | JWT from Clerk | User-specific endpoints |
+
+**PK Mode Accessible Endpoints:**
+- `GET /api/tiers` - Public (no JWT)
+- `GET /api/products` - Public (no JWT)
+- `POST /api/data` - Requires JWT
+- `GET /api/usage` - Requires JWT
+- `POST /api/create-checkout` - Requires JWT
+- `POST /api/customer-portal` - Requires JWT
+
+**SK-Only Endpoints (not accessible with PK):**
+- All `/api/customers/*` endpoints
+- All `/api/dashboard/*` endpoints
+- `POST /api/assets`
 
 ---
 

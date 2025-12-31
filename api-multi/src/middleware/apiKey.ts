@@ -20,7 +20,7 @@
  */
 
 import { Env } from '../types';
-import { getPlatformFromSecretHash } from '../services/d1';
+import { getPlatformFromSecretHash, getPlatformFromPublishableKey } from '../services/d1';
 
 /**
  * Result of API key verification
@@ -79,6 +79,60 @@ export async function verifyApiKey(apiKey: string, env: Env): Promise<ApiKeyVeri
 		return { platformId, publishableKey: pk, mode, projectType };
 	} catch (error) {
 		console.error('[API Key] Verification error:', error);
+		return null;
+	}
+}
+
+/**
+ * Result of publishable key verification
+ */
+export interface PublishableKeyVerifyResult {
+	platformId: string;
+	publishableKey: string;
+	mode: string;
+}
+
+/**
+ * Verify publishable key and return platformId
+ *
+ * Used for frontend-only auth (PK without SK):
+ * - Public endpoints: tiers, products (no JWT needed)
+ * - User endpoints: usage, billing (JWT required separately)
+ *
+ * This does NOT grant admin access - admin operations still require SK.
+ */
+export async function verifyPublishableKey(pk: string, env: Env): Promise<PublishableKeyVerifyResult | null> {
+	try {
+		// Validate format
+		if (!pk || (!pk.startsWith('pk_test_') && !pk.startsWith('pk_live_'))) {
+			console.warn(`[PK Auth] Invalid publishable key format: ${pk?.substring(0, 10)}...`);
+			return null;
+		}
+
+		// Derive mode from prefix
+		const mode = pk.startsWith('pk_test_') ? 'test' : 'live';
+
+		// Try KV cache first (fast path)
+		const cachedPlatformId = await env.TOKENS_KV.get(`publishablekey:${pk}:platformId`);
+		if (cachedPlatformId) {
+			console.log(`[PK Auth] ✅ Valid (from cache) - Platform: ${cachedPlatformId}, PK: ${pk}, Mode: ${mode}`);
+			return { platformId: cachedPlatformId, publishableKey: pk, mode };
+		}
+
+		// Cache miss - query D1
+		const platformId = await getPlatformFromPublishableKey(env, pk);
+		if (!platformId) {
+			console.warn(`[PK Auth] Publishable key not found: ${pk}`);
+			return null;
+		}
+
+		// Warm KV cache for next time
+		await env.TOKENS_KV.put(`publishablekey:${pk}:platformId`, platformId);
+
+		console.log(`[PK Auth] ✅ Valid (from D1) - Platform: ${platformId}, PK: ${pk}, Mode: ${mode}`);
+		return { platformId, publishableKey: pk, mode };
+	} catch (error) {
+		console.error('[PK Auth] Verification error:', error);
 		return null;
 	}
 }

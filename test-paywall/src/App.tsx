@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { DreamAPI } from '@dream-api/sdk'
 import './index.css'
 
-// Initialize SDK with env vars
+// Initialize SDK with publishable key only (frontend-safe mode)
+// Secret key should NEVER be in frontend code - it stays on your backend
 const api = new DreamAPI({
-  secretKey: import.meta.env.VITE_DREAM_SECRET_KEY,
   publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
 })
 

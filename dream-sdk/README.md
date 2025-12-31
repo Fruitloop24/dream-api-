@@ -13,10 +13,18 @@ npm install @dream-api/sdk
 ```typescript
 import { DreamAPI } from '@dream-api/sdk';
 
+// FRONTEND (React, Vue, browser) - PK only, safe to expose
+const api = new DreamAPI({
+  publishableKey: 'pk_test_xxx',
+});
+// Can access: tiers, products, usage (with JWT), billing (with JWT)
+
+// BACKEND (Node, Workers, API routes) - Full access
 const api = new DreamAPI({
   secretKey: process.env.DREAM_API_SECRET_KEY,
   publishableKey: process.env.DREAM_API_PUBLISHABLE_KEY,
 });
+// Can access: everything including customers, dashboard
 ```
 
 ## Backend Operations (SK Only)
@@ -183,8 +191,8 @@ DREAM_API_PUBLISHABLE_KEY=pk_test_xxx
 import { DreamAPI } from '@dream-api/sdk';
 import { useAuth } from '@clerk/clerk-react';
 
+// Frontend: PK only (secret key stays on your backend!)
 const api = new DreamAPI({
-  secretKey: import.meta.env.VITE_DREAM_API_SECRET_KEY,
   publishableKey: import.meta.env.VITE_DREAM_API_PUBLISHABLE_KEY,
 });
 

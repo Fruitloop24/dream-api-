@@ -12,7 +12,7 @@ const DEFAULT_SIGNUP_URL = 'https://sign-up.k-c-sheffield012376.workers.dev';
 const DEFAULT_CLERK_URL = 'https://composed-blowfish-76.accounts.dev';
 
 export class DreamClient {
-  private secretKey: string;
+  private secretKey: string | undefined;
   private publishableKey: string | undefined;
   private baseUrl: string;
   private signupUrl: string;
@@ -20,9 +20,16 @@ export class DreamClient {
   private userToken: string | null = null;
   private tokenRefresher: (() => Promise<string | null>) | null = null;
 
+  /**
+   * Frontend-only mode: When only publishableKey is provided (no secretKey)
+   * In this mode, only public endpoints and JWT-authenticated endpoints work
+   */
+  private readonly frontendOnly: boolean;
+
   constructor(config: DreamAPIConfig) {
-    if (!config.secretKey) {
-      throw new Error('DreamAPI: secretKey is required');
+    // Validate: at least one key must be provided
+    if (!config.secretKey && !config.publishableKey) {
+      throw new Error('DreamAPI: Either secretKey or publishableKey is required');
     }
 
     this.secretKey = config.secretKey;
@@ -30,6 +37,20 @@ export class DreamClient {
     this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
     this.signupUrl = config.signupUrl || DEFAULT_SIGNUP_URL;
     this.clerkUrl = config.clerkBaseUrl || DEFAULT_CLERK_URL;
+
+    // Frontend-only mode when we have PK but no SK
+    this.frontendOnly = !config.secretKey && !!config.publishableKey;
+
+    if (this.frontendOnly) {
+      console.log('[DreamAPI] Running in frontend-only mode (PK auth)');
+    }
+  }
+
+  /**
+   * Check if running in frontend-only mode
+   */
+  isFrontendOnly(): boolean {
+    return this.frontendOnly;
   }
 
   /**
@@ -100,15 +121,21 @@ export class DreamClient {
   ): Promise<T> {
     const { body, requiresUserToken = false } = options;
 
-    // Build headers
+    // Build headers based on auth mode
     const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.secretKey}`,
       'Content-Type': 'application/json',
     };
 
-    // Add publishable key header if available
-    if (this.publishableKey) {
-      headers['X-Publishable-Key'] = this.publishableKey;
+    if (this.frontendOnly) {
+      // Frontend-only mode: Use X-Publishable-Key header
+      headers['X-Publishable-Key'] = this.publishableKey!;
+    } else {
+      // Full mode: Use Authorization header with secret key
+      headers['Authorization'] = `Bearer ${this.secretKey}`;
+      // Also add publishable key if available (for project filtering)
+      if (this.publishableKey) {
+        headers['X-Publishable-Key'] = this.publishableKey;
+      }
     }
 
     // Add user token if required or available

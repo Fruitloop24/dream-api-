@@ -31,8 +31,8 @@ No sign-up, no Clerk, no JWT tokens needed.
 ## Listing Products
 
 ```typescript
+// Frontend: PK only (secret key stays on your backend!)
 const api = new DreamAPI({
-  secretKey: import.meta.env.VITE_DREAM_SECRET_KEY,
   publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
 });
 
@@ -126,8 +126,8 @@ function ProductCard({ product }) {
 import { useState, useEffect } from 'react';
 import { DreamAPI, Product } from '@dream-api/sdk';
 
+// Frontend: PK only (secret key stays on your backend!)
 const api = new DreamAPI({
-  secretKey: import.meta.env.VITE_DREAM_SECRET_KEY,
   publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
 });
 
@@ -240,19 +240,21 @@ const { url } = await api.products.cartCheckout({
 ## Environment Setup
 
 ```env
-# .env.local (gitignored)
-VITE_DREAM_SECRET_KEY=sk_test_xxx
+# Backend .env (server-side only - NEVER in frontend!)
+DREAM_SECRET_KEY=sk_test_xxx
+
+# Frontend .env (compiled into bundle, that's OK)
 VITE_DREAM_PUBLISHABLE_KEY=pk_test_xxx
 ```
 
 ```typescript
+// FRONTEND - PK only (secret key stays on your backend!)
 const api = new DreamAPI({
-  secretKey: import.meta.env.VITE_DREAM_SECRET_KEY,
   publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
 });
 ```
 
-**Note:** For stores, you can technically expose the publishable key in frontend code. The secret key should still be in env vars and never committed.
+**Note:** Publishable key is safe to expose in frontend code. Secret key should NEVER be in frontend - it stays on your backend for admin operations.
 
 ---
 

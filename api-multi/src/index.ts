@@ -24,7 +24,7 @@ import { getAllTiers } from './config/configLoader';
 // Middleware
 import { getCorsHeaders, handlePreflight } from './middleware/cors';
 import { checkRateLimit } from './middleware/rateLimit';
-import { verifyApiKey } from './middleware/apiKey';
+import { verifyApiKey, verifyPublishableKey } from './middleware/apiKey';
 
 // Routes
 import { handleDataRequest, handleUsageCheck } from './routes/usage';
@@ -47,7 +47,7 @@ import { validateEnv } from './utils';
 async function verifyEndUserToken(
 	request: Request,
 	env: Env
-): Promise<{ userId: string; plan: PlanTier; publishableKeyFromToken?: string | null }> {
+): Promise<{ userId: string; plan: PlanTier; publishableKeyFromToken?: string | null; email?: string | null }> {
 	const token =
 		request.headers.get('X-Clerk-Token') ||
 		request.headers.get('X-User-Token') ||
@@ -97,6 +97,27 @@ const ENDPOINTS_REQUIRING_USER_JWT = [
 
 function requiresEndUserJwt(pathname: string, method: string): boolean {
 	return ENDPOINTS_REQUIRING_USER_JWT.some(
+		(ep) => ep.path === pathname && ep.method === method
+	);
+}
+
+/**
+ * Endpoints accessible with publishable key only (no secret key required)
+ * These are safe for frontend/browser use
+ */
+const PK_ACCESSIBLE_ENDPOINTS = [
+	// Public catalog (PK only, no JWT)
+	{ path: '/api/tiers', method: 'GET' },
+	{ path: '/api/products', method: 'GET' },
+	// User operations (PK + JWT required)
+	{ path: '/api/data', method: 'POST' },
+	{ path: '/api/usage', method: 'GET' },
+	{ path: '/api/create-checkout', method: 'POST' },
+	{ path: '/api/customer-portal', method: 'POST' },
+];
+
+function isPkAccessible(pathname: string, method: string): boolean {
+	return PK_ACCESSIBLE_ENDPOINTS.some(
 		(ep) => ep.path === pathname && ep.method === method
 	);
 }
@@ -152,14 +173,178 @@ export default {
 
 		// ====================================================================
 		// API KEY AUTHENTICATION
+		// Supports two modes:
+		// 1. Secret Key (SK): Full access - Authorization: Bearer sk_xxx
+		// 2. Publishable Key (PK): Limited access - X-Publishable-Key: pk_xxx
 		// ====================================================================
 		const authHeader = request.headers.get('Authorization');
+		const pkHeader = request.headers.get('X-Publishable-Key');
+
+		// Check if this is a secret key auth (full access)
+		const hasSecretKey = authHeader?.startsWith('Bearer sk_');
+
+		// Check if this is a publishable key auth (limited access)
+		const hasPkOnly = !hasSecretKey && pkHeader;
+
+		// If PK-only auth, verify the endpoint is accessible
+		if (hasPkOnly) {
+			if (!isPkAccessible(url.pathname, request.method)) {
+				return new Response(
+					JSON.stringify({
+						error: 'Forbidden',
+						message: 'This endpoint requires a secret key (backend only)',
+					}),
+					{
+						status: 403,
+						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+					}
+				);
+			}
+
+			// Verify the publishable key
+			const pkAuth = await verifyPublishableKey(pkHeader, env);
+			if (!pkAuth) {
+				return new Response(
+					JSON.stringify({
+						error: 'Invalid publishable key',
+						message: 'Publishable key not found or invalid',
+					}),
+					{
+						status: 401,
+						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+					}
+				);
+			}
+
+			const { platformId, publishableKey, mode } = pkAuth;
+
+			// Create Clerk client for JWT verification
+			const clerkClient = createClerkClient({
+				secretKey: env.CLERK_SECRET_KEY,
+				publishableKey: env.CLERK_PUBLISHABLE_KEY,
+			});
+
+			// ================================================================
+			// PK-ONLY PUBLIC ENDPOINTS (no JWT required)
+			// ================================================================
+
+			// Get tiers - Public pricing page
+			if (url.pathname === '/api/tiers' && request.method === 'GET') {
+				console.log(`[PK Auth] ✅ Public - Platform: ${platformId}, Tiers list`);
+				const tiers = await getAllTiers(env, platformId, mode, publishableKey);
+				return new Response(JSON.stringify({ tiers }), {
+					status: 200,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+				});
+			}
+
+			// List products - Public product catalog
+			if (url.pathname === '/api/products' && request.method === 'GET') {
+				console.log(`[PK Auth] ✅ Public - Platform: ${platformId}, Products list`);
+				return await handleGetProducts(env, platformId, corsHeaders, mode, publishableKey);
+			}
+
+			// ================================================================
+			// PK + JWT ENDPOINTS (user must be authenticated)
+			// ================================================================
+
+			if (requiresEndUserJwt(url.pathname, request.method)) {
+				let userId: string;
+				let plan: PlanTier;
+				let publishableKeyFromToken: string | null | undefined;
+				let userEmail: string | null = null;
+
+				try {
+					const verified = await verifyEndUserToken(request, env);
+					userId = verified.userId;
+					plan = verified.plan;
+					publishableKeyFromToken = verified.publishableKeyFromToken;
+					userEmail = verified.email || null;
+				} catch (tokenError: any) {
+					return new Response(
+						JSON.stringify({
+							error: 'Invalid or missing end-user token',
+							message: tokenError?.message || 'Provide X-Clerk-Token with a valid JWT',
+						}),
+						{
+							status: 401,
+							headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+						}
+					);
+				}
+
+				// Security: ensure token's publishableKey matches the header PK
+				if (publishableKeyFromToken && publishableKeyFromToken !== publishableKey) {
+					return new Response(
+						JSON.stringify({
+							error: 'Publishable key mismatch',
+							message: 'End-user token does not match this project',
+						}),
+						{
+							status: 403,
+							headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+						}
+					);
+				}
+
+				console.log(`[PK Auth] ✅ JWT verified - Platform: ${platformId}, User: ${userId}, Plan: ${plan}`);
+
+				// Rate limiting (per user)
+				const rateCheck = await checkRateLimit(userId, env);
+				if (!rateCheck.allowed) {
+					return new Response(
+						JSON.stringify({
+							error: 'Rate limit exceeded',
+							message: `Maximum ${RATE_LIMIT_PER_MINUTE} requests per minute`,
+							retryAfter: 60,
+						}),
+						{
+							status: 429,
+							headers: {
+								...corsHeaders,
+								'Content-Type': 'application/json',
+								'Retry-After': '60',
+							},
+						}
+					);
+				}
+
+				// Process request
+				if (url.pathname === '/api/data' && request.method === 'POST') {
+					return await handleDataRequest(userId, platformId, plan, env, corsHeaders, mode, publishableKey, userEmail);
+				}
+
+				if (url.pathname === '/api/usage' && request.method === 'GET') {
+					return await handleUsageCheck(userId, platformId, plan, env, corsHeaders, mode, publishableKey);
+				}
+
+				if (url.pathname === '/api/create-checkout' && request.method === 'POST') {
+					const origin = request.headers.get('Origin') || '';
+					return await handleCreateCheckout(userId, platformId, publishableKey, clerkClient, env, corsHeaders, origin, request, mode);
+				}
+
+				if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
+					const origin = request.headers.get('Origin') || '';
+					return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin, mode);
+				}
+			}
+
+			// Should not reach here for PK routes
+			return new Response(JSON.stringify({ error: 'Not found' }), {
+				status: 404,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			});
+		}
+
+		// ====================================================================
+		// SECRET KEY AUTHENTICATION (Full Access)
+		// ====================================================================
 
 		if (!authHeader || !authHeader.startsWith('Bearer ')) {
 			return new Response(
 				JSON.stringify({
 					error: 'Missing authentication',
-					message: 'Authorization header required: Bearer {api_key}'
+					message: 'Provide Authorization: Bearer {secret_key} or X-Publishable-Key header'
 				}),
 				{
 					status: 401,
