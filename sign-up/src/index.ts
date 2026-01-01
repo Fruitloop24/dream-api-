@@ -249,6 +249,10 @@ function htmlResponse(html: string) {
 	return new Response(html, { headers: { 'Content-Type': 'text/html' } });
 }
 
+function escapeHtml(str: string): string {
+	return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // =============================================================================
 // HTML PAGES (minimal)
 // =============================================================================
@@ -274,8 +278,8 @@ function callbackPage(pk: string, redirect: string, clerkPk: string): string {
   <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
     data-clerk-publishable-key="${clerkPk}" async></script>
   <script>
-    const PK = '${pk}';
-    const REDIRECT = '${redirect}';
+    const PK = ${JSON.stringify(pk)};
+    const REDIRECT = ${JSON.stringify(redirect)};
 
     async function run() {
       // Wait for Clerk
@@ -324,7 +328,7 @@ function errorPage(msg: string): string {
 <body>
   <div class="box">
     <h1>Oops</h1>
-    <p>${msg}</p>
+    <p>${escapeHtml(msg)}</p>
     <p><a href="javascript:history.back()">Go back</a></p>
   </div>
 </body>

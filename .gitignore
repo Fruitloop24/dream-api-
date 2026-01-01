@@ -75,5 +75,6 @@ temp/
 # Other
 value.txt
 
-# Templates (excluded until needed)
-fs-template/
+# Templates (separate repos)
+dream-saas-basic/
+dream-store-basic/

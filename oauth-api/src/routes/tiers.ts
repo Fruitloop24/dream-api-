@@ -148,15 +148,18 @@ export async function handleGetTiers(
  *
  * Updatable properties:
  *   - displayName: Display name shown to customers
- *   - price: Price in dollars
+ *   - price: Price in dollars (creates new Stripe price if changed)
  *   - limit: Usage limit (number or 'unlimited')
  *   - features: JSON string of features
  *   - popular: Boolean flag for UI highlighting
  *   - inventory: Stock count (for store products)
  *   - soldOut: Boolean sold out flag
  *
- * Note: Changing price here does NOT update Stripe price.
- * For price changes, dev should create new tier and archive old one.
+ * PRICE CHANGES:
+ * Since Stripe prices are immutable, changing the price will:
+ *   1. Create a new Stripe price for the same product
+ *   2. Deactivate the old price
+ *   3. Update D1 with the new priceId
  */
 export async function handleUpdateTier(
   request: Request,
@@ -207,7 +210,104 @@ export async function handleUpdateTier(
     );
   }
 
-  // Build dynamic UPDATE query based on what fields were provided
+  // =========================================================================
+  // HANDLE PRICE CHANGE - Create new Stripe price if price is being updated
+  // =========================================================================
+  let newPriceId: string | null = null;
+
+  if (updates.price !== undefined) {
+    // First, get the current tier to check if price actually changed
+    let tierQuery = `
+      SELECT price, priceId, productId, projectType FROM tiers
+      WHERE platformId = ? AND name = ? AND (mode = ? OR mode IS NULL)
+    `;
+    const tierParams: any[] = [platformId, tierName, mode];
+
+    if (publishableKey) {
+      tierQuery += ' AND (publishableKey = ? OR publishableKey IS NULL)';
+      tierParams.push(publishableKey);
+    }
+
+    const currentTier = await env.DB.prepare(tierQuery)
+      .bind(...tierParams)
+      .first<{ price: number; priceId: string; productId: string; projectType: string }>();
+
+    if (!currentTier) {
+      return new Response(
+        JSON.stringify({ error: 'Tier not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Only create new Stripe price if price actually changed
+    if (currentTier.price !== updates.price) {
+      const stripeData = await getStripeCredentials(platformId, env);
+      if (!stripeData) {
+        return new Response(
+          JSON.stringify({ error: 'Stripe not connected - cannot update price' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Determine if this is a subscription or one-time price
+      const isSubscription = currentTier.projectType === 'saas';
+
+      // Create new Stripe price
+      const priceParams = new URLSearchParams({
+        product: currentTier.productId,
+        currency: 'usd',
+        unit_amount: String(Math.round(updates.price * 100)),
+      });
+
+      if (isSubscription) {
+        priceParams.set('recurring[interval]', 'month');
+      }
+
+      const priceRes = await fetch('https://api.stripe.com/v1/prices', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Stripe-Account': stripeData.stripeUserId,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: priceParams,
+      });
+
+      if (!priceRes.ok) {
+        const err = await priceRes.text();
+        return new Response(
+          JSON.stringify({ error: `Failed to create new Stripe price: ${err}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const newPrice = await priceRes.json() as { id: string };
+      newPriceId = newPrice.id;
+
+      console.log(`[Tiers] Created new Stripe price ${newPriceId} for tier ${tierName} (old: ${currentTier.priceId})`);
+
+      // Deactivate old price (best practice)
+      try {
+        await fetch(`https://api.stripe.com/v1/prices/${currentTier.priceId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${stripeData.accessToken}`,
+            'Stripe-Account': stripeData.stripeUserId,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({ active: 'false' }),
+        });
+        console.log(`[Tiers] Deactivated old price ${currentTier.priceId}`);
+      } catch (err) {
+        // Non-fatal - old price just stays active
+        console.warn(`[Tiers] Failed to deactivate old price: ${err}`);
+      }
+    }
+  }
+
+  // =========================================================================
+  // BUILD D1 UPDATE QUERY
+  // =========================================================================
   const setClauses: string[] = [];
   const values: any[] = [];
 
@@ -218,6 +318,11 @@ export async function handleUpdateTier(
   if (updates.price !== undefined) {
     setClauses.push('price = ?');
     values.push(updates.price);
+  }
+  // If we created a new Stripe price, update the priceId
+  if (newPriceId) {
+    setClauses.push('priceId = ?');
+    values.push(newPriceId);
   }
   if (updates.limit !== undefined) {
     setClauses.push('"limit" = ?');
@@ -260,10 +365,15 @@ export async function handleUpdateTier(
     `UPDATE tiers SET ${setClauses.join(', ')} WHERE ${whereClause}`
   ).bind(...values).run();
 
-  console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}`);
+  console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}${newPriceId ? ` (new priceId: ${newPriceId})` : ''}`);
 
   return new Response(
-    JSON.stringify({ success: true, tierName, updates }),
+    JSON.stringify({
+      success: true,
+      tierName,
+      updates,
+      ...(newPriceId && { newPriceId })
+    }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
