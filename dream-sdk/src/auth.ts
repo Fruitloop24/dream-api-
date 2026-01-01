@@ -51,6 +51,12 @@ export class AuthHelpers {
   async init(): Promise<void> {
     if (this.initialized) return;
     await this.clerk.load();
+
+    // Set up auto-refresh so tokens stay fresh before API calls
+    this.client.setTokenRefresher(async () => {
+      return await this.clerk.refreshToken();
+    });
+
     this.initialized = true;
   }
 

@@ -109,6 +109,8 @@ const PK_ACCESSIBLE_ENDPOINTS = [
 	// Public catalog (PK only, no JWT)
 	{ path: '/api/tiers', method: 'GET' },
 	{ path: '/api/products', method: 'GET' },
+	// Guest checkout for stores (PK only, no JWT)
+	{ path: '/api/cart/checkout', method: 'POST' },
 	// User operations (PK + JWT required)
 	{ path: '/api/data', method: 'POST' },
 	{ path: '/api/usage', method: 'GET' },
@@ -242,6 +244,13 @@ export default {
 			if (url.pathname === '/api/products' && request.method === 'GET') {
 				console.log(`[PK Auth] ✅ Public - Platform: ${platformId}, Products list`);
 				return await handleGetProducts(env, platformId, corsHeaders, mode, publishableKey);
+			}
+
+			// Cart checkout - Guest checkout (no account needed, email in body)
+			if (url.pathname === '/api/cart/checkout' && request.method === 'POST') {
+				const origin = request.headers.get('Origin') || '';
+				console.log(`[PK Auth] ✅ Public - Platform: ${platformId}, Cart checkout`);
+				return await handleCartCheckout(platformId, publishableKey, env, corsHeaders, origin, request, mode, publishableKey);
 			}
 
 			// ================================================================

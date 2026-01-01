@@ -121,6 +121,11 @@ export class DreamClient {
   ): Promise<T> {
     const { body, requiresUserToken = false } = options;
 
+    // Auto-refresh token if we have a refresher and need user auth
+    if (requiresUserToken || this.userToken) {
+      await this.ensureFreshToken();
+    }
+
     // Build headers based on auth mode
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

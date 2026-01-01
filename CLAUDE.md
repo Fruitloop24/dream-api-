@@ -23,21 +23,27 @@ npm install @dream-api/sdk
 ```typescript
 import { DreamAPI } from '@dream-api/sdk';
 
+// Frontend (PK only - safe for browsers)
+const api = new DreamAPI({
+  publishableKey: 'pk_test_xxx',
+});
+await api.products.list();           // Works with PK only
+await api.products.listTiers();      // Works with PK only
+await api.products.cartCheckout({}); // Guest checkout works
+
+// After user signs in
+await api.auth.init();               // Auto-sets JWT
+await api.usage.track();             // Now has JWT
+await api.billing.createCheckout({ tier: 'pro' });
+
+// Backend (SK - full admin access)
 const api = new DreamAPI({
   secretKey: 'sk_test_xxx',
   publishableKey: 'pk_test_xxx',
 });
-
-// Backend (SK only)
 await api.customers.create({ email: 'user@example.com' });
 await api.customers.delete(userId);
 await api.dashboard.get();
-
-// Frontend (needs user token)
-api.setUserToken(clerkJWT);
-await api.usage.track();
-await api.usage.check();
-await api.billing.createCheckout({ tier: 'pro' });
 
 // Auth URLs
 api.auth.getSignUpUrl({ redirect: '/dashboard' });
@@ -104,27 +110,32 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 
 | Endpoint | Auth | Notes |
 |----------|------|-------|
+| `GET /api/products` | PK | Public product catalog |
+| `GET /api/tiers` | PK | Public pricing tiers |
+| `POST /api/cart/checkout` | PK | Guest checkout (stores) |
+| `POST /api/data` | PK + JWT | Track usage |
+| `GET /api/usage` | PK + JWT | Check usage |
+| `POST /api/create-checkout` | PK + JWT | Subscription upgrade |
+| `POST /api/customer-portal` | PK + JWT | Billing portal |
 | `POST /api/customers` | SK | Create customer |
 | `GET /api/customers/:id` | SK | Get customer |
 | `PATCH /api/customers/:id` | SK | Update customer plan |
 | `DELETE /api/customers/:id` | SK | Delete customer + cleanup D1 |
-| `GET /api/products` | SK | Product catalog |
-| `GET /api/tiers` | SK | List subscription tiers |
-| `POST /api/cart/checkout` | SK | Guest checkout (store) |
 | `GET /api/dashboard` | SK | Dev metrics |
-| `POST /api/data` | SK + JWT | Track usage |
-| `GET /api/usage` | SK + JWT | Check usage |
-| `POST /api/create-checkout` | SK + JWT | Subscription upgrade |
-| `POST /api/customer-portal` | SK + JWT | Billing portal |
 
-SK = `Authorization: Bearer sk_xxx`
+PK = `X-Publishable-Key: pk_xxx` (safe for frontend)
+SK = `Authorization: Bearer sk_xxx` (backend only)
 JWT = `X-Clerk-Token: eyJ...` (end-user token with publishableKey + plan in metadata)
 
 ## Security Model
 
+- **PK/SK split** - Same model as Stripe (publishable key public, secret key backend-only)
+- **JWT verification** - All user operations verify Clerk JWT server-side
+- **Plan in metadata** - Cannot be spoofed (set by webhooks, not user input)
+- **Token auto-refresh** - SDK refreshes JWT before expiry
+- **Multi-tenant isolation** - publishableKey in JWT must match header
 - **OAuth `/authorize`** requires Clerk JWT - userId extracted from verified token
 - **Sign-up `/oauth/complete`** requires session token in Authorization header
-- **API endpoints** use SK (secret key) + optional JWT for user context
 - **Stripe webhooks** verified via signature when `STRIPE_WEBHOOK_SECRET` set
 - **D1 queries** parameterized via `.bind()` (SQL injection protected)
 
