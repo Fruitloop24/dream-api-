@@ -72,6 +72,8 @@ api-multi/
 | POST /api/data | PK+JWT | Track usage |
 | GET /api/usage | PK+JWT | Get usage stats |
 | POST /api/create-checkout | PK+JWT | Subscription checkout |
+| POST /api/customer-portal | PK+JWT | Billing portal |
+| DELETE /api/me | PK+JWT | Self-delete account |
 | GET /api/dashboard | SK | Dev metrics |
 | POST /api/customers | SK | Create customer |
 
@@ -211,7 +213,7 @@ await api.customers.create({ email: '...' });
 Both templates live in **separate GitHub repos** but are developed in this monorepo under `.gitignore`.
 
 ### dream-store-basic
-**GitHub:** `github.com/[user]/dream-store-basic`
+**GitHub:** `github.com/Fruitloop24/dream-store-basic`
 
 E-commerce store with cart and guest checkout.
 
@@ -246,7 +248,7 @@ dream-store-basic/
 ---
 
 ### dream-saas-basic
-**GitHub:** `github.com/[user]/dream-saas-basic`
+**GitHub:** `github.com/Fruitloop24/dream-saas-basic`
 
 SaaS app with auth, billing, and usage tracking.
 
