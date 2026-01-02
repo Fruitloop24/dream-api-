@@ -35,7 +35,6 @@ await api.products.cartCheckout({}); // Guest checkout works
 await api.auth.init();               // Auto-sets JWT
 await api.usage.track();             // Now has JWT
 await api.billing.createCheckout({ tier: 'pro' });
-await api.account.delete();          // Self-service account deletion
 
 // Backend (SK - full admin access)
 const api = new DreamAPI({
@@ -118,7 +117,6 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 | `GET /api/usage` | PK + JWT | Check usage |
 | `POST /api/create-checkout` | PK + JWT | Subscription upgrade |
 | `POST /api/customer-portal` | PK + JWT | Billing portal |
-| `DELETE /api/me` | PK + JWT | Self-delete account |
 | `POST /api/customers` | SK | Create customer |
 | `GET /api/customers/:id` | SK | Get customer |
 | `PATCH /api/customers/:id` | SK | Update customer plan |

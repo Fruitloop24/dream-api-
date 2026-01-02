@@ -73,7 +73,6 @@ api-multi/
 | GET /api/usage | PK+JWT | Get usage stats |
 | POST /api/create-checkout | PK+JWT | Subscription checkout |
 | POST /api/customer-portal | PK+JWT | Billing portal |
-| DELETE /api/me | PK+JWT | Self-delete account |
 | GET /api/dashboard | SK | Dev metrics |
 | POST /api/customers | SK | Create customer |
 

@@ -22,106 +22,10 @@
  * ============================================================================
  */
 
-import { ClerkClient, createClerkClient } from '@clerk/backend';
+import { ClerkClient } from '@clerk/backend';
 import { Env } from '../types';
 import { upsertEndUser, upsertUsageSnapshot } from '../services/d1';
 import { getCurrentPeriod } from '../services/kv';
-
-/**
- * Handle DELETE /api/me - Self-service account deletion
- *
- * Allows end-users to delete their own account.
- * Works with PK + JWT auth (no secret key required).
- */
-export async function handleDeleteSelf(
-	userId: string,
-	platformId: string,
-	publishableKey: string,
-	env: Env,
-	corsHeaders: Record<string, string>
-): Promise<Response> {
-	try {
-		const clerkClient = createClerkClient({
-			secretKey: env.CLERK_SECRET_KEY,
-			publishableKey: env.CLERK_PUBLISHABLE_KEY,
-		});
-
-		// Verify user exists and belongs to this project
-		const user = await clerkClient.users.getUser(userId);
-
-		if (user.publicMetadata?.publishableKey !== publishableKey) {
-			return new Response(
-				JSON.stringify({
-					error: 'Not found',
-					message: 'Account not found',
-				}),
-				{
-					status: 404,
-					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-				}
-			);
-		}
-
-		const email = user.emailAddresses[0]?.emailAddress || '';
-		console.log(`[Customers] Self-delete: ${userId} (${email})`);
-
-		// Delete from Clerk
-		await clerkClient.users.deleteUser(userId);
-		console.log(`[Customers] Deleted user ${userId} from Clerk`);
-
-		// Clean up D1 tables
-		await env.DB.prepare(
-			'DELETE FROM end_users WHERE clerkUserId = ? AND publishableKey = ?'
-		).bind(userId, publishableKey).run();
-
-		await env.DB.prepare(
-			'DELETE FROM usage_counts WHERE userId = ? AND publishableKey = ?'
-		).bind(userId, publishableKey).run();
-
-		await env.DB.prepare(
-			'DELETE FROM subscriptions WHERE userId = ? AND publishableKey = ?'
-		).bind(userId, publishableKey).run();
-
-		console.log(`[Customers] Cleaned up D1 records for ${userId}`);
-
-		return new Response(
-			JSON.stringify({
-				success: true,
-				message: 'Account deleted successfully',
-			}),
-			{
-				status: 200,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-			}
-		);
-	} catch (error: any) {
-		console.error('[Customers] Error in self-delete:', error);
-
-		if (error.status === 404 || error.message?.includes('not found')) {
-			return new Response(
-				JSON.stringify({
-					error: 'Account not found',
-					message: 'Account may have already been deleted',
-				}),
-				{
-					status: 404,
-					headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-				}
-			);
-		}
-
-		return new Response(
-			JSON.stringify({
-				error: 'Failed to delete account',
-				message: error.message || 'Unknown error',
-			}),
-			{
-				status: 500,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-			}
-		);
-	}
-}
 
 interface CreateCustomerBody {
 	email: string;
