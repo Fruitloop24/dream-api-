@@ -1,236 +1,201 @@
-# Dream API - Ship Your SaaS in Minutes, Not Months
+# Dream API
 
-**Clone. /setup. Ship.**
-
-The AI-native backend for the vibe coder generation. Auth, billing, usage tracking - done before your coffee gets cold.
-
----
-
-## The New Way to Build
-
-```bash
-# 1. Clone template
-git clone dream-saas-basic
-
-# 2. Open in Claude Code / Cursor / Windsurf
-
-# 3. Run setup
-/setup
-
-# 4. Deploy
-npm run build && npx wrangler pages deploy dist
-```
-
-**That's it.** Auth works. Billing works. Usage tracking works. PWA-ready. Go build your thing.
-
----
-
-## Why Dream API?
-
-### AI-First Development
-
-Built for the way you actually work:
-- **`/setup` command** - AI asks what you're building, configures everything
-- **Works with Claude Code, Cursor, Windsurf** - your AI assistant knows the SDK
-- **One config file** - `src/config.ts` has all branding, AI updates it for you
-- **No docs rabbit holes** - AI has context, just ask
-
-### Zero Infrastructure
-
-You don't deploy workers. You don't manage databases. You don't configure auth.
-
-| You Do | We Handle |
-|--------|-----------|
-| Clone template | Auth (Clerk) |
-| Run /setup | Billing (Stripe) |
-| Build your feature | Usage tracking |
-| Deploy static files | Multi-tenancy |
-| | Webhooks |
-| | JWT verification |
-| | Rate limiting |
-
-### Stupid Fast
-
-- **Vite** - Sub-second hot reload
-- **Cloudflare Edge** - <50ms API latency worldwide
-- **Static hosting** - Free/cheap deploys (Cloudflare Pages, Vercel, Netlify)
-- **No server costs** - It's just HTML/JS/CSS + our API
-
-### PWA-Ready
-
-Your SaaS is an installable app:
-- Works on iOS, Android, Desktop
-- No App Store approval
-- No Play Store fees
-- Just share a link or QR code
-- AI adds PWA support with `/pwa` command
-
----
-
-## Security That Actually Works
-
-**Same model as Stripe** - battle-tested, understood by every dev:
-
-| Layer | Protection |
-|-------|------------|
-| Keys | PK (public) / SK (secret) separation |
-| Identity | JWT verified on EVERY request |
-| Plans | Stored in JWT, set by webhooks only |
-| Data | Multi-tenant isolation by publishableKey |
-| SQL | Parameterized queries, no injection |
-| Webhooks | Stripe signatures verified |
-| Tokens | Auto-refresh, no expiry errors |
-
-**Users can't spoof their plan.** The JWT is signed by Clerk, verified server-side. They'd have to compromise Clerk itself.
-
----
+**Auth. Billing. Usage Tracking. One API.**
 
 ## What You Get
 
-### Free Templates
+One SDK. One publishable key. Done.
 
-| Template | Use Case |
-|----------|----------|
-| `dream-saas-basic` | AI wrappers, usage-metered SaaS |
-| `dream-store-basic` | E-commerce, guest checkout |
-| More coming | Gated content, courses, membership |
-
-### SDK That Just Works
-
-```typescript
-// Frontend - safe to expose
-const api = new DreamAPI({ publishableKey: 'pk_xxx' });
-
-// Auth
-await api.auth.init();
-const user = api.auth.getUser(); // { email, plan, ... }
-
-// Usage
-await api.usage.track();  // Increment counter
-await api.usage.check();  // Get remaining
-
-// Billing
-await api.billing.createCheckout({ tier: 'pro' });
-await api.billing.openPortal({ returnUrl: '/dashboard' });
-```
-
-### Developer Dashboard
-
-- Real-time metrics (MRR, usage, customers)
-- Tier/product management
-- Customer list with plan status
-- Webhook monitoring
-- Test/Live mode toggle
-- One-click Stripe Connect
-
----
-
-## The Stack
-
-All best-in-class, all handled for you:
-
-| Component | Technology | Why |
-|-----------|------------|-----|
-| Auth | Clerk | Enterprise-grade, 20+ OAuth providers |
-| Payments | Stripe Connect | PCI compliant, 135+ countries |
-| API | Cloudflare Workers | Edge compute, global |
-| Database | Cloudflare D1 | SQLite at edge, auto-replicated |
-| Cache | Cloudflare KV | Sub-ms reads, rate limiting |
-| Storage | Cloudflare R2 | Zero egress fees |
-| Frontend | React + Vite | Fast builds, cheap hosting |
-
----
-
-## Who This Is For
-
-**Vibe coders** - You prompt, AI builds, you ship
-
-**Indie hackers** - Launch fast, validate fast, pivot fast
-
-**AI wrapper builders** - Usage tracking built-in for token metering
-
-**Course creators** - Gated content with subscription billing
-
-**Side project warriors** - Free hosting, pay nothing until you make money
-
----
-
-## What Makes This Different
-
-| Feature | Typical SaaS Kit | Dream API |
-|---------|------------------|-----------|
-| Setup | Read docs, configure 12 files | `/setup` |
-| Auth | DIY or complex integration | Works out of box |
-| Billing | Wire up Stripe yourself | Works out of box |
-| Usage tracking | Build it yourself | `api.usage.track()` |
-| Multi-tenant | Figure it out | Built-in |
-| AI-assisted | None | Full context in CLAUDE.md |
-| Hosting cost | $20+/mo (servers) | $0 (static) |
-| PWA | Not included | One command |
-
----
-
-## The Numbers
-
-| Metric | Value |
-|--------|-------|
-| API Latency | <50ms (edge) |
-| Setup Time | ~2 minutes |
-| Lines of config | 1 file |
-| Hosting cost | $0 (static sites) |
-| Auth providers | 20+ |
-| Payment countries | 135+ |
-
----
-
-## Get Started
-
-**Option 1: Template (Recommended)**
-```bash
-git clone https://github.com/dream-api/dream-saas-basic
-cd dream-saas-basic
-# Open in Claude Code / Cursor / Windsurf
-# Run /setup
-```
-
-**Option 2: SDK Only**
 ```bash
 npm install @dream-api/sdk
 ```
 
 ```typescript
-import { DreamAPI } from '@dream-api/sdk';
+const api = new DreamAPI({ publishableKey: 'pk_xxx' });
+```
 
-const api = new DreamAPI({
-  publishableKey: 'pk_xxx',
-});
+That's your entire backend for auth, billing, and usage tracking.
+
+---
+
+## What It Does
+
+### Authentication
+- Users sign up and sign in
+- JWT-based sessions
+- Google, email, 20+ providers
+- Account management portal included
+
+### Billing
+- Subscription tiers with usage limits
+- One-time purchases
+- Checkout sessions
+- Customer billing portal
+- You keep your money (Stripe Connect - funds go direct to you)
+
+### Usage Tracking
+- Track any action: API calls, tokens, generations, whatever
+- Enforce limits by plan
+- Users see their usage
+- Automatic reset each billing period
+
+### E-Commerce
+- Products with images and inventory
+- Guest checkout (no account needed)
+- Order tracking
+- Stock management
+
+---
+
+## What You Don't Do
+
+| Normally You'd Build | With Dream API |
+|---------------------|----------------|
+| Auth system | ✓ Handled |
+| Stripe integration | ✓ Handled |
+| Webhook handlers | ✓ Handled |
+| Usage database | ✓ Handled |
+| Plan enforcement | ✓ Handled |
+| Billing portal | ✓ Handled |
+| Customer management | ✓ Handled |
+| Multi-tenant isolation | ✓ Handled |
+
+---
+
+## The Dashboard
+
+Manage everything from one place:
+
+**Projects**
+- Create SaaS or Store projects
+- Get your API keys instantly
+- Switch between Test and Live mode
+
+**Tiers & Pricing**
+- Set prices, limits, features
+- Changes sync to Stripe automatically
+- Mark tiers as popular
+
+**Products** (Store mode)
+- Add products with images
+- Set prices, manage inventory
+- Track stock levels
+
+**Customers**
+- See all your users
+- View their plan, usage, status
+- Know who's about to hit limits
+
+**Metrics**
+- MRR, active subscriptions
+- Usage this period
+- Revenue tracking
+
+**Webhooks**
+- See every Stripe event
+- Know when things happen
+- Debug without guessing
+
+---
+
+## How It Works
+
+1. **Sign up** → Connect your Stripe account (OAuth, takes 30 seconds)
+2. **Create project** → Get your publishable key
+3. **Set up tiers** → Prices and limits in the dashboard
+4. **Install SDK** → `npm install @dream-api/sdk`
+5. **Add one line** → `new DreamAPI({ publishableKey: 'pk_xxx' })`
+6. **Build your thing** → We handle the rest
+
+No webhook endpoints to build. No Stripe SDK to learn. No auth system to maintain.
+
+---
+
+## Test Mode → Live Mode
+
+Start in test mode. Everything works with test data.
+
+When ready:
+1. Click "Go Live" in dashboard
+2. Get your live keys
+3. Deploy
+
+Same code. Same API. Real money.
+
+---
+
+## SDK Methods
+
+```typescript
+// Auth
+api.auth.getSignUpUrl()      // New user signup
+api.auth.getSignInUrl()      // Returning user
+api.auth.getCustomerPortalUrl()  // Account settings
+
+// Usage (SaaS)
+api.usage.track()            // Count an action
+api.usage.check()            // Get usage + remaining
+
+// Billing
+api.billing.createCheckout({ tier: 'pro' })  // Upgrade flow
+api.billing.openPortal()     // Manage subscription
+
+// Products (Store)
+api.products.list()          // Get products
+api.products.listTiers()     // Get subscription tiers
+api.products.cartCheckout()  // Guest purchase
 ```
 
 ---
 
-## Security Checklist
+## Security
 
-- [x] PK/SK key separation (Stripe model)
-- [x] JWT verification on every request
-- [x] Server-side plan validation (unspoofable)
-- [x] Parameterized SQL (no injection)
-- [x] Stripe webhook signatures
-- [x] Multi-tenant data isolation
-- [x] Automatic token refresh
-- [x] Rate limiting per user
-- [x] HTTPS everywhere
-- [x] No secrets in frontend
+- **Your keys stay safe** - Publishable key is designed for frontend (like Stripe)
+- **Plans can't be spoofed** - Stored in signed JWT, set by webhooks only
+- **Data is isolated** - Each project's data is separated by API key
+- **Payments are secure** - Stripe handles all card data (PCI compliant)
 
 ---
 
-## Built For The AI Era
+## Pricing
 
-The old way: Read docs → Configure → Debug → Read more docs → Finally works
+You pay Stripe's normal fees. That's it.
 
-The new way: Clone → /setup → Ship
-
-Your AI assistant has full context. The SDK is published. The templates are ready. Stop building infrastructure. Start building your product.
+We take a small percentage of transactions processed through the API. You make money, we make money.
 
 ---
 
-**Dream API** - Clone. /setup. Ship.
+## Free Templates (Optional)
+
+Want a head start? We have React templates:
+
+- **dream-saas-basic** - Usage-metered SaaS starter
+- **dream-store-basic** - E-commerce with guest checkout
+
+Templates have AI-assisted setup. Clone, configure with your AI editor, deploy.
+
+But you don't need them. The SDK works with any frontend.
+
+---
+
+## Who It's For
+
+- **SaaS builders** - Usage tracking and subscription billing
+- **AI wrapper makers** - Meter tokens, API calls, generations
+- **Course creators** - Gated content with subscriptions
+- **E-commerce** - Products and guest checkout
+- **Side projects** - Ship fast, don't build infrastructure
+
+---
+
+## Get Started
+
+```bash
+npm install @dream-api/sdk
+```
+
+Sign up at [dashboard URL] → Create project → Get your key → Build.
+
+---
+
+**Dream API** - One key. Full backend.
