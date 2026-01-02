@@ -71,7 +71,7 @@ export interface Tier {
   limit: number;
   priceId: string;
   productId: string;
-  features?: string;
+  features?: string[];
   popular?: boolean;
 }
 

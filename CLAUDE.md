@@ -35,6 +35,7 @@ await api.products.cartCheckout({}); // Guest checkout works
 await api.auth.init();               // Auto-sets JWT
 await api.usage.track();             // Now has JWT
 await api.billing.createCheckout({ tier: 'pro' });
+await api.account.delete();          // Self-service account deletion
 
 // Backend (SK - full admin access)
 const api = new DreamAPI({
@@ -117,6 +118,7 @@ user:{clerkUserId}:secretKey:test → sk_test_xxx
 | `GET /api/usage` | PK + JWT | Check usage |
 | `POST /api/create-checkout` | PK + JWT | Subscription upgrade |
 | `POST /api/customer-portal` | PK + JWT | Billing portal |
+| `DELETE /api/me` | PK + JWT | Self-delete account |
 | `POST /api/customers` | SK | Create customer |
 | `GET /api/customers/:id` | SK | Get customer |
 | `PATCH /api/customers/:id` | SK | Update customer plan |
@@ -198,3 +200,12 @@ cd sign-up && npx wrangler deploy
 - Always filter queries by `publishableKey` for test/live isolation
 - User metadata: `{ publishableKey, plan }` - set by sign-up worker
 - Plan in JWT cannot be spoofed - set by system during subscription
+
+## Templates
+
+| Template | Repo | Purpose |
+|----------|------|---------|
+| `dream-saas-basic` | github.com/Fruitloop24/dream-saas-basic | SaaS starter (auth, billing, usage) |
+| `dream-store-basic` | github.com/Fruitloop24/dream-store-basic | Store starter (products, cart, checkout) |
+
+Each has `/setup` slash command for AI-assisted configuration. Just set `VITE_DREAM_PUBLISHABLE_KEY` and customize branding.

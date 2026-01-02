@@ -259,6 +259,8 @@ export async function getModeForPublishableKey(
 /**
  * Insert or update an end user
  * Called when a user signs up through the developer's API
+ *
+ * If email is null, we preserve the existing email (don't overwrite with null)
  */
 export async function upsertEndUser(
   env: Env,
@@ -268,13 +270,49 @@ export async function upsertEndUser(
   email?: string | null,
   status: string = 'active'
 ) {
-  await env.DB.prepare(`
-    INSERT OR REPLACE INTO end_users (
-      platformId, publishableKey, clerkUserId, email, status, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `)
-    .bind(platformId, publishableKey, clerkUserId, email ?? null, status)
-    .run();
+  if (email) {
+    // Have email - do full upsert
+    await env.DB.prepare(`
+      INSERT INTO end_users (platformId, publishableKey, clerkUserId, email, status, updatedAt)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(platformId, publishableKey, clerkUserId) DO UPDATE SET
+        email = excluded.email,
+        status = excluded.status,
+        updatedAt = CURRENT_TIMESTAMP
+    `)
+      .bind(platformId, publishableKey, clerkUserId, email, status)
+      .run();
+  } else {
+    // No email - insert if new, update status only if exists (preserve email)
+    await env.DB.prepare(`
+      INSERT INTO end_users (platformId, publishableKey, clerkUserId, email, status, updatedAt)
+      VALUES (?, ?, ?, NULL, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(platformId, publishableKey, clerkUserId) DO UPDATE SET
+        status = excluded.status,
+        updatedAt = CURRENT_TIMESTAMP
+    `)
+      .bind(platformId, publishableKey, clerkUserId, status)
+      .run();
+  }
+}
+
+/**
+ * Fetch email from Clerk API for a user
+ */
+export async function fetchEmailFromClerk(
+  clerkSecretKey: string,
+  userId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.clerk.com/v1/users/${userId}`, {
+      headers: { 'Authorization': `Bearer ${clerkSecretKey}` },
+    });
+    if (!res.ok) return null;
+    const user = await res.json() as any;
+    return user.email_addresses?.[0]?.email_address || null;
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================

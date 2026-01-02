@@ -22,7 +22,7 @@
 import { Env, PlanTier } from '../types';
 import { getTierConfig } from '../config/configLoader';
 import { getCurrentPeriod } from '../services/kv';
-import { ensureUsageSchema, upsertEndUser } from '../services/d1';
+import { ensureUsageSchema, upsertEndUser, fetchEmailFromClerk } from '../services/d1';
 
 /**
  * Handle /api/data - Process request and track usage
@@ -42,7 +42,21 @@ export async function handleDataRequest(
 	// Register user in end_users table (if not already there)
 	// This ensures users who sign in via OAuth show up in dashboard
 	if (publishableKey) {
-		await upsertEndUser(env, platformId, publishableKey, userId, userEmail, 'active');
+		let email = userEmail;
+
+		// If no email from JWT, check if user exists in D1 with email
+		if (!email) {
+			const existing = await env.DB.prepare(
+				'SELECT email FROM end_users WHERE platformId = ? AND publishableKey = ? AND clerkUserId = ?'
+			).bind(platformId, publishableKey, userId).first<{ email: string | null }>();
+
+			// If no email in D1 either, fetch from Clerk
+			if (!existing?.email) {
+				email = await fetchEmailFromClerk(env.CLERK_SECRET_KEY, userId);
+			}
+		}
+
+		await upsertEndUser(env, platformId, publishableKey, userId, email, 'active');
 	}
 
 	// Check D1 for actual subscription plan (more authoritative than JWT which may be stale)

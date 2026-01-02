@@ -29,7 +29,7 @@ import { verifyApiKey, verifyPublishableKey } from './middleware/apiKey';
 // Routes
 import { handleDataRequest, handleUsageCheck } from './routes/usage';
 import { handleCreateCheckout, handleCustomerPortal } from './routes/checkout';
-import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer, handleDeleteCustomer } from './routes/customers';
+import { handleCreateCustomer, handleGetCustomer, handleUpdateCustomer, handleDeleteCustomer, handleDeleteSelf } from './routes/customers';
 import { handleDashboard, handleDashboardTotals } from './routes/dashboard';
 import { handleCartCheckout, handleGetProducts } from './routes/products';
 import { handleAssetGet, handleAssetUpload } from './routes/assets';
@@ -93,6 +93,7 @@ const ENDPOINTS_REQUIRING_USER_JWT = [
 	{ path: '/api/usage', method: 'GET' },        // Usage check - must know real user
 	{ path: '/api/create-checkout', method: 'POST' }, // Subscription upgrade - must know who's upgrading
 	{ path: '/api/customer-portal', method: 'POST' }, // Billing portal - must know who's managing
+	{ path: '/api/me', method: 'DELETE' },        // Self-delete account - must know who's deleting
 ];
 
 function requiresEndUserJwt(pathname: string, method: string): boolean {
@@ -116,6 +117,7 @@ const PK_ACCESSIBLE_ENDPOINTS = [
 	{ path: '/api/usage', method: 'GET' },
 	{ path: '/api/create-checkout', method: 'POST' },
 	{ path: '/api/customer-portal', method: 'POST' },
+	{ path: '/api/me', method: 'DELETE' },
 ];
 
 function isPkAccessible(pathname: string, method: string): boolean {
@@ -335,6 +337,11 @@ export default {
 				if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
 					const origin = request.headers.get('Origin') || '';
 					return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin, mode);
+				}
+
+				// Self-delete account
+				if (url.pathname === '/api/me' && request.method === 'DELETE') {
+					return await handleDeleteSelf(userId, platformId, publishableKey, env, corsHeaders);
 				}
 			}
 
@@ -559,6 +566,11 @@ export default {
 				if (url.pathname === '/api/customer-portal' && request.method === 'POST') {
 					const origin = request.headers.get('Origin') || '';
 					return await handleCustomerPortal(userId, clerkClient, env, corsHeaders, origin, mode);
+				}
+
+				// Self-delete account
+				if (url.pathname === '/api/me' && request.method === 'DELETE') {
+					return await handleDeleteSelf(userId, platformId, publishableKey, env, corsHeaders);
 				}
 			}
 

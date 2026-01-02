@@ -68,6 +68,9 @@ export class DreamAPI {
   /** Dashboard metrics */
   public readonly dashboard: DashboardAPI;
 
+  /** Account management (self-service) */
+  public readonly account: AccountAPI;
+
   constructor(config: DreamAPIConfig) {
     this.client = new DreamClient(config);
 
@@ -78,6 +81,7 @@ export class DreamAPI {
     this.billing = new BillingAPI(this.client);
     this.products = new ProductAPI(this.client);
     this.dashboard = new DashboardAPI(this.client);
+    this.account = new AccountAPI(this.client);
   }
 
   /**
@@ -319,6 +323,28 @@ class DashboardAPI {
     totalMRR: number;
   }> {
     return this.client.get('/api/dashboard/totals');
+  }
+}
+
+// ============================================================================
+// Account API (Self-service)
+// ============================================================================
+
+class AccountAPI {
+  constructor(private client: DreamClient) {}
+
+  /**
+   * Delete the current user's account.
+   * This permanently removes all user data.
+   *
+   * @example
+   * ```typescript
+   * await api.account.delete();
+   * // User is now signed out and deleted
+   * ```
+   */
+  async delete(): Promise<{ success: boolean; message: string }> {
+    return this.client.delete('/api/me', true);
   }
 }
 
