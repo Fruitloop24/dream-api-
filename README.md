@@ -1,8 +1,40 @@
-# dream-api
+# Dream API
 
-API-as-a-Service platform built on Cloudflare Workers. Provides auth, billing, usage tracking via API keys.
+**API-as-a-Service for SaaS and E-commerce.** Auth, billing, usage tracking via API keys.
 
-## Quick Start (For Devs Using This API)
+## What It Is
+
+Dream API is the backend. You build your frontend, we handle:
+- **Authentication** (Clerk)
+- **Billing** (Stripe Connect)
+- **Usage tracking** (metered billing)
+- **Multi-tenancy** (data isolation by API key)
+
+**Business model:** You use our API. Templates are free tools to get started faster.
+
+## Two Modes
+
+### SaaS Mode
+Usage-metered subscriptions. Track API calls, tokens, or any billable action.
+
+```typescript
+await api.usage.track();  // Count usage
+await api.usage.check();  // Get remaining
+await api.billing.createCheckout({ tier: 'pro' });  // Upgrade
+```
+
+### Store Mode
+E-commerce with products, inventory, guest checkout.
+
+```typescript
+await api.products.list();  // Get products
+await api.products.cartCheckout({  // Guest checkout
+  items: [{ priceId: 'price_xxx', quantity: 1 }],
+  customerEmail: 'buyer@email.com',
+});
+```
+
+## Quick Start
 
 ```bash
 npm install @dream-api/sdk
@@ -11,131 +43,126 @@ npm install @dream-api/sdk
 ```typescript
 import { DreamAPI } from '@dream-api/sdk';
 
+// Frontend (publishable key only)
 const api = new DreamAPI({
-  secretKey: process.env.DREAM_API_SECRET_KEY,
-  publishableKey: process.env.DREAM_API_PUBLISHABLE_KEY,
+  publishableKey: 'pk_test_xxx',
 });
 
-// Track usage
-api.setUserToken(clerkJWT);
-await api.usage.track();
-
-// Check limits
-const usage = await api.usage.check();
-if (usage.remaining <= 0) {
-  const { url } = await api.billing.createCheckout({ tier: 'pro' });
-  window.location.href = url;
-}
+// Backend (both keys)
+const api = new DreamAPI({
+  publishableKey: 'pk_test_xxx',
+  secretKey: 'sk_test_xxx',
+});
 ```
 
-See `dream-sdk/README.md` for full SDK documentation.
+## Dashboard
+
+Manage everything from the dashboard:
+- **Projects** - Create SaaS or Store projects, get API keys
+- **Tiers** - Set prices, usage limits, features (synced to Stripe)
+- **Products** - Add products with images, inventory, prices
+- **Customers** - View users, plans, usage, status
+- **Metrics** - MRR, active subs, usage this period
+- **Webhooks** - Monitor Stripe events
+- **Keys** - Rotate secret key without breaking frontend
+
+## Templates
+
+Free React templates with AI-assisted setup:
+
+| Template | Type | Features |
+|----------|------|----------|
+| `dream-saas-basic` | SaaS | Auth, usage tracking, billing, dashboard |
+| `dream-store-basic` | Store | Products, cart, guest checkout |
+
+Both have `/setup` command for Claude Code, Cursor, or Windsurf.
+
+```bash
+git clone https://github.com/dream-api/dream-saas-basic
+cd dream-saas-basic
+# Open in AI editor, run /setup
+```
+
+## Infrastructure
+
+Built on Cloudflare Workers:
+
+| Feature | How |
+|---------|-----|
+| Edge latency | <50ms worldwide |
+| DDoS protection | Cloudflare automatic |
+| Database | D1 (SQLite at edge) |
+| Cache | KV (sub-ms reads) |
+| Storage | R2 (product images) |
+| Rate limiting | Per-user, KV-based |
+
+## Security
+
+| Layer | Protection |
+|-------|------------|
+| Keys | PK (public) / SK (secret) separation |
+| Identity | JWT verified every request |
+| Plans | Stored in JWT, set by webhooks only |
+| Data | Isolated by publishableKey |
+| SQL | Parameterized queries |
+| Webhooks | Stripe signatures verified |
 
 ## Project Structure
 
 ```
 dream-api/
-├── dream-sdk/         # Official TypeScript SDK (@dream-api/sdk)
-├── frontend/          # React dashboard for devs
-├── front-auth-api/    # Dev authentication, credentials
-├── oauth-api/         # Stripe Connect OAuth, products/tiers
-├── api-multi/         # Main API - usage, checkouts, webhooks
+├── dream-sdk/         # @dream-api/sdk (npm published)
+├── frontend/          # Developer dashboard (React)
+├── api-multi/         # Main API worker
+├── oauth-api/         # Stripe Connect OAuth
+├── front-auth-api/    # Dev authentication
 ├── sign-up/           # End-user signup worker
-└── test-app/          # Local testing client
+├── dream-saas-basic/  # SaaS template
+└── dream-store-basic/ # Store template
 ```
 
-## What It Does
+## Documentation
 
-1. **Dev signs up** → Gets platformId, connects Stripe
-2. **Creates project** → Gets pk/sk keys (test + live)
-3. **Configures tiers** → Sets limits, prices in Stripe
-4. **End-users sign up** → Via sign-up worker, metadata set automatically
-5. **Dev's app calls API** → Usage tracked, limits enforced
-6. **Users upgrade** → Checkout via Stripe, plan updated
+| Doc | Purpose |
+|-----|---------|
+| `docs/SDK-GUIDE.md` | SDK methods and usage |
+| `docs/API-REFERENCE.md` | Endpoints, params, responses |
+| `docs/ARCHITECTURE.md` | Technical deep dive |
+| `docs/HYPE.md` | Marketing pitch |
 
-## Current State (Dec 2025)
+## Current State
 
-### Working
+**Working:**
 - SaaS flow: signup → usage → limits → checkout → subscription
-- Store flow: products → cart → checkout → inventory
-- Project management: create, edit, delete, regen keys
-- Dashboard: metrics, customers, tiers
-- Sign-up worker: Clerk hosted pages, frictionless (no double sign-in)
-- OAuth flows secured with Clerk JWT verification
-- Session token validation on signup completion
+- Store flow: products → cart → checkout → inventory updates
+- Dashboard: projects, tiers, products, customers, metrics
+- Templates: SaaS and Store with `/setup` command
+- SDK: Published on npm, handles auth/refresh automatically
 
-### Notes
-- Auto-deploy via Cloudflare Pages (frontend) and Workers (API)
-
-## API Endpoints
-
-Base: `https://api-multi.k-c-sheffield012376.workers.dev`
-
-| Endpoint | Auth | Purpose |
-|----------|------|---------|
-| `POST /api/customers` | SK | Create customer |
-| `GET /api/customers/:id` | SK | Get customer |
-| `PATCH /api/customers/:id` | SK | Update customer |
-| `DELETE /api/customers/:id` | SK | Delete customer |
-| `GET /api/tiers` | SK | List subscription tiers |
-| `GET /api/products` | SK | List products (store) |
-| `POST /api/cart/checkout` | SK | Cart checkout (store) |
-| `GET /api/dashboard` | SK | Platform metrics |
-| `POST /api/data` | SK + JWT | Track usage |
-| `GET /api/usage` | SK + JWT | Check usage |
-| `POST /api/create-checkout` | SK + JWT | Subscription upgrade |
-| `POST /api/customer-portal` | SK + JWT | Billing portal |
-
-## Sign-Up Worker
-
-Frictionless signup using Clerk hosted pages. Users sign up (email or Google), get metadata set automatically, and land in your app logged in. No double sign-in required.
-
-**With SDK:**
-```typescript
-const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
-// Redirect new users to signupUrl
-```
-
-**Direct URL:**
-```
-https://sign-up.k-c-sheffield012376.workers.dev/signup?pk=pk_test_xxx&redirect=https://yourapp.com
-```
-
-See `sign-up/oauth.md` for implementation details.
+**Planned:**
+- `/pwa` command for installable apps
+- More templates (gated content, courses)
+- Framework variants (Next.js, Vue)
 
 ## Local Dev
 
 ```bash
-cd frontend && npm run dev        # :5173
-cd front-auth-api && npm run dev  # :8788
-cd oauth-api && npm run dev       # :8789
-cd api-multi && npm run dev       # :8787
+cd frontend && npm run dev        # Dashboard :5173
+cd api-multi && npm run dev       # Main API :8787
+cd front-auth-api && npm run dev  # Dev auth :8788
+cd oauth-api && npm run dev       # Stripe OAuth :8789
 ```
 
 ## Deploy
 
 ```bash
-cd front-auth-api && npx wrangler deploy
-cd oauth-api && npx wrangler deploy
 cd api-multi && npx wrangler deploy
+cd oauth-api && npx wrangler deploy
+cd front-auth-api && npx wrangler deploy
 cd sign-up && npx wrangler deploy
-# Frontend auto-deploys via Cloudflare Pages
+# Frontend: Cloudflare Pages auto-deploy
 ```
 
-## Technical Reference
+## License
 
-See `CLAUDE.md` for schemas, bindings, debugging.
-
-## TODO
-
-- [x] SDK wrapper for devs (`dream-sdk/`)
-- [x] Totals view (aggregate live revenue)
-- [x] CSV export (customers, orders)
-- [x] Delete customer endpoint
-- [x] Publish SDK to npm (`@dream-api/sdk`)
-- [x] OAuth flow security hardening (JWT verification)
-- [x] Sign-up session token validation
-- [x] Frictionless signup (no double sign-in required)
-- [ ] Facebook OAuth (in addition to Google)
-- [ ] Framework-specific guides (React, Next.js, Vue)
-- [ ] Store template with SDK integration
-- [ ] SaaS template with SDK integration
+MIT

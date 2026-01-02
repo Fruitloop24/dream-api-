@@ -1,135 +1,172 @@
-# Dream API - The Complete Backend for Your App
+# Dream API - Ship Your SaaS in Minutes, Not Months
 
-**Auth. Billing. Usage Tracking. One SDK. Done.**
+**Clone. /setup. Ship.**
 
-Stop building the same infrastructure every project. Dream API gives you production-ready backend services with a single npm install.
+The AI-native backend for the vibe coder generation. Auth, billing, usage tracking - done before your coffee gets cold.
+
+---
+
+## The New Way to Build
+
+```bash
+# 1. Clone template
+git clone dream-saas-basic
+
+# 2. Open in Claude Code / Cursor / Windsurf
+
+# 3. Run setup
+/setup
+
+# 4. Deploy
+npm run build && npx wrangler pages deploy dist
+```
+
+**That's it.** Auth works. Billing works. Usage tracking works. PWA-ready. Go build your thing.
 
 ---
 
 ## Why Dream API?
 
-### Ship Faster
-- **One integration** replaces Auth0 + Stripe + custom usage tracking
-- **Ready-to-use templates** - SaaS and E-commerce, fully functional
-- **SDK handles everything** - auth flows, token refresh, API calls
+### AI-First Development
 
-### Enterprise-Grade Security
+Built for the way you actually work:
+- **`/setup` command** - AI asks what you're building, configures everything
+- **Works with Claude Code, Cursor, Windsurf** - your AI assistant knows the SDK
+- **One config file** - `src/config.ts` has all branding, AI updates it for you
+- **No docs rabbit holes** - AI has context, just ask
 
-**Same Security Model as Stripe**
-- Publishable keys (pk_xxx) safe for frontend - can only read public data
-- Secret keys (sk_xxx) for backend only - full admin access
-- Never expose secrets in browser bundles
+### Zero Infrastructure
 
-**JWT-Based User Identity**
-- Clerk-signed JWTs verified on every request
-- User ID extracted from cryptographically signed tokens
-- No header spoofing possible - identity comes from verified JWT
+You don't deploy workers. You don't manage databases. You don't configure auth.
 
-**Plan Protection**
-- Subscription plan stored in JWT metadata
-- Set by Stripe webhooks, not user input
-- Users cannot upgrade themselves without paying
+| You Do | We Handle |
+|--------|-----------|
+| Clone template | Auth (Clerk) |
+| Run /setup | Billing (Stripe) |
+| Build your feature | Usage tracking |
+| Deploy static files | Multi-tenancy |
+| | Webhooks |
+| | JWT verification |
+| | Rate limiting |
 
-**Multi-Tenant Isolation**
-- Every request filtered by publishableKey
-- Test/Live mode separation built-in
-- No cross-tenant data access possible
+### Stupid Fast
 
-**SQL Injection Protected**
-- All D1 queries use parameterized `.bind()` calls
-- No string concatenation in SQL queries
+- **Vite** - Sub-second hot reload
+- **Cloudflare Edge** - <50ms API latency worldwide
+- **Static hosting** - Free/cheap deploys (Cloudflare Pages, Vercel, Netlify)
+- **No server costs** - It's just HTML/JS/CSS + our API
 
-**Webhook Security**
-- Stripe webhook signatures verified
-- Event idempotency prevents replay attacks
+### PWA-Ready
 
-**Token Auto-Refresh**
-- SDK automatically refreshes JWTs before expiry
-- 5-minute clock skew tolerance
-- No expired token errors for your users
+Your SaaS is an installable app:
+- Works on iOS, Android, Desktop
+- No App Store approval
+- No Play Store fees
+- Just share a link or QR code
+- AI adds PWA support with `/pwa` command
 
 ---
 
-## Industry Best Practices
+## Security That Actually Works
 
-### Authentication
-- **Clerk** - Enterprise-grade auth used by Vercel, Notion, and thousands more
-- Supports email, Google, GitHub, and 20+ OAuth providers
-- Passwordless, MFA, and SSO ready
+**Same model as Stripe** - battle-tested, understood by every dev:
 
-### Payments
-- **Stripe Connect** - Powers Shopify, Lyft, DoorDash
-- PCI-DSS compliant out of the box
-- Subscription billing + one-time payments
-- Customer portal for self-service billing
+| Layer | Protection |
+|-------|------------|
+| Keys | PK (public) / SK (secret) separation |
+| Identity | JWT verified on EVERY request |
+| Plans | Stored in JWT, set by webhooks only |
+| Data | Multi-tenant isolation by publishableKey |
+| SQL | Parameterized queries, no injection |
+| Webhooks | Stripe signatures verified |
+| Tokens | Auto-refresh, no expiry errors |
 
-### Infrastructure
-- **Cloudflare Workers** - Edge computing, <50ms latency worldwide
-- **D1** - SQLite at the edge, automatic replication
-- **KV** - Sub-millisecond caching, rate limiting
-- **R2** - Zero-egress object storage for assets
+**Users can't spoof their plan.** The JWT is signed by Clerk, verified server-side. They'd have to compromise Clerk itself.
 
 ---
 
 ## What You Get
 
-### For SaaS Apps
+### Free Templates
+
+| Template | Use Case |
+|----------|----------|
+| `dream-saas-basic` | AI wrappers, usage-metered SaaS |
+| `dream-store-basic` | E-commerce, guest checkout |
+| More coming | Gated content, courses, membership |
+
+### SDK That Just Works
+
 ```typescript
-// Frontend - just the publishable key
+// Frontend - safe to expose
 const api = new DreamAPI({ publishableKey: 'pk_xxx' });
 
-// User signs up (Clerk handles auth)
+// Auth
 await api.auth.init();
+const user = api.auth.getUser(); // { email, plan, ... }
 
-// Track usage
-await api.usage.track();
-const { usageCount, limit, remaining } = await api.usage.check();
+// Usage
+await api.usage.track();  // Increment counter
+await api.usage.check();  // Get remaining
 
-// Upgrade to paid tier
+// Billing
 await api.billing.createCheckout({ tier: 'pro' });
-```
-
-### For E-Commerce
-```typescript
-// List products (public, PK only)
-const { products } = await api.products.list();
-
-// Guest checkout (no account needed)
-const { url } = await api.products.cartCheckout({
-  items: [{ priceId: 'price_xxx', quantity: 2 }],
-  customerEmail: 'buyer@email.com',
-  successUrl: '/thank-you',
-  cancelUrl: '/cart',
-});
+await api.billing.openPortal({ returnUrl: '/dashboard' });
 ```
 
 ### Developer Dashboard
-- Real-time usage metrics
-- Customer management
-- Revenue tracking
-- Product/tier configuration
+
+- Real-time metrics (MRR, usage, customers)
+- Tier/product management
+- Customer list with plan status
+- Webhook monitoring
+- Test/Live mode toggle
+- One-click Stripe Connect
 
 ---
 
-## Technical Reliability
+## The Stack
 
-### Rate Limiting
-- Per-user rate limiting built-in
-- KV-based for sub-millisecond checks
-- Configurable limits per tier
+All best-in-class, all handled for you:
 
-### Atomic Operations
-- D1 atomic increments for usage tracking
-- No race conditions on concurrent requests
+| Component | Technology | Why |
+|-----------|------------|-----|
+| Auth | Clerk | Enterprise-grade, 20+ OAuth providers |
+| Payments | Stripe Connect | PCI compliant, 135+ countries |
+| API | Cloudflare Workers | Edge compute, global |
+| Database | Cloudflare D1 | SQLite at edge, auto-replicated |
+| Cache | Cloudflare KV | Sub-ms reads, rate limiting |
+| Storage | Cloudflare R2 | Zero egress fees |
+| Frontend | React + Vite | Fast builds, cheap hosting |
 
-### Webhook Idempotency
-- Events table prevents duplicate processing
-- Safe to receive the same webhook twice
+---
 
-### Error Handling
-- Consistent error format across all endpoints
-- Actionable error messages
-- Proper HTTP status codes
+## Who This Is For
+
+**Vibe coders** - You prompt, AI builds, you ship
+
+**Indie hackers** - Launch fast, validate fast, pivot fast
+
+**AI wrapper builders** - Usage tracking built-in for token metering
+
+**Course creators** - Gated content with subscription billing
+
+**Side project warriors** - Free hosting, pay nothing until you make money
+
+---
+
+## What Makes This Different
+
+| Feature | Typical SaaS Kit | Dream API |
+|---------|------------------|-----------|
+| Setup | Read docs, configure 12 files | `/setup` |
+| Auth | DIY or complex integration | Works out of box |
+| Billing | Wire up Stripe yourself | Works out of box |
+| Usage tracking | Build it yourself | `api.usage.track()` |
+| Multi-tenant | Figure it out | Built-in |
+| AI-assisted | None | Full context in CLAUDE.md |
+| Hosting cost | $20+/mo (servers) | $0 (static) |
+| PWA | Not included | One command |
 
 ---
 
@@ -138,24 +175,25 @@ const { url } = await api.products.cartCheckout({
 | Metric | Value |
 |--------|-------|
 | API Latency | <50ms (edge) |
-| Uptime Target | 99.9% |
-| Auth Providers | 20+ |
-| Payment Methods | 135+ countries |
-
----
-
-## What Devs Are Building
-
-- **SaaS platforms** with usage-based billing
-- **AI tools** with token/request metering
-- **E-commerce stores** with Stripe checkout
-- **Membership sites** with tiered access
-- **Developer tools** with API key management
+| Setup Time | ~2 minutes |
+| Lines of config | 1 file |
+| Hosting cost | $0 (static sites) |
+| Auth providers | 20+ |
+| Payment countries | 135+ |
 
 ---
 
 ## Get Started
 
+**Option 1: Template (Recommended)**
+```bash
+git clone https://github.com/dream-api/dream-saas-basic
+cd dream-saas-basic
+# Open in Claude Code / Cursor / Windsurf
+# Run /setup
+```
+
+**Option 2: SDK Only**
 ```bash
 npm install @dream-api/sdk
 ```
@@ -164,10 +202,8 @@ npm install @dream-api/sdk
 import { DreamAPI } from '@dream-api/sdk';
 
 const api = new DreamAPI({
-  publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY,
+  publishableKey: 'pk_xxx',
 });
-
-// That's it. Start building.
 ```
 
 ---
@@ -175,28 +211,26 @@ const api = new DreamAPI({
 ## Security Checklist
 
 - [x] PK/SK key separation (Stripe model)
-- [x] JWT verification on all user operations
-- [x] Server-side plan validation (no spoofing)
-- [x] Parameterized SQL queries (no injection)
-- [x] Stripe webhook signature verification
+- [x] JWT verification on every request
+- [x] Server-side plan validation (unspoofable)
+- [x] Parameterized SQL (no injection)
+- [x] Stripe webhook signatures
 - [x] Multi-tenant data isolation
 - [x] Automatic token refresh
 - [x] Rate limiting per user
 - [x] HTTPS everywhere
-- [x] No secrets in frontend bundles
+- [x] No secrets in frontend
 
 ---
 
-## Built With
+## Built For The AI Era
 
-- **Clerk** - Authentication
-- **Stripe Connect** - Payments
-- **Cloudflare Workers** - Edge compute
-- **Cloudflare D1** - Database
-- **Cloudflare KV** - Caching
-- **Cloudflare R2** - Asset storage
-- **TypeScript** - End-to-end type safety
+The old way: Read docs → Configure → Debug → Read more docs → Finally works
+
+The new way: Clone → /setup → Ship
+
+Your AI assistant has full context. The SDK is published. The templates are ready. Stop building infrastructure. Start building your product.
 
 ---
 
-**Dream API** - Focus on your product. We handle the infrastructure.
+**Dream API** - Clone. /setup. Ship.
