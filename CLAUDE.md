@@ -129,16 +129,25 @@ src/
 ### Template Features
 
 - **`/setup` command** - AI-assisted configuration (Claude Code, Cursor, Windsurf)
+- **`/pwa` command** - Add PWA support (installable app, works offline)
 - **Single config file** - `src/config.ts` controls all branding
+- **Theme system** - `theme: 'light' | 'dark'` - one toggle switches entire app
+- **Accent colors** - Pick from 6 colors, applies to all buttons/highlights
+- **Hero image support** - Drop image in public/, set path in config
 - **Shared Nav component** - Profile dropdown with Account Settings, Billing, Sign Out
-- **Accent color system** - Pick a color, applies everywhere
-- **Hero image support** - Optional product screenshot
-- **Social proof section** - Customer logos
+- **Social proof section** - Customer logos (SaaS)
 - **Icons for features** - user, settings, rocket, check, chart, shield, etc.
 
-### Planned Template Features
+### AI Customization Power
 
-- **`/pwa` command** - Add PWA support (installable app, works offline)
+The config.ts has two layers:
+1. **User-facing config** (~15 lines) - name, theme, accent, content
+2. **Theme classes** (THEMES object) - Full Tailwind classes AI can modify
+
+When user asks for custom branding (gradients, glassmorphism, custom colors), AI modifies the THEMES object directly. User never touches it.
+
+### Planned
+
 - **More templates** - Gated content, courses, membership
 - **Framework variants** - Next.js, Vue versions
 
