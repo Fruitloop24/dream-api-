@@ -4,6 +4,14 @@ API-as-a-Service Platform. Developers get API keys, we handle auth/billing/usage
 
 **Business Model:** API is the product. Templates are free onboarding tools.
 
+## Pricing
+
+| Plan | Price | Includes |
+|------|-------|----------|
+| Trial | Free | 14 days, full access, no CC |
+| Pro | $19/mo | SaaS: 2,000 end-users / Store: unlimited guest checkout |
+| Overage | $0.03/user | SaaS only, after 2,000 users |
+
 ## Quick Reference
 
 ```bash

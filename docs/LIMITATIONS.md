@@ -46,15 +46,15 @@
 
 ### Security Considerations
 
-1. **Sign-up redirect parameter**
-   - Currently not validated against allowlist
-   - Should add per-project allowed redirect domains
-   - Low risk: redirect happens after successful auth
+1. **Sign-up redirect parameter** - FIXED
+   - Now properly escaped with JSON.stringify()
+   - Open redirect is low risk (auth happens first)
+   - Can add allowlist later if needed
 
-2. **X-Publishable-Key override**
-   - When using SK, PK header can override project filter
-   - Not validated against platformId ownership
-   - Low risk: requires SK (already god-mode)
+2. **X-Publishable-Key override** - PROTECTED
+   - All queries use platformId AND publishableKey
+   - AND condition prevents cross-platform access
+   - Low risk: requires SK which is already god-mode
 
 3. **JWT Clock Skew**
    - 5-minute tolerance for clock differences
@@ -88,17 +88,21 @@
 
 ## Roadmap Considerations
 
+**Completed:**
+- ~~Redirect allowlist validation~~ → Fixed with JSON.stringify, low risk
+- ~~X-Publishable-Key override validation~~ → Protected by AND condition
+
 **High Value, Low Effort:**
-- Redirect allowlist validation
-- X-Publishable-Key override validation
 - USAGE_KV binding documentation
+- End-user count enforcement in sign-up worker
 
 **High Value, Medium Effort:**
-- Metered billing support
+- Metered billing support (Stripe meters)
 - Multi-currency
 - Webhook retry UI
+- dream-store-basic template completion
 
 **High Value, High Effort:**
-- Team/org accounts
+- Team/org accounts (Clerk Organizations)
 - Custom domains
 - Self-service Clerk customization

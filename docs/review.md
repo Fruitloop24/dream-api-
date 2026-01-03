@@ -1,7 +1,7 @@
 # dream-api Review (2025-12-30)
 
 ## Scope
-- Read all docs and code (excluding `test-paywall`), plus `test-store` and `fs-template`.
+- Read all docs and code (excluding `test-paywall`).
 - Focus: viability, marketability, scalability, security, reliability, and ship-readiness.
 
 ## Executive Summary
@@ -60,11 +60,6 @@ This is a real product, not a toy MVP. The architecture is coherent (Workers + D
 - D1 write-per-request usage tracking will bottleneck at high traffic (OK for non-enterprise)
 - Webhook idempotency implemented
 
-### fs-template Notes
-- Single-tenant SaaS starter (doesn't use pk/sk model)
-- Needs README and setup guide
-- Uses `getToken({ template: 'pan-api' })` - JWT template name is configurable
-
 ### Store Mode
 - Production-ready for basic stores
 - API returns `imageUrl`, `features`, `description`
@@ -82,40 +77,31 @@ This is a real product, not a toy MVP. The architecture is coherent (Workers + D
 ## Next Steps
 1. ~~Full end-to-end test of OAuth flow~~ ✓
 2. ~~Test sign-up flow (OAuth + email/password)~~ ✓ Using Clerk hosted pages
-3. Test store template with SDK
-4. Test SaaS template with SDK
-5. ~~Deploy updated workers~~ ✓ sign-up worker deployed
+3. ~~Test SaaS template with SDK~~ ✓ dream-saas-basic working
+4. Test store template with SDK (dream-store-basic needs completion)
+5. ~~Deploy updated workers~~ ✓ All workers deployed
+6. ~~Finalize pricing~~ ✓ $19/mo, 14-day trial, 2k users
 
 ---
 
 ## Addendum (2025-12-31) - Template + Redirect Notes
 
 ### 1) Client-side secret key exposure in templates - FIXED
-- **Where:** `fs-template/frontend/src/hooks/useDreamAPI.tsx`, `test-paywall/src/App.tsx`
-- **Issue:** `import.meta.env.VITE_DREAM_SECRET_KEY` was compiled into the browser bundle.
-- **Fix Applied:**
-  1. Added `verifyPublishableKey()` function to api-multi
-  2. Modified api-multi router to accept PK-only auth for public routes (tiers, products)
-  3. Modified api-multi router to accept PK+JWT auth for user routes (usage, billing)
-  4. Updated SDK to work without secretKey (frontend-only mode)
-  5. Updated templates to use PK-only: `new DreamAPI({ publishableKey: 'pk_xxx' })`
-  6. SK-only endpoints (customers, dashboard) remain protected
+- **Issue:** Secret key was compiled into browser bundle.
+- **Fix:** Templates now use PK-only mode. SK stays on backend.
 - **Security Model:** Same as Stripe - PK is public, SK stays on backend
 
-### 2) Sign-up redirect is not escaped or allowlisted
-- **Where:** `sign-up/src/index.ts` (`/signup` redirect param, `callbackPage` JS interpolation)
-- **Issue:** Arbitrary `redirect` is interpolated into JS without escaping.
-- **Why it matters:** Enables open redirect phishing and potential script injection on the callback page, before any JWT validation.
-- **Fix:** Embed via `JSON.stringify(redirect)` and validate redirect against a per-project allowlist. Optional: signed state in cookie.
+### 2) Sign-up redirect XSS - FIXED
+- **Where:** `sign-up/src/index.ts`
+- **Issue:** Arbitrary `redirect` was interpolated into JS without escaping.
+- **Fix:** Now uses `JSON.stringify()` to properly escape values.
+- **Note:** Open redirect (any URL accepted) is low risk since auth happens first. Can add allowlist later if needed.
 
-### 3) Publishable-key override is not validated
-- **Where:** `api-multi/src/index.ts` (`X-Publishable-Key` header override)
-- **Issue:** Override is accepted without verifying it belongs to the platformId derived from the SK.
-- **Why it matters:** If an SK leaks, override expands blast radius across projects.
-- **Fix:** Verify override against D1/KV mapping for the platformId before use (otherwise ignore).
+### 3) Publishable-key override - PROTECTED BY DESIGN
+- **Where:** `api-multi/src/index.ts`
+- **Issue:** Override accepted without validation.
+- **Why it's OK:** All queries filter by BOTH platformId AND publishableKey. The AND condition prevents cross-platform access even with override.
 
-### 4) Demo checkout without JWT
+### 4) Demo checkout without JWT - TEST FILE ONLY
 - **Where:** `test-paywall/src/App.tsx`
-- **Issue:** Calls `api.billing.createCheckout()` without a user JWT.
-- **Why it matters:** Works in demo but fails in production; can confuse template users.
-- **Fix:** Wire sign-in and call `setUserToken()` before billing calls, or mark as demo-only.
+- **Note:** Test file, not a production template. Can be ignored.

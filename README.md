@@ -12,6 +12,16 @@ Dream API is the backend. You build your frontend, we handle:
 
 **Business model:** You use our API. Templates are free tools to get started faster.
 
+## Pricing
+
+| Plan | Price | Includes |
+|------|-------|----------|
+| **Trial** | Free | 14 days, full access, no credit card |
+| **Pro** | $19/month | SaaS: 2,000 end-users / Store: unlimited guest checkout |
+| **Overage** | $0.03/user | SaaS only, after 2,000 users |
+
+Plus Stripe's standard transaction fees (2.9% + $0.30). Funds go directly to your Stripe account.
+
 ## Two Modes
 
 ### SaaS Mode
@@ -77,11 +87,9 @@ Free React templates with AI-assisted setup:
 
 Both have `/setup` command for Claude Code, Cursor, or Windsurf.
 
-```bash
-git clone https://github.com/dream-api/dream-saas-basic
-cd dream-saas-basic
-# Open in AI editor, run /setup
-```
+Clone from GitHub, open in your AI editor, run `/setup`.
+
+Templates are available after signup.
 
 ## Infrastructure
 

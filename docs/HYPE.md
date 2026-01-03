@@ -159,9 +159,18 @@ api.products.cartCheckout()  // Guest purchase
 
 ## Pricing
 
-You pay Stripe's normal fees. That's it.
+**14-day free trial. No credit card required.**
 
-We take a small percentage of transactions processed through the API. You make money, we make money.
+| Plan | Price | What You Get |
+|------|-------|--------------|
+| **Trial** | Free | 14 days, full access |
+| **Pro** | $19/month | SaaS: 2,000 end-users included |
+| | | Store: Unlimited guest checkout |
+| **Overage** | $0.03/user | SaaS only, after 2,000 users |
+
+You also pay Stripe's normal transaction fees (2.9% + $0.30). Funds go directly to your Stripe account.
+
+Simple. Predictable. Scales with you.
 
 ---
 
@@ -194,8 +203,8 @@ But you don't need them. The SDK works with any frontend.
 npm install @dream-api/sdk
 ```
 
-Sign up at [dashboard URL] → Create project → Get your key → Build.
+Sign up at the dashboard → Create project → Get your key → Build.
 
 ---
 
-**Dream API** - One key. Full backend.
+**Dream API** - 14 days free. $19/month. One key. Full backend.
