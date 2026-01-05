@@ -47,6 +47,25 @@ preview_bucket_name = "dream-api-assets"
 CLERK_JWT_TEMPLATE = "dream-api"
 API_MULTI_URL = "https://api-multi.k-c-sheffield012376.workers.dev"
 
+# Platform billing config
+# STRIPE_PRICE_ID = "price_xxx"           # $19/mo base (set as secret)
+# STRIPE_PRICE_ID_METERED = "price_yyy"   # $0.03/user metered (optional)
+# STRIPE_METER_EVENT_NAME = "end_user_count"
+INCLUDED_USERS = "2000"
+OVERAGE_RATE = "0.03"
+
+# Daily cron to report usage to Stripe Meter (midnight UTC)
+[triggers]
+crons = ["0 0 * * *"]
+
 # Local development settings
 [dev]
 port = 8788
+
+# Observability
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true

@@ -8,9 +8,11 @@ API-as-a-Service Platform. Developers get API keys, we handle auth/billing/usage
 
 | Plan | Price | Includes |
 |------|-------|----------|
-| Trial | Free | 14 days, full access, no CC |
+| Trial | Free | 14 days, full access, payment method required |
 | Pro | $19/mo | SaaS: 2,000 end-users / Store: unlimited guest checkout |
-| Overage | $0.03/user | SaaS only, after 2,000 users |
+| Overage | $0.03/user | SaaS only, after 2,000 live users |
+
+**Billing model:** Stripe direct for our billing ($19/mo + overage). Stripe Connect for end-user payments (funds go to dev).
 
 ## Quick Reference
 
@@ -46,13 +48,24 @@ await api.dashboard.get();
 ## Architecture
 
 ```
-Frontend (React) → front-auth-api (Dev Auth) → oauth-api (Stripe Connect)
-                            ↓
-                    D1 + KV + R2
-                            ↓
-                    api-multi ← Dev's App (via SDK)
-                            ↓
-                    sign-up ← End-user signup
+┌─────────────────────────────────────────────────────────────┐
+│ PLATFORM (Dev pays us)                                       │
+│                                                              │
+│ Frontend → front-auth-api → oauth-api (Stripe Connect)      │
+│                   ↓                                          │
+│          front-auth-api ← Stripe Webhooks                   │
+│          (subscriptions, daily cron → usage metering)       │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ END-USER (End-user pays dev via Stripe Connect)             │
+│                                                              │
+│ Dev's App → @dream-api/sdk → api-multi                      │
+│                                   ↓                          │
+│                              sign-up (end-user signup)      │
+│                                   ↓                          │
+│                           D1 + KV + R2                      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Workers
@@ -61,7 +74,7 @@ Frontend (React) → front-auth-api (Dev Auth) → oauth-api (Stripe Connect)
 |--------|---------|
 | `api-multi` | Main API - usage, billing, products, dashboard |
 | `oauth-api` | Stripe Connect, tier management |
-| `front-auth-api` | Dev auth, credentials |
+| `front-auth-api` | Dev auth, credentials, $19/mo billing, usage metering |
 | `sign-up` | End-user signup with metadata |
 
 ## Infrastructure Features
@@ -100,6 +113,28 @@ Devs manage everything from the dashboard:
 - Rotate secret keys (without breaking frontend)
 - Test/Live mode toggle
 - Webhook monitoring
+- Subscription status + billing portal
+
+## Platform Billing (How We Get Paid)
+
+**platform-billing worker** handles our revenue:
+
+| Event | Action |
+|-------|--------|
+| Dev signs up | 14-day trial starts (payment method required) |
+| Trial ends | $19/mo subscription begins |
+| Daily cron | Count live end-users, report to Stripe Meter |
+| Billing cycle | Stripe calculates $0.03/user overage |
+
+**End-user counting:**
+```sql
+-- Only LIVE users count (test users are free)
+SELECT COUNT(*) FROM end_users
+WHERE platformId = ?
+AND publishableKey LIKE 'pk_live_%'
+```
+
+**Store mode:** No Clerk users created (guest checkout), no count, no overage.
 
 ## Templates
 
@@ -172,6 +207,8 @@ cd oauth-api && npx wrangler deploy
 cd front-auth-api && npx wrangler deploy
 cd sign-up && npx wrangler deploy
 ```
+
+All workers auto-deploy via GitHub/Cloudflare connector.
 
 ## SDK Published
 

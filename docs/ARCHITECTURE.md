@@ -6,27 +6,67 @@ Technical reference for contributors and maintainers.
 
 ## System Overview
 
+Two billing flows, two Clerk apps, four workers:
+
 ```
-Developer's App
-      │
-      ├─► @dream-api/sdk
-      │        │
-      │        ├─► PK mode (frontend)
-      │        │      └─► X-Publishable-Key header
-      │        │
-      │        └─► SK mode (backend)
-      │               └─► Authorization: Bearer sk_xxx
-      │
-      ▼
- api-multi Worker
-      │
-      ├─► D1 (SQLite) - subscriptions, usage, tiers
-      ├─► KV - caching, auth lookups
-      ├─► R2 - asset storage
-      │
-      ├─► Clerk Backend API - JWT verification
-      └─► Stripe Connect - payments
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PLATFORM BILLING                                   │
+│                     (Devs pay us $19/mo + overage)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Developer                                                                  │
+│       │                                                                      │
+│       ├─► Clerk (dream-api app) ──► front-auth-api                          │
+│       │                                    │                                 │
+│       ├─► Stripe Connect ─────────► oauth-api                               │
+│       │                                    │                                 │
+│       └─► $19/mo subscription ────► front-auth-api ◄── Stripe Webhooks     │
+│                                            │                                 │
+│                                     Daily cron → Stripe Billing Meter       │
+│                                     (end-user overage)                       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           END-USER BILLING                                   │
+│                  (End-users pay devs via Stripe Connect)                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Developer's App                                                            │
+│       │                                                                      │
+│       ├─► @dream-api/sdk                                                    │
+│       │        │                                                             │
+│       │        ├─► PK mode (frontend)                                       │
+│       │        │      └─► X-Publishable-Key header                          │
+│       │        │                                                             │
+│       │        └─► SK mode (backend)                                        │
+│       │               └─► Authorization: Bearer sk_xxx                      │
+│       │                                                                      │
+│       ▼                                                                      │
+│   api-multi Worker                                                          │
+│       │                                                                      │
+│       ├─► D1 (SQLite) - subscriptions, usage, tiers                         │
+│       ├─► KV - caching, auth lookups                                        │
+│       ├─► R2 - asset storage                                                │
+│       │                                                                      │
+│       ├─► Clerk (end-user-api) - JWT verification                           │
+│       └─► Stripe Connect - payments go to dev's Stripe                      │
+│                                                                              │
+│   End-User Sign-up                                                           │
+│       └─► sign-up Worker ──► Clerk (end-user-api)                           │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Pricing Model
+
+| Who Pays | To Whom | Amount | How |
+|----------|---------|--------|-----|
+| Developer | Dream API | $19/mo base | Stripe subscription |
+| Developer | Dream API | $0.03/user after 2,000 | Stripe Billing Meter |
+| End-user | Developer | Tier price | Stripe Connect (direct) |
+
+**Key insight:** We don't touch end-user payments. Stripe Connect routes funds directly to dev's Stripe account. We only charge devs for platform usage.
 
 ---
 
@@ -84,18 +124,31 @@ oauth-api/src/
 ### front-auth-api
 **URL:** `https://front-auth-api.k-c-sheffield012376.workers.dev`
 
-Developer authentication, project management.
+Developer authentication, project management, AND platform billing.
 
 ```
 front-auth-api/src/
-├── index.ts
-├── webhook.ts            # Clerk webhook
+├── index.ts              # Router + cron handler
+├── types.ts              # TypeScript interfaces
+├── webhook.ts            # Stripe webhook (platform billing)
 └── lib/
     ├── auth.ts           # Dev JWT verification
     ├── keys.ts           # SK management
     ├── keyRotation.ts    # Key regeneration
-    └── projectsRoute.ts  # Project CRUD
+    ├── projectsRoute.ts  # Project CRUD
+    ├── schema.ts         # D1 schema migrations
+    └── usage.ts          # End-user counting + Stripe Meter
 ```
+
+**Platform Billing Endpoints:**
+```
+POST /create-checkout     # $19/mo subscription (14-day trial)
+POST /billing-portal      # Stripe billing portal
+GET  /subscription        # Status, usage, overage estimate
+POST /webhook/stripe      # Subscription events
+```
+
+**Cron Trigger:** Daily 00:00 UTC - Report end-user counts to Stripe Meter
 
 ### sign-up
 **URL:** `https://sign-up.k-c-sheffield012376.workers.dev`
@@ -207,12 +260,12 @@ End User
 
 ## Bindings
 
-| Worker | KV | D1 | R2 |
-|--------|----|----|-----|
-| api-multi | TOKENS_KV | DB | dream_api_assets |
-| oauth-api | PLATFORM_TOKENS_KV, CUSTOMER_TOKENS_KV | DB | - |
-| front-auth-api | TOKENS_KV | DB | - |
-| sign-up | TOKENS_KV | DB | - |
+| Worker | KV | D1 | R2 | Cron |
+|--------|----|----|-----|------|
+| api-multi | TOKENS_KV | DB | dream_api_assets | - |
+| oauth-api | PLATFORM_TOKENS_KV, CUSTOMER_TOKENS_KV | DB | - | - |
+| front-auth-api | TOKENS_KV, USAGE_KV | DB | dream_api_assets | Daily 00:00 UTC |
+| sign-up | TOKENS_KV | DB | - | - |
 
 ---
 
@@ -234,7 +287,7 @@ All end-users across all developers.
 ## Deployment
 
 ```bash
-# Workers
+# Workers (all auto-deploy via GitHub/Cloudflare connector)
 cd api-multi && npx wrangler deploy
 cd oauth-api && npx wrangler deploy
 cd front-auth-api && npx wrangler deploy
@@ -247,6 +300,65 @@ cd dream-sdk && npm publish
 # Auto-deploys via Cloudflare Pages
 ```
 
+### Environment Secrets (set via wrangler secret)
+
+| Worker | Secrets |
+|--------|---------|
+| api-multi | CLERK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET |
+| oauth-api | CLERK_SECRET_KEY, STRIPE_SECRET_KEY |
+| front-auth-api | CLERK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID |
+| sign-up | CLERK_SECRET_KEY |
+
+---
+
+## Database Schema Updates
+
+### platforms table (extended for billing)
+
+```sql
+CREATE TABLE IF NOT EXISTS platforms (
+  platformId TEXT PRIMARY KEY,
+  clerkUserId TEXT,
+  stripeCustomerId TEXT,        -- Stripe customer ID (for our billing)
+  stripeSubscriptionId TEXT,    -- Their $19/mo subscription
+  subscriptionStatus TEXT,      -- 'trialing', 'active', 'past_due', 'canceled'
+  trialEndsAt INTEGER,          -- Unix timestamp
+  currentPeriodEnd INTEGER,     -- Unix timestamp
+  createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Platform Billing Flow
+
+```
+1. Dev signs up via Clerk (dream-api app)
+2. /generate-platform-id creates plt_xxx
+3. Dev goes to billing → platform-billing creates Stripe checkout
+   - 14-day trial with payment method required
+   - $19/mo after trial
+4. Stripe webhook → platform-billing
+   - checkout.session.completed: Store stripeCustomerId, subscriptionId
+   - customer.subscription.updated: Update status, period
+   - invoice.payment_succeeded: Confirm active
+   - customer.subscription.deleted: Mark canceled
+5. Daily cron → platform-billing
+   - Count live end-users per platform
+   - Report to Stripe Billing Meter
+   - Stripe auto-calculates overage ($0.03/user after 2,000)
+```
+
+### Store Mode (No End-User Cost)
+
+Store mode uses guest checkout - no Clerk users created, no cost to us:
+
+```
+End-user → Stripe Checkout (guest) → Dev's Stripe account
+                ↓
+         No Clerk user created
+         No count toward 2,000 limit
+         No overage billing
+```
+
 ---
 
 ## Key Concepts
@@ -257,3 +369,5 @@ cd dream-sdk && npm publish
 4. **Plan in metadata** - Set by webhooks, not user input, not spoofable
 5. **Parameterized queries** - All D1 uses `.bind()` for SQL safety
 6. **Webhook idempotency** - Events table prevents duplicates
+7. **Live vs Test users** - Only `pk_live_%` users count toward billing
+8. **Store mode is free** - Guest checkout creates no Clerk users

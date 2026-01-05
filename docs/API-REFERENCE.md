@@ -6,12 +6,12 @@ Complete reference for endpoints and data structures.
 
 ## Base URLs
 
-| Service | URL |
-|---------|-----|
-| Main API | `https://api-multi.k-c-sheffield012376.workers.dev` |
-| Sign-Up Worker | `https://sign-up.k-c-sheffield012376.workers.dev` |
-| OAuth/Products | `https://oauth-api.k-c-sheffield012376.workers.dev` |
-| Dev Auth | `https://front-auth-api.k-c-sheffield012376.workers.dev` |
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Main API | `https://api-multi.k-c-sheffield012376.workers.dev` | End-user operations |
+| Sign-Up Worker | `https://sign-up.k-c-sheffield012376.workers.dev` | End-user signup |
+| OAuth/Products | `https://oauth-api.k-c-sheffield012376.workers.dev` | Stripe Connect, tier/product CRUD |
+| Dev Auth + Billing | `https://front-auth-api.k-c-sheffield012376.workers.dev` | Developer auth, credentials, $19/mo billing |
 
 ---
 
@@ -132,13 +132,84 @@ Auth: SK
 Response: { totalRevenue, totalCustomers, totalMRR }
 ```
 
-### Webhooks
+### Webhooks (api-multi)
 
-**POST /webhook/stripe** - Stripe webhook handler
+**POST /webhook/stripe** - Stripe webhook handler (end-user payments)
 ```
 Auth: Stripe signature
 Events: checkout.session.completed, customer.subscription.*, invoice.paid
 ```
+
+---
+
+## Platform Billing (front-auth-api)
+
+These endpoints handle billing for developers (our customers), not their end-users.
+All on `front-auth-api` worker.
+
+### Endpoints
+
+**POST /create-checkout** - Create developer subscription checkout
+```
+Auth: Clerk JWT (dream-api app)
+Body: { successUrl?: string, cancelUrl?: string }
+Response: { url: string }
+
+Creates Stripe checkout for $19/mo Pro plan with 14-day trial.
+Payment method required upfront.
+```
+
+**POST /create-portal** - Open developer billing portal
+```
+Auth: Clerk JWT (dream-api app)
+Body: { returnUrl?: string }
+Response: { url: string }
+
+Manage subscription, update payment method, view invoices.
+```
+
+**GET /subscription** - Get developer subscription status
+```
+Auth: Clerk JWT (dream-api app)
+Response: {
+  status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'none',
+  trialEndsAt?: number,
+  currentPeriodEnd?: number,
+  liveEndUserCount: number,
+  includedUsers: 2000,
+  overageRate: 0.03
+}
+```
+
+**POST /webhook/stripe** - Platform billing webhook
+```
+Auth: Stripe signature (different from api-multi webhook)
+Events:
+  - checkout.session.completed: Store subscription info
+  - customer.subscription.updated: Sync status
+  - customer.subscription.deleted: Mark canceled
+  - invoice.payment_succeeded: Confirm payment
+  - invoice.payment_failed: Handle failure
+```
+
+### Cron Jobs
+
+**Daily usage reporting** (0 0 * * *)
+```
+For each platform with active subscription:
+1. Count live end-users: SELECT COUNT(*) FROM end_users WHERE publishableKey LIKE 'pk_live_%'
+2. Report to Stripe Billing Meter
+3. Stripe calculates overage automatically
+```
+
+### Stripe Resources
+
+| Resource | Purpose |
+|----------|---------|
+| Product: Dream API Pro | Base subscription product |
+| Price: $19/mo | Monthly subscription price |
+| Price: $0.03/unit metered | End-user overage price |
+| Billing Meter: end_user_count | Tracks live end-users per platform |
 
 ---
 
@@ -225,16 +296,50 @@ Events: checkout.session.completed, customer.subscription.*, invoice.paid
 }
 ```
 
+### Platform (Developer Account)
+```typescript
+{
+  platformId: string;           // plt_xxx
+  clerkUserId: string;          // Clerk user ID
+  stripeAccountId?: string;     // Stripe Connect ID (their account)
+  stripeCustomerId?: string;    // Stripe customer ID (our billing)
+  stripeSubscriptionId?: string;
+  subscriptionStatus: 'trialing' | 'active' | 'past_due' | 'canceled' | 'none';
+  trialEndsAt?: number;         // Unix timestamp
+  currentPeriodEnd?: number;    // Unix timestamp
+  liveEndUserCount?: number;    // Count of pk_live_% users
+  createdAt: string;
+}
+```
+
+### PlatformSubscription (Billing Status)
+```typescript
+{
+  status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'none';
+  trialEndsAt?: number;
+  currentPeriodEnd?: number;
+  liveEndUserCount: number;
+  includedUsers: 2000;          // Always 2000
+  overageRate: 0.03;            // Always $0.03
+  estimatedOverage: number;     // (liveEndUserCount - 2000) * 0.03 if > 0
+}
+```
+
 ---
 
 ## Database Schema (D1)
 
 ### platforms
-Developer accounts.
+Developer accounts and subscription status.
 ```sql
-platformId TEXT PRIMARY KEY,  -- plt_xxx
-clerkUserId TEXT,             -- Clerk ID from dream-api app
-stripeAccountId TEXT,         -- Stripe Connect ID
+platformId TEXT PRIMARY KEY,      -- plt_xxx
+clerkUserId TEXT,                 -- Clerk ID from dream-api app
+stripeAccountId TEXT,             -- Stripe Connect ID (for their payments)
+stripeCustomerId TEXT,            -- Stripe customer ID (for OUR billing)
+stripeSubscriptionId TEXT,        -- Their $19/mo subscription to us
+subscriptionStatus TEXT,          -- 'trialing', 'active', 'past_due', 'canceled'
+trialEndsAt INTEGER,              -- Unix timestamp
+currentPeriodEnd INTEGER,         -- Unix timestamp
 createdAt TEXT
 ```
 

@@ -1,13 +1,66 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
-import { Env } from './types';
+import { Env, SubscriptionStatus } from './types';
 
 async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
     const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
         .bind(userId)
         .first<{ platformId: string }>();
     return row?.platformId ?? null;
+}
+
+async function getPlatformIdByStripeCustomer(customerId: string, env: Env): Promise<string | null> {
+    const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE stripeCustomerId = ?')
+        .bind(customerId)
+        .first<{ platformId: string }>();
+    return row?.platformId ?? null;
+}
+
+/**
+ * Update platform subscription status in D1
+ */
+async function updatePlatformSubscription(
+    env: Env,
+    platformId: string,
+    data: {
+        stripeCustomerId?: string;
+        stripeSubscriptionId?: string;
+        subscriptionStatus?: SubscriptionStatus;
+        trialEndsAt?: number | null;
+        currentPeriodEnd?: number | null;
+    }
+): Promise<void> {
+    const updates: string[] = [];
+    const values: (string | number | null)[] = [];
+
+    if (data.stripeCustomerId !== undefined) {
+        updates.push('stripeCustomerId = ?');
+        values.push(data.stripeCustomerId);
+    }
+    if (data.stripeSubscriptionId !== undefined) {
+        updates.push('stripeSubscriptionId = ?');
+        values.push(data.stripeSubscriptionId);
+    }
+    if (data.subscriptionStatus !== undefined) {
+        updates.push('subscriptionStatus = ?');
+        values.push(data.subscriptionStatus);
+    }
+    if (data.trialEndsAt !== undefined) {
+        updates.push('trialEndsAt = ?');
+        values.push(data.trialEndsAt);
+    }
+    if (data.currentPeriodEnd !== undefined) {
+        updates.push('currentPeriodEnd = ?');
+        values.push(data.currentPeriodEnd);
+    }
+
+    if (updates.length === 0) return;
+
+    values.push(platformId);
+    await env.DB.prepare(`UPDATE platforms SET ${updates.join(', ')} WHERE platformId = ?`)
+        .bind(...values)
+        .run();
 }
 
 async function isEventProcessed(eventId: string, env: Env): Promise<boolean> {
@@ -114,11 +167,7 @@ export async function handleStripeWebhook(
             }
 
             // Get tier from session metadata (sent during checkout)
-            const tier = session.metadata?.tier;
-            if (!tier) {
-                console.error('No tier metadata in checkout session');
-                return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
-            }
+            const tier = session.metadata?.tier || 'paid';
 
             // Update Clerk user metadata with purchased tier
             try {
@@ -129,6 +178,17 @@ export async function handleStripeWebhook(
                     },
                 });
                 console.log(`Updated user ${userId} to ${tier} plan after checkout`);
+
+                // Also update D1 platforms table
+                const userPlatformId = await getPlatformIdFromDb(userId, env);
+                if (userPlatformId) {
+                    await updatePlatformSubscription(env, userPlatformId, {
+                        stripeCustomerId: session.customer as string,
+                        stripeSubscriptionId: session.subscription as string,
+                        subscriptionStatus: 'active',
+                    });
+                    console.log(`Updated platform ${userPlatformId} with subscription info`);
+                }
             } catch (err) {
                 const msg = err instanceof Error ? err.message : 'Unknown error';
                 console.error(`Failed to update user ${userId}:`, msg);
@@ -142,39 +202,57 @@ export async function handleStripeWebhook(
 
         case 'customer.subscription.created':
         case 'customer.subscription.updated': {
-            // Extract customer metadata (should include userId)
             const subscription = event.data.object as Stripe.Subscription;
             const subUserId = subscription.metadata?.userId;
+            const customerId = subscription.customer as string;
 
-            if (!subUserId) {
-                console.error('No userId in subscription metadata');
-                return new Response(JSON.stringify({ error: 'No userId' }), { status: 400 });
+            // Map Stripe status to our status
+            let status: SubscriptionStatus;
+            switch (subscription.status) {
+                case 'trialing': status = 'trialing'; break;
+                case 'active': status = 'active'; break;
+                case 'past_due': status = 'past_due'; break;
+                case 'canceled':
+                case 'unpaid': status = 'canceled'; break;
+                default: status = 'active';
             }
 
-            // Get tier from subscription metadata
-            const subTier = subscription.metadata?.tier;
-            if (!subTier) {
-                console.error('No tier metadata in subscription');
-                return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
+            const trialEnd = subscription.trial_end ? subscription.trial_end * 1000 : null;
+            const periodEnd = subscription.current_period_end * 1000;
+
+            // Update D1 first (by customer ID if we have it)
+            let subPlatformId = await getPlatformIdByStripeCustomer(customerId, env);
+            if (!subPlatformId && subUserId) {
+                subPlatformId = await getPlatformIdFromDb(subUserId, env);
             }
 
-            // Update Clerk user metadata with subscription tier
-            try {
-                await clerkClient.users.updateUserMetadata(subUserId, {
-                    publicMetadata: {
-                        plan: subTier,
-                        stripeCustomerId: subscription.customer as string,
-                        subscriptionId: subscription.id,
-                    },
+            if (subPlatformId) {
+                await updatePlatformSubscription(env, subPlatformId, {
+                    stripeCustomerId: customerId,
+                    stripeSubscriptionId: subscription.id,
+                    subscriptionStatus: status,
+                    trialEndsAt: trialEnd,
+                    currentPeriodEnd: periodEnd,
                 });
-                console.log(`Updated user ${subUserId} to ${subTier} plan`);
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : 'Unknown error';
-                console.error(`Failed to update user ${subUserId}:`, msg);
-                return new Response(
-                    JSON.stringify({ error: 'Failed to update user metadata' }),
-                    { status: 500 }
-                );
+                console.log(`Updated platform ${subPlatformId} subscription: ${status}`);
+            }
+
+            // Update Clerk if we have userId
+            if (subUserId) {
+                const subTier = subscription.metadata?.tier || 'paid';
+                try {
+                    await clerkClient.users.updateUserMetadata(subUserId, {
+                        publicMetadata: {
+                            plan: status === 'canceled' ? 'free' : subTier,
+                            stripeCustomerId: customerId,
+                            subscriptionId: subscription.id,
+                        },
+                    });
+                    console.log(`Updated user ${subUserId} to ${subTier} plan`);
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'Unknown error';
+                    console.error(`Failed to update user ${subUserId}:`, msg);
+                }
             }
             break;
         }
@@ -182,27 +260,35 @@ export async function handleStripeWebhook(
         case 'customer.subscription.deleted': {
             const deletedSubscription = event.data.object as Stripe.Subscription;
             const deletedUserId = deletedSubscription.metadata?.userId;
+            const deletedCustomerId = deletedSubscription.customer as string;
 
-            if (!deletedUserId) {
-                console.error('No userId in deleted subscription metadata');
-                return new Response(JSON.stringify({ error: 'No userId' }), { status: 400 });
+            // Update D1
+            let deletedPlatformId = await getPlatformIdByStripeCustomer(deletedCustomerId, env);
+            if (!deletedPlatformId && deletedUserId) {
+                deletedPlatformId = await getPlatformIdFromDb(deletedUserId, env);
             }
 
-            // Downgrade user back to free
-            try {
-                await clerkClient.users.updateUser(deletedUserId, {
-                    publicMetadata: {
-                        plan: 'free',
-                    },
+            if (deletedPlatformId) {
+                await updatePlatformSubscription(env, deletedPlatformId, {
+                    subscriptionStatus: 'canceled',
+                    stripeSubscriptionId: undefined,
                 });
-                console.log(`Downgraded user ${deletedUserId} to free plan`);
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : 'Unknown error';
-                console.error(`Failed to downgrade user ${deletedUserId}:`, msg);
-                return new Response(
-                    JSON.stringify({ error: 'Failed to update user metadata' }),
-                    { status: 500 }
-                );
+                console.log(`Marked platform ${deletedPlatformId} as canceled`);
+            }
+
+            // Downgrade user in Clerk
+            if (deletedUserId) {
+                try {
+                    await clerkClient.users.updateUserMetadata(deletedUserId, {
+                        publicMetadata: {
+                            plan: 'free',
+                        },
+                    });
+                    console.log(`Downgraded user ${deletedUserId} to free plan`);
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'Unknown error';
+                    console.error(`Failed to downgrade user ${deletedUserId}:`, msg);
+                }
             }
             break;
         }

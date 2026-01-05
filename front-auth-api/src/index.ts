@@ -13,12 +13,18 @@
  * POST /generate-platform-id  - Create plt_xxx on first login
  * GET  /get-platform-id       - Retrieve existing platformId
  * GET  /get-credentials       - Get test/live keys and products
- * POST /create-checkout       - $15/mo subscription via Stripe
+ * POST /create-checkout       - $19/mo subscription via Stripe (14-day trial)
  * POST /upload-asset          - Upload product images to R2
  * GET  /projects              - List all projects for a dev
  * POST /projects/rotate-key   - Rotate secret key (keep products)
  * POST /verify-auth           - Verify auth + track usage
  * POST /webhook/stripe        - Handle platform subscription events
+ * GET  /subscription          - Get subscription status + usage info
+ * POST /billing-portal        - Open Stripe billing portal
+ *
+ * CRON:
+ * -----
+ * Daily 00:00 UTC             - Report end-user counts to Stripe Meter
  *
  * FLOW:
  * -----
@@ -41,12 +47,13 @@
 
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
-import { Env, PlatformPlan } from './types';
+import { Env, PlatformPlan, PlatformSubscriptionInfo, SubscriptionStatus } from './types';
 import { handleStripeWebhook } from './webhook';
 import { ensurePlatformForUser, getPlatformIdFromDb } from './lib/auth';
-import { ensureApiKeySchema } from './lib/schema';
+import { ensureApiKeySchema, ensurePlatformSchema } from './lib/schema';
 import { handleListProjects } from './lib/projectsRoute';
 import { rotateSecretKey } from './lib/keyRotation';
+import { getLiveEndUserCount, runDailyUsageReport } from './lib/usage';
 
 // ============================================================================ //
 // Constants                                                                    //
@@ -446,6 +453,80 @@ export default {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // Get subscription status
+      if (url.pathname === '/subscription' && request.method === 'GET') {
+        await ensurePlatformSchema(env);
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
+
+        if (!platformId) {
+          return new Response(JSON.stringify({ error: 'Platform not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const platform = await env.DB.prepare(`
+          SELECT subscriptionStatus, trialEndsAt, currentPeriodEnd
+          FROM platforms WHERE platformId = ?
+        `).bind(platformId).first<{
+          subscriptionStatus: string | null;
+          trialEndsAt: number | null;
+          currentPeriodEnd: number | null;
+        }>();
+
+        const liveEndUserCount = await getLiveEndUserCount(platformId, env.DB);
+        const includedUsers = parseInt(env.INCLUDED_USERS || '2000');
+        const overageRate = parseFloat(env.OVERAGE_RATE || '0.03');
+        const overageUsers = Math.max(0, liveEndUserCount - includedUsers);
+        const estimatedOverage = overageUsers * overageRate;
+
+        const info: PlatformSubscriptionInfo = {
+          status: (platform?.subscriptionStatus as SubscriptionStatus) || 'none',
+          trialEndsAt: platform?.trialEndsAt ?? undefined,
+          currentPeriodEnd: platform?.currentPeriodEnd ?? undefined,
+          liveEndUserCount,
+          includedUsers,
+          overageRate,
+          estimatedOverage,
+        };
+
+        return new Response(JSON.stringify(info), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Billing portal
+      if (url.pathname === '/billing-portal' && request.method === 'POST') {
+        const platformId =
+          (await getPlatformIdFromDb(userId, env)) ||
+          (await env.TOKENS_KV.get(`user:${userId}:platformId`));
+
+        const platform = await env.DB.prepare(`
+          SELECT stripeCustomerId FROM platforms WHERE platformId = ?
+        `).bind(platformId).first<{ stripeCustomerId: string }>();
+
+        if (!platform?.stripeCustomerId) {
+          return new Response(JSON.stringify({ error: 'No subscription found' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const body = await request.json().catch(() => ({})) as { returnUrl?: string };
+        const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' });
+
+        const session = await stripe.billingPortal.sessions.create({
+          customer: platform.stripeCustomerId,
+          return_url: body.returnUrl || `${env.FRONTEND_URL}/dashboard`,
+        });
+
+        return new Response(JSON.stringify({ url: session.url }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     } catch (error) {
       console.error('[front-auth-api] Error:', error);
@@ -454,5 +535,14 @@ export default {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+  },
+
+  /**
+   * Cron trigger - Daily usage reporting to Stripe Meter
+   */
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log(`[front-auth-api] Cron triggered at ${new Date(event.scheduledTime).toISOString()}`);
+    await ensurePlatformSchema(env);
+    ctx.waitUntil(runDailyUsageReport(env));
   },
 };
