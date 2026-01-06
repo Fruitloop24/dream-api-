@@ -1,12 +1,11 @@
 /**
- * SubscriptionDropdown - Shows platform subscription status with dropdown details
+ * SubscriptionDropdown - Simple status badge + manage billing button
  */
 
 import { useState, useRef, useEffect } from 'react';
-import type { PlatformSubscription } from '@/hooks/usePlatformSubscription';
 
 interface SubscriptionDropdownProps {
-  subscription: PlatformSubscription | null;
+  subscription: { status: string; trialEndsAt?: number } | null;
   loading: boolean;
   statusDisplay: { label: string; color: string };
   onManageBilling: () => void;
@@ -68,13 +67,13 @@ export function SubscriptionDropdown({
         </svg>
       </button>
 
-      {/* Dropdown Panel */}
+      {/* Dropdown Panel - Simplified */}
       {isOpen && subscription && (
-        <div className="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+        <div className="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
           <div className="p-4">
             {/* Status Header */}
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-700">
-              <span className="text-sm text-gray-400">Platform Subscription</span>
+              <span className="text-sm text-gray-400">Subscription</span>
               <span className={`px-2 py-0.5 text-xs rounded ${colors.bg} ${colors.text} border ${colors.border}`}>
                 {subscription.status.toUpperCase()}
               </span>
@@ -82,7 +81,7 @@ export function SubscriptionDropdown({
 
             {/* Trial Info */}
             {subscription.status === 'trialing' && subscription.trialEndsAt && (
-              <div className="mb-3 p-2 bg-amber-900/20 border border-amber-800 rounded">
+              <div className="mb-4 p-2 bg-amber-900/20 border border-amber-800 rounded">
                 <p className="text-xs text-amber-400">
                   Trial ends {new Date(subscription.trialEndsAt).toLocaleDateString()}
                 </p>
@@ -91,74 +90,10 @@ export function SubscriptionDropdown({
 
             {/* Past Due Warning */}
             {subscription.status === 'past_due' && (
-              <div className="mb-3 p-2 bg-red-900/20 border border-red-800 rounded">
+              <div className="mb-4 p-2 bg-red-900/20 border border-red-800 rounded">
                 <p className="text-xs text-red-400">
-                  Payment failed. Update your payment method to avoid service interruption.
+                  Payment failed. Update payment method.
                 </p>
-              </div>
-            )}
-
-            {/* End User Stats */}
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Live End Users</span>
-                <span className="text-white font-medium">
-                  {subscription.liveEndUserCount.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Included</span>
-                <span className="text-gray-300">
-                  {subscription.includedUsers.toLocaleString()}
-                </span>
-              </div>
-              {subscription.liveEndUserCount > subscription.includedUsers && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Overage Users</span>
-                    <span className="text-amber-400">
-                      {(subscription.liveEndUserCount - subscription.includedUsers).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Est. Overage</span>
-                    <span className="text-amber-400 font-medium">
-                      ${subscription.estimatedOverage.toFixed(2)}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Usage Bar */}
-            <div className="mb-4">
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>Usage</span>
-                <span>
-                  {Math.min(100, Math.round((subscription.liveEndUserCount / subscription.includedUsers) * 100))}%
-                </span>
-              </div>
-              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all ${
-                    subscription.liveEndUserCount > subscription.includedUsers
-                      ? 'bg-amber-500'
-                      : subscription.liveEndUserCount > subscription.includedUsers * 0.8
-                      ? 'bg-yellow-500'
-                      : 'bg-green-500'
-                  }`}
-                  style={{
-                    width: `${Math.min(100, (subscription.liveEndUserCount / subscription.includedUsers) * 100)}%`
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Next Billing */}
-            {subscription.currentPeriodEnd && subscription.status !== 'canceled' && (
-              <div className="flex justify-between text-sm mb-4 text-gray-400">
-                <span>Next billing</span>
-                <span>{new Date(subscription.currentPeriodEnd).toLocaleDateString()}</span>
               </div>
             )}
 

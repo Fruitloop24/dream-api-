@@ -319,6 +319,7 @@ export default function Dashboard() {
             projects={projects}
             liveMetrics={liveTotals || undefined}
             loading={loadingTotals}
+            platformLiveEndUsers={subscription?.liveEndUserCount}
           />
         ) : selectedProject ? (
           <>

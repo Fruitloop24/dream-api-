@@ -20,11 +20,12 @@ interface TotalsViewProps {
   projects: Project[];
   liveMetrics?: LiveMetrics;
   loading?: boolean;
+  platformLiveEndUsers?: number;  // Total end users across all live SaaS projects
 }
 
 type TabType = 'all' | 'stores' | 'saas';
 
-export function TotalsView({ projects, liveMetrics, loading }: TotalsViewProps) {
+export function TotalsView({ projects, liveMetrics, loading, platformLiveEndUsers }: TotalsViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>('all');
 
   const saasProjects = projects.filter(p => p.type === 'saas');
@@ -97,6 +98,7 @@ export function TotalsView({ projects, liveMetrics, loading }: TotalsViewProps) 
           liveSaas={liveSaas}
           liveMetrics={liveMetrics}
           loading={loading}
+          platformLiveEndUsers={platformLiveEndUsers}
         />
       )}
     </div>
@@ -288,10 +290,12 @@ function LiveSaasTab({
   liveSaas,
   liveMetrics,
   loading,
+  platformLiveEndUsers,
 }: {
   liveSaas: Project[];
   liveMetrics?: LiveMetrics;
   loading?: boolean;
+  platformLiveEndUsers?: number;
 }) {
   if (liveSaas.length === 0) {
     return (
@@ -314,6 +318,30 @@ function LiveSaasTab({
           <h4 className="text-lg font-bold text-blue-200">Live SaaS Metrics</h4>
           <span className="text-sm text-gray-500">({liveSaas.length} project{liveSaas.length !== 1 ? 's' : ''})</span>
         </div>
+
+        {/* Platform Live End Users - Important for billing */}
+        {platformLiveEndUsers !== undefined && (
+          <div className="mb-4 bg-gradient-to-r from-emerald-900/30 to-teal-900/30 border border-emerald-700 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-emerald-300 mb-1">Total Live End Users</p>
+                <p className="text-4xl font-bold text-white">
+                  {platformLiveEndUsers.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">First 2,000 included in $19/mo plan</p>
+              </div>
+              {platformLiveEndUsers > 2000 && (
+                <div className="text-right">
+                  <p className="text-sm text-amber-400">Overage</p>
+                  <p className="text-2xl font-bold text-amber-400">
+                    +{(platformLiveEndUsers - 2000).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">@ $0.03/user</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {liveMetrics && !loading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
