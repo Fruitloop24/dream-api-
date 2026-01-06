@@ -226,13 +226,15 @@ export default {
         await env.TOKENS_KV.delete(`user:${userId}:secretKey:live`).catch(() => {});
 
         // Delete R2 assets for this platform (best effort)
-        try {
-          const listed = await env.ASSETS.list({ prefix: `${platformId}/` });
-          for (const obj of listed.objects) {
-            await env.ASSETS.delete(obj.key);
+        if (env.ASSETS) {
+          try {
+            const listed = await env.ASSETS.list({ prefix: `${platformId}/` });
+            for (const obj of listed.objects) {
+              await env.ASSETS.delete(obj.key);
+            }
+          } catch (e) {
+            console.warn('[Delete Project] R2 cleanup failed:', e);
           }
-        } catch (e) {
-          console.warn('[Delete Project] R2 cleanup failed:', e);
         }
 
         return new Response(JSON.stringify({ success: true, message: 'Project deleted permanently', deletedKeys: publishableKeys.length }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
