@@ -181,13 +181,29 @@ export async function handleStripeWebhook(
 
                 // Also update D1 platforms table
                 const userPlatformId = await getPlatformIdFromDb(userId, env);
-                if (userPlatformId) {
+                if (userPlatformId && session.subscription) {
+                    // Fetch the subscription to get actual status (trialing vs active)
+                    const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+
+                    let status: SubscriptionStatus;
+                    switch (sub.status) {
+                        case 'trialing': status = 'trialing'; break;
+                        case 'active': status = 'active'; break;
+                        case 'past_due': status = 'past_due'; break;
+                        default: status = 'active';
+                    }
+
+                    const trialEnd = sub.trial_end ? sub.trial_end * 1000 : null;
+                    const periodEnd = sub.current_period_end * 1000;
+
                     await updatePlatformSubscription(env, userPlatformId, {
                         stripeCustomerId: session.customer as string,
                         stripeSubscriptionId: session.subscription as string,
-                        subscriptionStatus: 'active',
+                        subscriptionStatus: status,
+                        trialEndsAt: trialEnd,
+                        currentPeriodEnd: periodEnd,
                     });
-                    console.log(`Updated platform ${userPlatformId} with subscription info`);
+                    console.log(`Updated platform ${userPlatformId} with subscription: ${status}, trial ends: ${trialEnd}`);
                 }
             } catch (err) {
                 const msg = err instanceof Error ? err.message : 'Unknown error';
