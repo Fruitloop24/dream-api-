@@ -22,11 +22,14 @@ Platform billing = how devs pay us $19/mo + overage.
 - [x] Daily cron - Report end-user counts to Stripe Meter
 - [x] Deploy secrets (STRIPE_PRICE_ID_METERED, STRIPE_METER_EVENT_NAME)
 
-### Frontend Dashboard Updates
-- [ ] Add billing section for devs
-- [ ] Show subscription status, trial countdown
-- [ ] Show live end-user count and estimated overage
-- [ ] Billing portal link
+### Frontend Dashboard Updates (DONE)
+- [x] SubscriptionDropdown in header (status + manage billing)
+- [x] Trial countdown display
+- [x] Billing portal link (Manage Billing button)
+- [x] Live end-user count in Totals > Live SaaS tab
+- [x] Overage display when > 2000 users
+- [x] Removed legacy tier limits (PLATFORM_TIERS)
+- [x] Simplified dropdown (usage details in Stripe portal)
 - [ ] Fix polling glitch on dashboard pages
 
 ---
