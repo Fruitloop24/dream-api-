@@ -242,7 +242,7 @@ export default function Landing() {
               </ul>
               <div className="flex gap-3">
                 <a href={CONFIG.links.saasDemo} className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Try Demo</a>
-                <a href={CONFIG.links.saasRepo} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>GitHub</a>
+                <a href="/templates" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>Learn More</a>
               </div>
             </div>
 
@@ -262,7 +262,7 @@ export default function Landing() {
               </ul>
               <div className="flex gap-3">
                 <a href={CONFIG.links.storeDemo} className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Try Demo</a>
-                <a href={CONFIG.links.storeRepo} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>GitHub</a>
+                <a href="/templates" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>Learn More</a>
               </div>
             </div>
           </div>

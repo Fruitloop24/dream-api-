@@ -48,7 +48,7 @@ export default function Templates() {
       ],
       demoUrl: CONFIG.links.saasDemo,
       githubUrl: CONFIG.links.saasRepo,
-      downloadUrl: 'https://github.com/panacea-tech/dream-saas-basic/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-saas-basic/archive/refs/heads/main.zip',
     },
     {
       name: 'Store Basic',
@@ -68,7 +68,7 @@ export default function Templates() {
       ],
       demoUrl: CONFIG.links.storeDemo,
       githubUrl: CONFIG.links.storeRepo,
-      downloadUrl: 'https://github.com/panacea-tech/dream-store-basic/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-store-basic/archive/refs/heads/main.zip',
     },
   ];
 

@@ -31,12 +31,12 @@ export const CONFIG = {
   // LINKS
   // -------------------------------------------------------------------------
   links: {
-    github: 'https://github.com/panacea-tech',
+    github: 'https://github.com/Fruitloop24',
     docs: '#', // TODO: Add docs URL
     saasDemo: '#', // TODO: Add SaaS demo URL
     storeDemo: '#', // TODO: Add Store demo URL
-    saasRepo: 'https://github.com/panacea-tech/dream-saas-basic',
-    storeRepo: 'https://github.com/panacea-tech/dream-store-basic',
+    saasRepo: 'https://github.com/Fruitloop24/dream-saas-basic',
+    storeRepo: 'https://github.com/Fruitloop24/dream-store-basic',
   },
 
   // -------------------------------------------------------------------------
