@@ -358,8 +358,6 @@ export async function handleCreateProducts(
     const { publishableKey, secretKey } = generateKeyPair(mode);
     const secretKeyHash = await hashSecretKey(secretKey);
 
-    console.log(`[Keys] Generated ${mode} keys: ${publishableKey}`);
-
     // =========================================================================
     // BUILD TIER CONFIG
     // Each tier is linked to the publishableKey (the project)

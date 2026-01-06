@@ -528,13 +528,7 @@ export default function ApiTierConfig() {
       throw new Error(errorData.message || errorData.error || 'Failed to promote');
     }
 
-    const data = await response.json();
-
-    // Show the new live keys
-    if (data.secretKey) {
-      alert(`Live keys created!\n\nPublishable Key: ${data.publishableKey}\n\nSecret Key: ${data.secretKey}\n\nSAVE THIS SECRET KEY NOW - you won't see it again!`);
-    }
-
+    // Navigate back to dashboard - keys are shown in KeyModal there
     navigate('/dashboard');
   };
 

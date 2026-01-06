@@ -150,7 +150,7 @@ export async function handlePromoteToLive(
   }
 
   const projectName = projectResult.name || 'Untitled Project';
-  const projectType = projectResult.projectType || 'saas';
+  const projectType = (projectResult.projectType || 'saas') as 'saas' | 'store';
 
   // Check if a live version already exists for this project (same name, live mode)
   const existingLiveKey = await env.DB.prepare(
@@ -322,8 +322,6 @@ export async function handlePromoteToLive(
 
     const { publishableKey, secretKey } = generateLiveKeyPair();
     const secretKeyHash = await hashSecretKey(secretKey);
-
-    console.log(`[Promote] Generated live keys: ${publishableKey}`);
 
     // =========================================================================
     // BUILD LIVE TIER CONFIG
