@@ -98,7 +98,7 @@ export default function Dashboard() {
     }
   }, [user, platformIdGenerated, paymentLoading, handlePayment]);
 
-  // Load projects + credentials + subscription once paid
+  // Load projects + credentials once paid
   useEffect(() => {
     if (hasPaid && projects.length === 0) {
       loadProjects().then(list => {
@@ -107,9 +107,15 @@ export default function Dashboard() {
         }
       });
       loadCredentials();
+    }
+  }, [hasPaid, projects.length, selectedPk, loadProjects, loadCredentials]);
+
+  // Load subscription independently (always refresh on mount)
+  useEffect(() => {
+    if (hasPaid) {
       loadSubscription();
     }
-  }, [hasPaid, projects.length, selectedPk, loadProjects, loadCredentials, loadSubscription]);
+  }, [hasPaid, loadSubscription]);
 
   // Load dashboard when project selected
   useEffect(() => {
