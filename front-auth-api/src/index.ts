@@ -339,16 +339,8 @@ export default {
         return new Response(JSON.stringify({ success: true, userId, usage: usage.usage }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Create checkout ($29/mo)
+      // Create checkout ($19/mo with 14-day trial)
       if (url.pathname === '/create-checkout' && request.method === 'POST') {
-        const client = await clerk(env);
-        const user = await client.users.getUser(userId);
-        const plan: PlatformPlan = (user.publicMetadata.plan as PlatformPlan) || 'free';
-        const rate = await checkRateLimit(userId, env);
-        if (!rate.allowed) return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        const usage = await trackUsage(userId, plan, env);
-        if (!usage.success) return new Response(JSON.stringify({ error: 'Tier limit reached', ...usage.usage }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
         const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-11-17.clover' });
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ['card'],
@@ -360,7 +352,7 @@ export default {
           client_reference_id: userId,
           metadata: { userId, tier: 'paid' },
         });
-        return new Response(JSON.stringify({ checkoutUrl: session.url, usage: usage.usage }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ checkoutUrl: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       // Upload asset (for product images before keys)
