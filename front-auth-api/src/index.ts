@@ -47,7 +47,7 @@
 
 import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
-import { Env, PlatformPlan, PlatformSubscriptionInfo, SubscriptionStatus } from './types';
+import { Env, PlatformSubscriptionInfo, SubscriptionStatus } from './types';
 import { handleStripeWebhook } from './webhook';
 import { ensurePlatformForUser, getPlatformIdFromDb } from './lib/auth';
 import { ensureApiKeySchema, ensurePlatformSchema } from './lib/schema';
@@ -60,26 +60,10 @@ import { getLiveEndUserCount, runDailyUsageReport } from './lib/usage';
 // ============================================================================ //
 
 const RATE_LIMIT_PER_MINUTE = 100;
-const PLATFORM_TIERS: Record<PlatformPlan, { limit: number; price: number; name: string }> = {
-  free: { name: 'Free', price: 0, limit: 5 },
-  paid: { name: 'Paid', price: 29, limit: 500 },
-};
 
 // ============================================================================ //
 // Helpers                                                                      //
 // ============================================================================ //
-
-function getCurrentPeriod() {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  const start = new Date(Date.UTC(year, month, 1));
-  const end = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
-  return {
-    start: start.toISOString().split('T')[0],
-    end: end.toISOString().split('T')[0],
-  };
-}
 
 function decodeBase64(data: string): Uint8Array {
   const binary = atob(data);
@@ -138,29 +122,6 @@ async function checkRateLimit(userId: string, env: Env): Promise<{ allowed: bool
   return { allowed: true, remaining: RATE_LIMIT_PER_MINUTE - count - 1 };
 }
 
-async function trackUsage(userId: string, plan: PlatformPlan, env: Env) {
-  const usageKey = `usage:${userId}`;
-  const raw = await env.USAGE_KV.get(usageKey);
-  const period = getCurrentPeriod();
-  const usage = raw ? JSON.parse(raw) as { usageCount: number; plan: PlatformPlan; periodStart?: string; periodEnd?: string } : {
-    usageCount: 0,
-    plan,
-    periodStart: period.start,
-    periodEnd: period.end,
-  };
-  if (!usage.periodStart || usage.periodStart !== period.start) {
-    usage.usageCount = 0;
-    usage.periodStart = period.start;
-    usage.periodEnd = period.end;
-  }
-  const limit = PLATFORM_TIERS[plan]?.limit || 0;
-  if (usage.usageCount >= limit) {
-    return { success: false, usage: { ...usage, limit, remaining: 0, message: 'Tier limit reached' } };
-  }
-  usage.usageCount += 1;
-  await env.USAGE_KV.put(usageKey, JSON.stringify(usage));
-  return { success: true, usage: { ...usage, limit, remaining: Math.max(0, limit - usage.usageCount) } };
-}
 
 async function getPublishableKeyFromDb(platformId: string, env: Env): Promise<string | null> {
   await ensureApiKeySchema(env);
@@ -327,24 +288,23 @@ export default {
         }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Verify auth + usage
+      // Verify auth (rate limit only, no tier limits)
       if (url.pathname === '/verify-auth' && request.method === 'POST') {
-        const client = await clerk(env);
-        const user = await client.users.getUser(userId);
-        const plan: PlatformPlan = (user.publicMetadata.plan as PlatformPlan) || 'free';
         const rate = await checkRateLimit(userId, env);
         if (!rate.allowed) return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        const usage = await trackUsage(userId, plan, env);
-        if (!usage.success) return new Response(JSON.stringify({ error: 'Tier limit reached', ...usage.usage }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        return new Response(JSON.stringify({ success: true, userId, usage: usage.usage }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ success: true, userId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Create checkout ($19/mo with 14-day trial)
+      // Create checkout ($19/mo + metered overage, 14-day trial)
       if (url.pathname === '/create-checkout' && request.method === 'POST') {
         const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-11-17.clover' });
+        const lineItems: any[] = [{ price: env.STRIPE_PRICE_ID, quantity: 1 }];
+        if (env.STRIPE_PRICE_ID_METERED) {
+          lineItems.push({ price: env.STRIPE_PRICE_ID_METERED });
+        }
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ['card'],
-          line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
+          line_items: lineItems,
           mode: 'subscription',
           subscription_data: { trial_period_days: 14 },
           success_url: `${env.FRONTEND_URL}/dashboard?payment=success`,
