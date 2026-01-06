@@ -183,7 +183,7 @@ export async function handleStripeWebhook(
                 const userPlatformId = await getPlatformIdFromDb(userId, env);
                 if (userPlatformId && session.subscription) {
                     // Fetch the subscription to get actual status (trialing vs active)
-                    const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+                    const sub = await stripe.subscriptions.retrieve(session.subscription as string) as Stripe.Subscription;
 
                     let status: SubscriptionStatus;
                     switch (sub.status) {
@@ -194,7 +194,7 @@ export async function handleStripeWebhook(
                     }
 
                     const trialEnd = sub.trial_end ? sub.trial_end * 1000 : null;
-                    const periodEnd = sub.current_period_end * 1000;
+                    const periodEnd = (sub as any).current_period_end * 1000;
 
                     await updatePlatformSubscription(env, userPlatformId, {
                         stripeCustomerId: session.customer as string,
@@ -234,7 +234,7 @@ export async function handleStripeWebhook(
             }
 
             const trialEnd = subscription.trial_end ? subscription.trial_end * 1000 : null;
-            const periodEnd = subscription.current_period_end * 1000;
+            const periodEnd = (subscription as any).current_period_end * 1000;
 
             // Update D1 first (by customer ID if we have it)
             let subPlatformId = await getPlatformIdByStripeCustomer(customerId, env);
