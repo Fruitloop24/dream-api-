@@ -5,6 +5,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { SignedIn, SignedOut, RedirectToSignIn, SignIn, SignUp } from '@clerk/clerk-react';
 import Landing from './pages/LandingNew';
+import Templates from './pages/Templates';
 import { getTheme } from './config';
 import Dashboard from './pages/DashboardNew';
 import ApiTierConfig from './pages/ApiTierConfig';
@@ -17,6 +18,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/templates" element={<Templates />} />
         <Route path="/sign-in/*" element={
           <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
             <SignIn routing="path" path="/sign-in" />

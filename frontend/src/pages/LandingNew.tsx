@@ -52,7 +52,7 @@ export default function Landing() {
             <a href="/" className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
               <a href="#dashboard" className={theme.navTextHover}>Dashboard</a>
-              <a href="#templates" className={theme.navTextHover}>Templates</a>
+              <a href="/templates" className={theme.navTextHover}>Templates</a>
               <a href="#pricing" className={theme.navTextHover}>Pricing</a>
               <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
             </div>
@@ -220,7 +220,10 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Free Templates + Live Demos</h2>
-            <p className={`${theme.muted} text-lg`}>Try our fully functional demos. Then clone and customize.</p>
+            <p className={`${theme.muted} text-lg mb-4`}>Try our fully functional demos. Then clone and customize.</p>
+            <a href="/templates" className={`inline-block px-6 py-2 ${secondaryBtn} text-sm`}>
+              View All Templates →
+            </a>
           </div>
           <div className="grid md:grid-cols-2 gap-8">
             {/* SaaS Template */}
