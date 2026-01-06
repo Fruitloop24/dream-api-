@@ -98,7 +98,7 @@ export async function handleStripeWebhook(
 
     // Verify webhook signature
     const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-        apiVersion: '2025-09-30.clover',
+        apiVersion: '2025-11-17.clover',
     });
 
     let event: Stripe.Event;

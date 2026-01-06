@@ -354,6 +354,7 @@ export default {
           payment_method_types: ['card'],
           line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
           mode: 'subscription',
+          subscription_data: { trial_period_days: 14 },
           success_url: `${env.FRONTEND_URL}/dashboard?payment=success`,
           cancel_url: `${env.FRONTEND_URL}/dashboard?payment=cancelled`,
           client_reference_id: userId,
@@ -515,7 +516,7 @@ export default {
         }
 
         const body = await request.json().catch(() => ({})) as { returnUrl?: string };
-        const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' });
+        const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-11-17.clover' });
 
         const session = await stripe.billingPortal.sessions.create({
           customer: platform.stripeCustomerId,
