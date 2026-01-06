@@ -4,8 +4,24 @@
 
 import { UserButton } from '@clerk/clerk-react';
 import { CONFIG } from '../../config';
+import { SubscriptionDropdown } from './SubscriptionDropdown';
+import type { PlatformSubscription } from '@/hooks/usePlatformSubscription';
 
-export function Header() {
+interface HeaderProps {
+  subscription?: PlatformSubscription | null;
+  subscriptionLoading?: boolean;
+  statusDisplay?: { label: string; color: string };
+  onManageBilling?: () => void;
+}
+
+export function Header({
+  subscription,
+  subscriptionLoading = false,
+  statusDisplay = { label: 'Loading', color: 'gray' },
+  onManageBilling,
+}: HeaderProps) {
+  const showSubscription = subscription !== undefined || subscriptionLoading;
+
   return (
     <header className="bg-gray-800 border-b border-gray-700">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -19,7 +35,17 @@ export function Header() {
             <a href={CONFIG.links.docs} className="hover:text-white transition">Docs</a>
           </nav>
         </div>
-        <UserButton />
+        <div className="flex items-center gap-4">
+          {showSubscription && onManageBilling && (
+            <SubscriptionDropdown
+              subscription={subscription ?? null}
+              loading={subscriptionLoading}
+              statusDisplay={statusDisplay}
+              onManageBilling={onManageBilling}
+            />
+          )}
+          <UserButton />
+        </div>
       </div>
     </header>
   );

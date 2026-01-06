@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 // Hooks
-import { useToast, useProjects, useCredentials, useDashboardData, usePayment } from '@/hooks';
+import { useToast, useProjects, useCredentials, useDashboardData, usePayment, usePlatformSubscription } from '@/hooks';
 
 // Layout components
 import { Header, ProjectSelector, DeleteConfirmBanner } from '@/components/layout';
@@ -50,6 +50,7 @@ export default function Dashboard() {
   const { credentials, showSecret, loadCredentials, toggleSecret, getSecretKey } = useCredentials();
   const { dashboard, products, loading: loadingDashboard, loadDashboard, loadProducts, clearDashboard, liveTotals, loadingTotals, loadLiveTotals, deleteCustomer } = useDashboardData();
   const { handlePayment, loading: paymentLoading } = usePayment();
+  const { subscription, loading: subscriptionLoading, loadSubscription, openBillingPortal, getStatusDisplay } = usePlatformSubscription();
 
   // Local state
   const [hasPaid, setHasPaid] = useState(false);
@@ -97,7 +98,7 @@ export default function Dashboard() {
     }
   }, [user, platformIdGenerated, paymentLoading, handlePayment]);
 
-  // Load projects + credentials once paid
+  // Load projects + credentials + subscription once paid
   useEffect(() => {
     if (hasPaid && projects.length === 0) {
       loadProjects().then(list => {
@@ -106,8 +107,9 @@ export default function Dashboard() {
         }
       });
       loadCredentials();
+      loadSubscription();
     }
-  }, [hasPaid, projects.length, selectedPk, loadProjects, loadCredentials]);
+  }, [hasPaid, projects.length, selectedPk, loadProjects, loadCredentials, loadSubscription]);
 
   // Load dashboard when project selected
   useEffect(() => {
@@ -233,7 +235,12 @@ export default function Dashboard() {
   if (projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-900 text-white">
-        <Header />
+        <Header
+          subscription={subscription}
+          subscriptionLoading={subscriptionLoading}
+          statusDisplay={getStatusDisplay()}
+          onManageBilling={openBillingPortal}
+        />
         <main className="container mx-auto px-4 py-8">
           <div className="mb-8">
             <h2 className="text-3xl font-bold mb-2">Welcome, {user?.firstName || 'there'}!</h2>
@@ -263,7 +270,12 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      <Header />
+      <Header
+        subscription={subscription}
+        subscriptionLoading={subscriptionLoading}
+        statusDisplay={getStatusDisplay()}
+        onManageBilling={openBillingPortal}
+      />
       <main className="container mx-auto px-4 py-8">
         {/* Welcome Header */}
         <div className="mb-6">
