@@ -7,7 +7,8 @@
 
 // End-user-api Clerk publishable key (shared across all devs)
 const CLERK_PUBLISHABLE_KEY = 'pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
-const CLERK_CDN_URL = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+// Pin to specific version to avoid breaking changes from Clerk updates
+const CLERK_CDN_URL = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.118.0/dist/clerk.browser.js';
 const JWT_TEMPLATE = 'end-user-api';
 
 // Clerk type (loaded dynamically from CDN)
