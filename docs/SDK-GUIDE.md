@@ -529,19 +529,37 @@ DREAM_PUBLISHABLE_KEY=pk_test_xxx
 
 ```typescript
 import type {
+  // Configuration
   DreamAPIConfig,
+
+  // Auth
+  ClerkUser,
+
+  // Customers
   Customer,
   CreateCustomerParams,
+
+  // Usage
   Usage,
   UsageTrackResult,
+
+  // Products & Pricing
   Tier,
   Product,
+
+  // Billing
   CheckoutResult,
   PortalResult,
+
+  // Dashboard
   DashboardMetrics,
+  DashboardCustomer,
+  Order,
+  WebhookStatus,
+
+  // Errors
   DreamAPIError,
   DreamAPIException,
-  ClerkUser,
 } from '@dream-api/sdk';
 ```
 

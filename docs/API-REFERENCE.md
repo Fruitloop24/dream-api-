@@ -159,7 +159,7 @@ Creates Stripe checkout for $19/mo Pro plan with 14-day trial.
 Payment method required upfront.
 ```
 
-**POST /create-portal** - Open developer billing portal
+**POST /billing-portal** - Open developer billing portal
 ```
 Auth: Clerk JWT (dream-api app)
 Body: { returnUrl?: string }
@@ -192,6 +192,71 @@ Events:
   - invoice.payment_failed: Handle failure
 ```
 
+### Developer Dashboard Endpoints
+
+These endpoints are used by the developer dashboard UI, not the public SDK.
+
+**POST /generate-platform-id** - Create new platform account
+```
+Auth: Clerk JWT (dream-api app)
+Response: { platformId: string }
+```
+
+**GET /get-platform-id** - Get existing platform ID
+```
+Auth: Clerk JWT (dream-api app)
+Response: { platformId: string }
+```
+
+**GET /get-credentials** - Get API keys and project info
+```
+Auth: Clerk JWT (dream-api app)
+Response: {
+  test: { publishableKey, secretKey, projectType, products },
+  live: { publishableKey, secretKey, projectType, products }
+}
+```
+
+**GET /projects** - List all projects for developer
+```
+Auth: Clerk JWT (dream-api app)
+Response: { projects: Project[] }
+```
+
+**POST /projects/rotate-key** - Rotate secret key
+```
+Auth: Clerk JWT (dream-api app)
+Body: { publishableKey: string }
+Response: { secretKey: string }
+```
+
+**POST /projects/regenerate-secret** - Generate new secret key
+```
+Auth: Clerk JWT (dream-api app)
+Body: { publishableKey: string }
+Response: { secretKey: string }
+```
+
+**POST /projects/delete** - Delete entire project
+```
+Auth: Clerk JWT (dream-api app)
+Body: { publishableKey: string }
+Response: { success: boolean }
+```
+
+**POST /upload-asset** - Upload product image
+```
+Auth: Clerk JWT (dream-api app)
+Body: FormData with file
+Response: { url: string }
+```
+
+**POST /verify-auth** - Verify auth (rate limit check)
+```
+Auth: Clerk JWT (dream-api app)
+Response: { valid: boolean }
+```
+
 ### Cron Jobs
 
 **Daily usage reporting** (0 0 * * *)
@@ -210,6 +275,104 @@ For each platform with active subscription:
 | Price: $19/mo | Monthly subscription price |
 | Price: $0.03/unit metered | End-user overage price |
 | Billing Meter: end_user_count | Tracks live end-users per platform |
+
+---
+
+## OAuth & Products (oauth-api)
+
+Stripe Connect OAuth and tier/product management for developers.
+All endpoints require Clerk JWT from dream-api app.
+
+### Stripe Connect
+
+**GET /authorize** - Start Stripe Connect OAuth
+```
+Auth: None (stateless redirect)
+Query: state (platform ID)
+Redirects to: Stripe Connect OAuth page
+```
+
+**GET /callback** - Handle Stripe OAuth callback
+```
+Auth: None
+Query: code, state
+Redirects to: Frontend with Stripe account ID
+```
+
+### Tier/Product Management
+
+**POST /create-products** - Create Stripe products and API keys
+```
+Auth: Clerk JWT (dream-api app)
+Body: { projectType: 'saas' | 'store', tiers: TierConfig[] }
+Response: {
+  testPublishableKey, testSecretKey,
+  livePublishableKey, liveSecretKey
+}
+```
+
+**GET /tiers** - List tiers for a platform
+```
+Auth: Clerk JWT (dream-api app)
+Query: publishableKey
+Response: { tiers: Tier[] }
+```
+
+**PUT /tiers** - Update tier properties
+```
+Auth: Clerk JWT (dream-api app)
+Body: { publishableKey, name, updates: { displayName?, price?, limit?, features?, popular? } }
+Response: { success: boolean }
+```
+
+**POST /tiers/add** - Add new tier to project
+```
+Auth: Clerk JWT (dream-api app)
+Body: { publishableKey, tier: TierConfig }
+Response: { tier: Tier }
+```
+
+**DELETE /tiers** - Remove a tier
+```
+Auth: Clerk JWT (dream-api app)
+Body: { publishableKey, tierName }
+Response: { success: boolean }
+```
+
+**POST /promote-to-live** - Create live products from test config
+```
+Auth: Clerk JWT (dream-api app)
+Body: { platformId }
+Response: { livePublishableKey, liveSecretKey }
+```
+
+---
+
+## Sign-Up Worker (sign-up)
+
+Handles end-user signup flow with metadata injection.
+
+**GET /signup** - Start signup flow
+```
+Auth: None
+Query: pk (publishable key), redirect (return URL)
+Action: Validates PK, redirects to Clerk hosted signup
+```
+
+**GET /callback** - Return from Clerk signup
+```
+Auth: None
+Query: Clerk callback params
+Action: Sets user metadata (publishableKey, plan), renders callback page
+```
+
+**POST /oauth/complete** - API endpoint for OAuth completion
+```
+Auth: Bearer JWT
+Body: { publishableKey }
+Action: Verify token, set metadata, sync to D1
+Response: { success: boolean }
+```
 
 ---
 
