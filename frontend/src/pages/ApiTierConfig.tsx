@@ -805,10 +805,11 @@ export default function ApiTierConfig() {
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={tier.price}
-                      onChange={(e) => {
+                      defaultValue={tier.price}
+                      key={`saas-price-${index}-${tier.priceId || 'new'}`}
+                      onBlur={(e) => {
                         const val = e.target.value.replace(/[^0-9.]/g, '');
-                        updateSaasTier(index, 'price', val === '' ? 0 : Number(val));
+                        updateSaasTier(index, 'price', val === '' ? 0 : parseFloat(val) || 0);
                       }}
                       placeholder="0"
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
@@ -906,10 +907,11 @@ export default function ApiTierConfig() {
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={product.price}
-                      onChange={(e) => {
+                      defaultValue={product.price}
+                      key={`store-price-${index}-${product.priceId || 'new'}`}
+                      onBlur={(e) => {
                         const val = e.target.value.replace(/[^0-9.]/g, '');
-                        updateStoreProduct(index, 'price', val === '' ? 0 : Number(val));
+                        updateStoreProduct(index, 'price', val === '' ? 0 : parseFloat(val) || 0);
                       }}
                       placeholder="49"
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
