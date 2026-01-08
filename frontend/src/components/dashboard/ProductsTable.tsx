@@ -59,7 +59,7 @@ export function ProductsTable({ project, products, onCopy }: ProductsTableProps)
                   </td>
                   <td className="py-3 pr-4 font-medium">{p.displayName || p.name}</td>
                   <td className="py-3 pr-4">
-                    <span className="text-green-400 font-bold">${(p.price || 0).toFixed(2)}</span>
+                    <span className="text-green-400 font-bold">${((p.price || 0) / 100).toFixed(2)}</span>
                   </td>
                   <td className="py-3 pr-4">
                     <div className="flex items-center gap-1">

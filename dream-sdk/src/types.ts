@@ -67,6 +67,7 @@ export interface UsageTrackResult {
 export interface Tier {
   name: string;
   displayName: string;
+  /** Price in cents (e.g., 2900 = $29.00) */
   price: number;
   limit: number;
   priceId: string;
@@ -80,6 +81,7 @@ export interface Product {
   name: string;
   displayName?: string;
   description?: string;
+  /** Price in cents (e.g., 4900 = $49.00) */
   price: number;
   currency?: string;
   priceId: string;

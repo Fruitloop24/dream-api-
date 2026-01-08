@@ -139,8 +139,8 @@ export async function handlePromoteToLive(
 
   // Get project info from api_keys table
   const projectResult = await env.DB.prepare(
-    `SELECT name, projectType, mode FROM api_keys WHERE publishableKey = ? AND platformId = ?`
-  ).bind(testPublishableKey, platformId).first<{ name: string; projectType: string; mode: string }>();
+    `SELECT name, projectType, mode, enableTax FROM api_keys WHERE publishableKey = ? AND platformId = ?`
+  ).bind(testPublishableKey, platformId).first<{ name: string; projectType: string; mode: string; enableTax: number | null }>();
 
   if (!projectResult) {
     return new Response(
@@ -151,6 +151,7 @@ export async function handlePromoteToLive(
 
   const projectName = projectResult.name || 'Untitled Project';
   const projectType = (projectResult.projectType || 'saas') as 'saas' | 'store';
+  const enableTax = !!projectResult.enableTax;
 
   // Check if a live version already exists for this project (same name, live mode)
   const existingLiveKey = await env.DB.prepare(
@@ -277,10 +278,10 @@ export async function handlePromoteToLive(
 
       const product = await productRes.json() as { id: string };
 
-      // Create live price
+      // Create live price (price already in cents)
       const priceParams = new URLSearchParams({
         product: product.id,
-        unit_amount: String(Math.round(tier.price * 100)),
+        unit_amount: String(Math.round(tier.price)), // Already in cents
         currency: 'usd',
         'metadata[platformId]': platformId,
         'metadata[tierName]': tier.name,
@@ -363,7 +364,7 @@ export async function handlePromoteToLive(
     // =========================================================================
 
     await ensurePlatform(env, platformId, userId);
-    await upsertApiKey(env, platformId, publishableKey, secretKeyHash, 'live', projectName, projectType);
+    await upsertApiKey(env, platformId, publishableKey, secretKeyHash, 'live', projectName, projectType, enableTax);
     await upsertTiers(env, platformId, liveTierConfig);
 
     // KV: Store live keys

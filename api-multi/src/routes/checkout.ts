@@ -22,7 +22,7 @@
 import { Env } from '../types';
 import { getPriceIdMap } from '../config/configLoader';
 import type { ClerkClient } from '@clerk/backend';
-import { ensureStripeTokenSchema } from '../services/d1';
+import { ensureStripeTokenSchema, getProjectSettings } from '../services/d1';
 
 /**
  * Get dev's Stripe access token from KV
@@ -157,8 +157,34 @@ export async function handleCreateCheckout(
 			throw new Error('Developer has not connected their Stripe account');
 		}
 
+		// Get project settings for tax configuration
+		const projectSettings = await getProjectSettings(env, publishableKey);
+
 		// Use origin from request for success/cancel URLs (handles changing hash URLs)
 		const frontendUrl = origin || 'https://app.panacea-tech.net';
+
+		// Build checkout session params
+		const checkoutParams: Record<string, string> = {
+			'success_url': `${frontendUrl}/dashboard?success=true`,
+			'cancel_url': `${frontendUrl}/dashboard?canceled=true`,
+			'customer_email': userEmail,
+			'client_reference_id': userId,
+			'mode': 'subscription',
+			'line_items[0][price]': priceId,
+			'line_items[0][quantity]': '1',
+			'metadata[userId]': userId,
+			'metadata[tier]': targetTier,
+			'metadata[publishableKey]': publishableKey,
+			'subscription_data[metadata][userId]': userId,
+			'subscription_data[metadata][tier]': targetTier,
+			'subscription_data[metadata][publishableKey]': publishableKey,
+		};
+
+		// Enable Stripe Tax if configured for this project
+		if (projectSettings?.enableTax) {
+			checkoutParams['automatic_tax[enabled]'] = 'true';
+			console.log(`[Checkout] Automatic tax enabled for project ${publishableKey}`);
+		}
 
 		// Create Stripe checkout session on DEV's Stripe account
 		// CRITICAL: Prefer dev's OAuth access token for Standard Connect; fallback to platform key + Stripe-Account
@@ -166,21 +192,7 @@ export async function handleCreateCheckout(
 		const checkoutSession = await fetch('https://api.stripe.com/v1/checkout/sessions', {
 			method: 'POST',
 			headers: stripeHeaders,
-			body: new URLSearchParams({
-				'success_url': `${frontendUrl}/dashboard?success=true`,
-				'cancel_url': `${frontendUrl}/dashboard?canceled=true`,
-				'customer_email': userEmail,
-				'client_reference_id': userId,
-				'mode': 'subscription',
-				'line_items[0][price]': priceId,
-				'line_items[0][quantity]': '1',
-				'metadata[userId]': userId,
-				'metadata[tier]': targetTier,
-				'metadata[publishableKey]': publishableKey,
-				'subscription_data[metadata][userId]': userId,
-				'subscription_data[metadata][tier]': targetTier,
-				'subscription_data[metadata][publishableKey]': publishableKey,
-			}).toString(),
+			body: new URLSearchParams(checkoutParams).toString(),
 		});
 
 		const session = await checkoutSession.json() as { url?: string; error?: { message: string } };

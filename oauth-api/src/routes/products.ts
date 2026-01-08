@@ -133,7 +133,7 @@ async function createStripePrice(
   productId: string,
   tier: {
     name: string;
-    price: number;
+    price: number; // Price in CENTS
     limit: number | 'unlimited';
     billingMode?: 'subscription' | 'one_off';
   },
@@ -141,7 +141,7 @@ async function createStripePrice(
 ): Promise<{ priceId: string }> {
   const params = new URLSearchParams({
     product: productId,
-    unit_amount: String(Math.round(tier.price * 100)), // Convert dollars to cents
+    unit_amount: String(Math.round(tier.price)), // Already in cents
     currency: 'usd',
     'metadata[platformId]': platformId,
     'metadata[tierName]': tier.name,
@@ -257,10 +257,11 @@ export async function handleCreateProducts(
     mode?: 'live' | 'test';
     projectName?: string;
     projectType?: 'saas' | 'store';
+    enableTax?: boolean;  // Enable Stripe automatic tax collection
     tiers: Array<{
       name: string;
       displayName: string;
-      price: number;
+      price: number;  // Price in cents
       limit: number | 'unlimited';
       billingMode?: 'subscription' | 'one_off';
       description?: string;
@@ -385,7 +386,8 @@ export async function handleCreateProducts(
       secretKeyHash,
       mode,
       projectName || 'Untitled Project',
-      projectType
+      projectType,
+      body.enableTax || false
     );
     await upsertTiers(env, platformId, tierConfig);
 

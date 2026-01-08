@@ -252,11 +252,11 @@ export async function handleUpdateTier(
       // Determine if this is a subscription or one-time price
       const isSubscription = currentTier.projectType === 'saas';
 
-      // Create new Stripe price
+      // Create new Stripe price (price already in cents)
       const priceParams = new URLSearchParams({
         product: currentTier.productId,
         currency: 'usd',
-        unit_amount: String(Math.round(updates.price * 100)),
+        unit_amount: String(Math.round(updates.price)), // Already in cents
       });
 
       if (isSubscription) {
@@ -527,7 +527,7 @@ export async function handleAddTier(
   const priceParams = new URLSearchParams({
     product: product.id,
     currency: 'usd',
-    unit_amount: String(Math.round(tier.price * 100)),
+    unit_amount: String(Math.round(tier.price)), // Already in cents
   });
 
   if (tierBillingMode === 'subscription') {

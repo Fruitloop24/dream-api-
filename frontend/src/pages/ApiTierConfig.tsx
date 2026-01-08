@@ -83,6 +83,7 @@ export default function ApiTierConfig() {
   const [loadingTiers, setLoadingTiers] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const [stripeConnected, setStripeConnected] = useState(false);
+  const [enableTax, setEnableTax] = useState(false);
 
   // Check URL params for stripe connected
   useEffect(() => {
@@ -139,7 +140,7 @@ export default function ApiTierConfig() {
             storeList.push({
               name: tier.name,
               displayName: tier.displayName || tier.name,
-              price: tier.price || 0,
+              price: (tier.price || 0) / 100, // Convert cents to dollars for display
               description: parsedFeatures.description || '',
               imageUrl: parsedFeatures.imageUrl || '',
               inventory: tier.inventory ?? null,
@@ -151,7 +152,7 @@ export default function ApiTierConfig() {
             saasList.push({
               name: tier.name,
               displayName: tier.displayName || tier.name,
-              price: tier.price || 0,
+              price: (tier.price || 0) / 100, // Convert cents to dollars for display
               limit: tier.limit === null ? 'unlimited' : tier.limit,
               popular: !!tier.popular,
               priceId: tier.priceId,
@@ -324,7 +325,7 @@ export default function ApiTierConfig() {
       tiers = saasTiers.map(t => ({
         name: t.name.toLowerCase().replace(/\s+/g, '_'),
         displayName: t.displayName,
-        price: t.price,
+        price: Math.round(t.price * 100), // Convert dollars to cents for API
         limit: t.limit,
         billingMode: 'subscription',
         popular: t.popular,
@@ -337,7 +338,7 @@ export default function ApiTierConfig() {
       tiers = storeProducts.map(p => ({
         name: p.name.toLowerCase().replace(/\s+/g, '_'),
         displayName: p.displayName,
-        price: p.price,
+        price: Math.round(p.price * 100), // Convert dollars to cents for API
         limit: 0,
         billingMode: 'one_off',
         features: p.features,
@@ -359,6 +360,7 @@ export default function ApiTierConfig() {
         mode,
         projectName: projectName.trim(),
         projectType: activeTab,
+        enableTax,
       }),
     });
 
@@ -390,7 +392,7 @@ export default function ApiTierConfig() {
     for (const tier of toUpdate) {
       const updates: any = {
         displayName: tier.displayName,
-        price: tier.price,
+        price: Math.round(tier.price * 100), // Convert dollars to cents for API
         popular: 'popular' in tier ? tier.popular : false,
       };
 
@@ -441,7 +443,7 @@ export default function ApiTierConfig() {
           tier: {
             name: tier.name.toLowerCase().replace(/\s+/g, '_'),
             displayName: tier.displayName,
-            price: tier.price,
+            price: Math.round(tier.price * 100), // Convert dollars to cents for API
             limit: 'limit' in tier ? (tier as SaasTier).limit : 0,
             billingMode: activeTab === 'saas' ? 'subscription' : 'one_off',
             features: 'features' in tier ? (tier as StoreProduct).features : '',
@@ -485,7 +487,7 @@ export default function ApiTierConfig() {
       tiers = saasTiers.map(t => ({
         name: t.name,
         displayName: t.displayName,
-        price: t.price,
+        price: Math.round(t.price * 100), // Convert dollars to cents for API
         limit: t.limit,
         billingMode: 'subscription',
         popular: t.popular,
@@ -494,7 +496,7 @@ export default function ApiTierConfig() {
       tiers = storeProducts.map(p => ({
         name: p.name,
         displayName: p.displayName,
-        price: p.price,
+        price: Math.round(p.price * 100), // Convert dollars to cents for API
         limit: 0,
         billingMode: 'one_off',
         features: p.features,
@@ -636,6 +638,37 @@ export default function ApiTierConfig() {
             </span>
           </div>
         </div>
+
+        {/* Tax Collection Toggle - Only for new projects */}
+        {!isEditMode && !isPromoteMode && (
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold mb-1">Tax Collection</h3>
+                <p className="text-sm text-gray-400">
+                  Enable Stripe Tax to automatically calculate and collect taxes at checkout.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableTax}
+                  onChange={(e) => setEnableTax(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            {enableTax && (
+              <div className="mt-3 p-3 bg-blue-900/20 border border-blue-800 rounded-lg">
+                <p className="text-xs text-blue-300">
+                  Stripe Tax will automatically calculate sales tax, VAT, and GST based on your customer's location.
+                  Make sure you have Stripe Tax enabled in your Stripe dashboard.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Type Chooser - Show for new projects before they pick a type */}
         {!isEditMode && !hasChosenType && (

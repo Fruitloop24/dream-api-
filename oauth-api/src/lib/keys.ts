@@ -35,6 +35,7 @@ import { ensureApiKeySchema } from './schema';
  * @param mode - 'test' or 'live'
  * @param name - Display name for this project
  * @param projectType - 'saas' or 'store' (LOCKED - can't change later)
+ * @param enableTax - Enable Stripe automatic tax collection
  */
 export async function upsertApiKey(
   env: Env,
@@ -43,7 +44,8 @@ export async function upsertApiKey(
   secretKeyHash: string,
   mode: 'live' | 'test' = 'live',
   name?: string,
-  projectType?: ProjectType
+  projectType?: ProjectType,
+  enableTax?: boolean
 ) {
   // Ensure schema has all columns
   await ensureApiKeySchema(env);
@@ -58,8 +60,9 @@ export async function upsertApiKey(
       status,
       mode,
       name,
-      projectType
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      projectType,
+      enableTax
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .bind(
       platformId,
@@ -68,7 +71,8 @@ export async function upsertApiKey(
       'active',
       mode,
       name || null,
-      projectType || null
+      projectType || null,
+      enableTax ? 1 : 0
     )
     .run();
 
@@ -114,9 +118,10 @@ export async function getApiKey(
   projectType: ProjectType | null;
   mode: string;
   name: string | null;
+  enableTax: boolean;
 } | null> {
   const row = await env.DB.prepare(`
-    SELECT platformId, projectType, mode, name
+    SELECT platformId, projectType, mode, name, enableTax
     FROM api_keys
     WHERE publishableKey = ?
     LIMIT 1
@@ -127,6 +132,7 @@ export async function getApiKey(
       projectType: string | null;
       mode: string;
       name: string | null;
+      enableTax: number | null;
     }>();
 
   if (!row) return null;
@@ -136,6 +142,7 @@ export async function getApiKey(
     projectType: row.projectType as ProjectType | null,
     mode: row.mode,
     name: row.name,
+    enableTax: !!row.enableTax,
   };
 }
 

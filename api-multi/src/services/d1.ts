@@ -84,6 +84,11 @@ export async function ensureApiKeySchema(env: Env) {
   try {
     await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN name TEXT').run();
   } catch {}
+
+  // enableTax - enable Stripe automatic tax collection
+  try {
+    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN enableTax INTEGER DEFAULT 0').run();
+  } catch {}
 }
 
 /**
@@ -249,6 +254,33 @@ export async function getModeForPublishableKey(
     .first<{ mode: string | null }>();
 
   return row?.mode ?? null;
+}
+
+/**
+ * Get project settings for a publishable key
+ * Used for checkout to check enableTax flag
+ */
+export async function getProjectSettings(
+  env: Env,
+  pk: string
+): Promise<{ enableTax: boolean; projectType: string | null } | null> {
+  await ensureApiKeySchema(env);
+
+  const row = await env.DB.prepare(`
+    SELECT enableTax, projectType
+    FROM api_keys
+    WHERE publishableKey = ?
+    LIMIT 1
+  `)
+    .bind(pk)
+    .first<{ enableTax: number | null; projectType: string | null }>();
+
+  if (!row) return null;
+
+  return {
+    enableTax: !!row.enableTax,
+    projectType: row.projectType,
+  };
 }
 
 // ============================================================================

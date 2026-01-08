@@ -25,7 +25,7 @@ export function TierCard({ tier, onCopy }: TierCardProps) {
         )}
       </div>
       <div className="mb-3">
-        <span className="text-2xl font-bold">${tier.price}</span>
+        <span className="text-2xl font-bold">${(tier.price / 100).toFixed(2)}</span>
         <span className="text-gray-400 text-sm">/mo</span>
       </div>
       <p className="text-sm text-gray-300 mb-3">

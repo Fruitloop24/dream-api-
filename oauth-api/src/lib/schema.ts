@@ -130,6 +130,11 @@ export async function ensureApiKeySchema(env: Env) {
   try {
     await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN projectId TEXT').run();
   } catch {}
+
+  // enableTax - enable Stripe automatic tax collection for this project
+  try {
+    await env.DB.prepare('ALTER TABLE api_keys ADD COLUMN enableTax INTEGER DEFAULT 0').run();
+  } catch {}
 }
 
 /**
