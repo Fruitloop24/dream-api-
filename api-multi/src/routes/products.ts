@@ -21,7 +21,7 @@
 import { Env } from '../types';
 import { getAllTiers } from '../config/configLoader';
 import { buildStripeHeaders, getDevStripeToken } from './checkout';
-import { ensureTierSchema } from '../services/d1';
+import { ensureTierSchema, getProjectSettings } from '../services/d1';
 
 type CartItem = {
   productId?: string;
@@ -157,6 +157,9 @@ export async function handleCartCheckout(
       throw new Error('Developer has not connected their Stripe account');
     }
 
+    // Get project settings for tax configuration
+    const projectSettings = await getProjectSettings(env, overridePublishableKey || publishableKey);
+
     const baseUrl = origin || 'https://app.panacea-tech.net';
     const successUrl = body.successUrl || `${baseUrl}/cart?success=true`;
     const cancelUrl = body.cancelUrl || `${baseUrl}/cart?canceled=true`;
@@ -170,6 +173,13 @@ export async function handleCartCheckout(
       'metadata[publishableKey]': publishableKey,
       'metadata[platformId]': platformId,
     });
+
+    // Enable Stripe Tax if configured for this project
+    if (projectSettings?.enableTax) {
+      params.set('automatic_tax[enabled]', 'true');
+      console.log(`[Cart] Automatic tax enabled for project ${publishableKey}`);
+    }
+
     lineItems.forEach((item, idx) => {
       params.set(`line_items[${idx}][price]`, item.price);
       params.set(`line_items[${idx}][quantity]`, item.quantity);
