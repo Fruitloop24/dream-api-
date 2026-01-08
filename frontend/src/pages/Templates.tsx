@@ -80,7 +80,7 @@ export default function Templates() {
           <div className="flex items-center justify-between">
             <a href="/" className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
-              <a href="/#dashboard" className={theme.navTextHover}>Dashboard</a>
+              <a href="/docs" className={theme.navTextHover}>Docs</a>
               <a href="/templates" className={`${accent.text} font-medium`}>Templates</a>
               <a href="/#pricing" className={theme.navTextHover}>Pricing</a>
               <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>

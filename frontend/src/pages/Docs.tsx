@@ -27,8 +27,12 @@ export default function Docs() {
             {CONFIG.appName}
           </a>
           <nav className="flex items-center gap-6">
+            <a href="/docs" className={`${accent.text} font-medium`}>Docs</a>
             <a href="/templates" className={`${theme.muted} hover:${theme.heading} transition-colors`}>
               Templates
+            </a>
+            <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={`${theme.muted} hover:${theme.heading} transition-colors`}>
+              GitHub
             </a>
             <a href="/sign-in" className={`px-4 py-2 rounded ${accent.bg} text-white ${accent.bgHover} transition-colors`}>
               Sign In
