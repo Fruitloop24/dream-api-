@@ -3,105 +3,56 @@
  * CORS MIDDLEWARE
  * ============================================================================
  *
- * Dynamic origin validation (no wildcard) with environment variable configuration
+ * Open CORS policy for multi-tenant API.
+ * Security is handled by publishable key validation + JWT authentication.
  */
 
 import { Env } from '../types';
 import { getSecurityHeaders } from './security';
 
 /**
- * CORS STRATEGY: Dynamic origin validation (no wildcard)
+ * CORS STRATEGY: Open access with echo-back
  *
- * WHY NO WILDCARD:
- * - Wildcard ('*') allows ANY website to call your API
- * - This exposes user JWTs and data to malicious sites
- * - We use explicit origin allowlist + regex patterns instead
- *
- * TWO WAYS TO CONFIGURE:
- *
- * METHOD 1: ENV VARIABLE (Recommended for Production)
+ * WHY OPEN CORS IS SAFE HERE:
  * ------------------------------------------------
- * Set ALLOWED_ORIGINS as comma-separated list:
+ * This is a multi-tenant API where developers deploy their apps to ANY domain
+ * (Vercel, Netlify, Cloudflare Pages, custom domains, etc.).
  *
- * wrangler secret put ALLOWED_ORIGINS
- * # Enter: https://clerk-frontend.pages.dev,https://app.panacea-tech.net
+ * Security is NOT provided by CORS origin checking. Instead:
  *
- * This allows dynamic updates without code changes.
+ * 1. PUBLIC ENDPOINTS (products.list, products.listTiers)
+ *    - Require valid publishable key (X-Publishable-Key header)
+ *    - Only return public data (prices, tier info)
+ *    - No sensitive data exposed even if called from malicious site
  *
- * METHOD 2: HARDCODED DEFAULTS (Development Fallback)
- * ------------------------------------------------
- * If ALLOWED_ORIGINS not set, uses defaults:
- * - localhost:5173 (Vite dev server)
- * - clerk-frontend.pages.dev (CF Pages production)
- * - app.panacea-tech.net (Custom domain)
+ * 2. AUTHENTICATED ENDPOINTS (usage.track, billing.checkout)
+ *    - Require valid publishable key
+ *    - Require valid JWT token (from Clerk, stored in user's browser)
+ *    - JWT is httpOnly cookie - malicious sites can't steal it
+ *    - Even if request is made, it's on behalf of the actual user
  *
- * REGEX PATTERNS (Always Active):
- * ------------------------------------------------
- * These patterns match dynamically generated URLs:
- * - *.clerk-frontend.pages.dev (CF Pages preview branches)
- * - *.vercel.app (Vercel deployments, for testing)
+ * 3. ADMIN ENDPOINTS (dashboard, customers.create)
+ *    - Require secret key (server-to-server only)
+ *    - Never called from browser
+ *    - CORS irrelevant
  *
- * HOW TO ADD NEW ORIGIN:
- * ------------------------------------------------
- * Option A: Update env var (no code change)
- *   wrangler secret put ALLOWED_ORIGINS
- *   # Add new origin to comma-separated list
- *
- * Option B: Update defaults below (requires redeploy)
- *   defaultAllowedOrigins: ['https://new-domain.com', ...]
- *
- * Option C: Add regex pattern (for wildcard subdomains)
- *   /^https:\/\/[a-z0-9-]+\.myapp\.com$/.test(origin)
- *
- * SECURITY NOTES:
- * ------------------------------------------------
- * - Origins aren't "secrets" (visible in Network tab)
- * - BUT limiting them prevents unauthorized API access
- * - Preview URLs use regex to avoid hardcoding thousands of hashes
- * - Localhost only allowed in dev (remove for production if needed)
+ * This matches how Stripe, Clerk, and other public APIs work.
+ * The publishable key identifies the developer's project.
+ * The JWT identifies and authorizes the end user.
  */
 export function getCorsHeaders(request: Request, env: Env): Record<string, string> {
-	const origin = request.headers.get('Origin') || '';
-	console.log(`[CORS Debug] Request Origin: ${origin}`);
+	// Echo back the requesting origin, or use * if no origin header
+	// This allows any domain to use the API while still enabling credentials
+	const origin = request.headers.get('Origin');
+	const allowOrigin = origin || '*';
 
-	// Parse allowed origins from env var OR use defaults
-	const defaultAllowedOrigins = [
-		'http://localhost:5173',               // Vite dev (frontend-v2)
-		'http://localhost:5174',               // Vite dev (fact-saas)
-		'http://localhost:8787',               // Wrangler dev (api)
-		'http://127.0.0.1:5500',               // Live Server (test-app)
-		'http://localhost:5500',               // Live Server alt
-	];
-
-	console.log(`[CORS Debug] env.ALLOWED_ORIGINS: ${env.ALLOWED_ORIGINS}`);
-	const allowedOrigins = env.ALLOWED_ORIGINS
-		? env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) // Parse from env var
-		: defaultAllowedOrigins;                             // Fall back to defaults
-	console.log(`[CORS Debug] Processed Allowed Origins: ${allowedOrigins.join(', ')}`);
-
-	// Check if origin is allowed (exact match OR regex pattern)
-	const isAllowedOrigin =
-		allowedOrigins.includes(origin) ||
-		/^https:\/\/[a-z0-9-]+\.dream-frontend-dyn\.pages\.dev$/.test(origin) ||
-		origin === 'https://dream-frontend-dyn.pages.dev';
-	console.log(`[CORS Debug] isAllowedOrigin: ${isAllowedOrigin}`);
-
-	// Debug logging (only in dev - remove for production if needed)
-	if (!isAllowedOrigin && origin) {
-		console.warn(`[CORS] Rejected origin: ${origin}`);
-		console.warn(`[CORS] Allowed origins: ${allowedOrigins.join(', ')}`);
-	}
-
-	// Build CORS headers with validated origin + security headers
-	const finalAllowOrigin = isAllowedOrigin ? origin : allowedOrigins[0];
-	console.log(`[CORS Debug] Final Access-Control-Allow-Origin: ${finalAllowOrigin}`);
 	return {
-		// If origin allowed, echo it back. Otherwise, use first allowed origin as safe fallback
-		'Access-Control-Allow-Origin': finalAllowOrigin,
+		'Access-Control-Allow-Origin': allowOrigin,
 		'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
 		'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform-User-Id, X-User-Id, X-User-Plan, X-Env, X-Publishable-Key, X-Clerk-Token',
+		'Access-Control-Allow-Credentials': 'true',
 		'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
-		...getSecurityHeaders(), // Add security headers to all responses
+		...getSecurityHeaders(),
 	};
 }
 

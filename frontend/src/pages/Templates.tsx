@@ -1,6 +1,6 @@
 /**
- * Templates Page - Showcase free templates with download links
- * Uses config.ts for consistent branding
+ * Templates Page - Showcase all free templates
+ * React + Next.js versions for SaaS, Store, Membership
  */
 
 import { getTheme, getAccent, CONFIG, getPrimaryButtonClasses, getSecondaryButtonClasses } from '../config';
@@ -8,12 +8,6 @@ import { getTheme, getAccent, CONFIG, getPrimaryButtonClasses, getSecondaryButto
 const CheckIcon = ({ className = '' }: { className?: string }) => (
   <svg className={`w-5 h-5 ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-  </svg>
-);
-
-const DownloadIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
   </svg>
 );
 
@@ -29,46 +23,57 @@ export default function Templates() {
   const primaryBtn = getPrimaryButtonClasses();
   const secondaryBtn = getSecondaryButtonClasses();
 
-  const templates = [
+  const reactTemplates = [
     {
       name: 'SaaS Basic',
       icon: '📊',
-      description: 'Perfect for AI tools, APIs, developer tools, or any subscription-based app.',
-      features: [
-        'React + TypeScript + Vite',
-        'Auth fully wired (sign up, sign in, sign out)',
-        'Billing integrated (checkout, portal)',
-        'Usage tracking with tier limits',
-        'Dashboard with usage display',
-        'Responsive landing page',
-      ],
-      aiCommands: [
-        { cmd: '/setup', desc: 'AI-guided configuration wizard' },
-        { cmd: '/pwa', desc: 'Make your app installable' },
-      ],
-      demoUrl: CONFIG.links.saasDemo,
-      githubUrl: CONFIG.links.saasRepo,
+      description: 'Usage-metered apps with subscription tiers. Perfect for AI tools, APIs, developer tools.',
+      features: ['Auth (sign up, sign in, sign out)', 'Usage tracking with limits', 'Subscription billing', 'Dashboard with usage display'],
+      githubUrl: CONFIG.links.saasBasic,
       downloadUrl: 'https://github.com/Fruitloop24/dream-saas-basic/archive/refs/heads/main.zip',
     },
     {
       name: 'Store Basic',
       icon: '🛒',
-      description: 'Perfect for digital products, merchandise, courses, or any e-commerce site.',
-      features: [
-        'React + TypeScript + Vite',
-        'Product catalog from dashboard',
-        'Shopping cart functionality',
-        'Guest checkout (no auth required)',
-        'Order confirmation flow',
-        'Responsive product grid',
-      ],
-      aiCommands: [
-        { cmd: '/setup', desc: 'AI-guided configuration wizard' },
-        { cmd: '/pwa', desc: 'Make your app installable' },
-      ],
-      demoUrl: CONFIG.links.storeDemo,
-      githubUrl: CONFIG.links.storeRepo,
+      description: 'E-commerce with guest checkout. Perfect for digital products, merch, courses.',
+      features: ['Product catalog from dashboard', 'Shopping cart', 'Guest checkout (no auth)', 'Inventory management'],
+      githubUrl: CONFIG.links.storeBasic,
       downloadUrl: 'https://github.com/Fruitloop24/dream-store-basic/archive/refs/heads/main.zip',
+    },
+    {
+      name: 'Membership Basic',
+      icon: '🔐',
+      description: 'Gated content with paid access. Perfect for courses, communities, premium content.',
+      features: ['Content gating (free vs paid)', 'Member dashboard', 'Subscription management', 'Upgrade prompts'],
+      githubUrl: CONFIG.links.membershipBasic,
+      downloadUrl: 'https://github.com/Fruitloop24/dream-membership-basic/archive/refs/heads/main.zip',
+    },
+  ];
+
+  const nextTemplates = [
+    {
+      name: 'SaaS Next',
+      icon: '📊',
+      description: 'Same features as SaaS Basic, built with Next.js App Router.',
+      features: ['Server components', 'SEO optimized', 'Edge-ready', 'App Router'],
+      githubUrl: CONFIG.links.saasNext,
+      downloadUrl: 'https://github.com/Fruitloop24/dream-saas-next/archive/refs/heads/main.zip',
+    },
+    {
+      name: 'Store Next',
+      icon: '🛒',
+      description: 'Same features as Store Basic, built with Next.js App Router.',
+      features: ['Server components', 'SEO optimized', 'Edge-ready', 'App Router'],
+      githubUrl: CONFIG.links.storeNext,
+      downloadUrl: 'https://github.com/Fruitloop24/dream-store-next/archive/refs/heads/main.zip',
+    },
+    {
+      name: 'Membership Next',
+      icon: '🔐',
+      description: 'Same features as Membership Basic, built with Next.js App Router.',
+      features: ['Server components', 'SEO optimized', 'Edge-ready', 'App Router'],
+      githubUrl: CONFIG.links.membershipNext,
+      downloadUrl: 'https://github.com/Fruitloop24/dream-membership-next/archive/refs/heads/main.zip',
     },
   ];
 
@@ -98,8 +103,8 @@ export default function Templates() {
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Free Templates</h1>
           <p className={`text-xl ${theme.muted} max-w-2xl mx-auto`}>
-            Production-ready React templates with auth, billing, and usage tracking already wired up.
-            Clone, customize with AI, and ship.
+            Production-ready apps with auth, billing, and usage tracking wired up.
+            Clone, run <code className={accent.text}>/setup</code>, and ship.
           </p>
         </div>
       </section>
@@ -115,14 +120,14 @@ export default function Templates() {
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
               <code className={`${accent.text} text-lg font-bold`}>/setup</code>
               <p className={`${theme.muted} mt-2`}>
-                Interactive wizard that configures your entire app. Set your brand name, colors,
-                publishable key, and content - all through conversation with AI.
+                Interactive wizard that configures everything. Brand name, colors,
+                API key, content - all through conversation with AI.
               </p>
             </div>
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
               <code className={`${accent.text} text-lg font-bold`}>/pwa</code>
               <p className={`${theme.muted} mt-2`}>
-                Make your app installable on any device. Adds service worker, manifest,
+                Make your app installable. Adds service worker, manifest,
                 and offline support. One command, full PWA.
               </p>
             </div>
@@ -130,78 +135,102 @@ export default function Templates() {
         </div>
       </section>
 
-      {/* Templates List */}
+      {/* PWA Section */}
       <section className="py-16 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="space-y-8">
-            {templates.map((template) => (
-              <div key={template.name} className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl overflow-hidden`}>
-                <div className="p-8">
-                  <div className="flex flex-col md:flex-row md:items-start gap-6">
-                    {/* Left: Info */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="text-4xl">{template.icon}</span>
-                        <h3 className="text-2xl font-bold">{template.name}</h3>
-                      </div>
-                      <p className={`${theme.muted} mb-6`}>{template.description}</p>
-
-                      {/* Features */}
-                      <div className="grid sm:grid-cols-2 gap-2 mb-6">
-                        {template.features.map((feature, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm">
-                            <CheckIcon className={accent.text} />
-                            <span className={theme.body}>{feature}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* AI Commands */}
-                      <div className={`${theme.cardBgAlt} rounded-lg p-4 mb-6`}>
-                        <p className={`text-sm font-medium mb-2 ${theme.muted}`}>AI Commands:</p>
-                        <div className="flex flex-wrap gap-4">
-                          {template.aiCommands.map((cmd) => (
-                            <div key={cmd.cmd} className="text-sm">
-                              <code className={accent.text}>{cmd.cmd}</code>
-                              <span className={theme.mutedMore}> - {cmd.desc}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Actions */}
-                    <div className="md:w-64 space-y-3">
-                      <a
-                        href={template.downloadUrl}
-                        className={`flex items-center justify-center gap-2 w-full py-3 ${primaryBtn}`}
-                      >
-                        <DownloadIcon />
-                        Download ZIP
-                      </a>
-                      <a
-                        href={template.githubUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`flex items-center justify-center gap-2 w-full py-3 ${secondaryBtn}`}
-                      >
-                        <GithubIcon />
-                        View on GitHub
-                      </a>
-                      {template.demoUrl !== '#' && (
-                        <a
-                          href={template.demoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`block w-full py-3 text-center ${theme.muted} ${theme.navTextHover} text-sm`}
-                        >
-                          Try Live Demo →
-                        </a>
-                      )}
-                    </div>
+        <div className="max-w-4xl mx-auto">
+          <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
+            <div className="flex items-start gap-4">
+              <span className="text-4xl">📱</span>
+              <div>
+                <h3 className="text-2xl font-bold mb-2">PWA Support (React Templates)</h3>
+                <p className={`${theme.muted} mb-4`}>
+                  Turn your web app into a native-like experience. Users can install it on their phone,
+                  access it from their home screen, and use it offline.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2">
+                    <CheckIcon className={accent.text} />
+                    <span className={theme.body}>Install on any device</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckIcon className={accent.text} />
+                    <span className={theme.body}>Works offline</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckIcon className={accent.text} />
+                    <span className={theme.body}>Home screen icon</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckIcon className={accent.text} />
+                    <span className={theme.body}>Push notifications (coming)</span>
                   </div>
                 </div>
+                <p className={`${theme.mutedMore} text-sm mt-4`}>
+                  Just run <code className={accent.text}>/pwa</code> in your AI editor after setup.
+                </p>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* React Templates */}
+      <section className="py-8 px-4">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-2xl font-bold mb-2">React Templates</h2>
+          <p className={`${theme.muted} mb-8`}>
+            Vite + React + TypeScript. Fast dev server, instant HMR. Best for getting started quickly.
+          </p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {reactTemplates.map((template) => (
+              <TemplateCard key={template.name} template={template} theme={theme} accent={accent} primaryBtn={primaryBtn} secondaryBtn={secondaryBtn} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Next.js Advantages */}
+      <section className={`py-16 px-4 ${theme.sectionAlt}`}>
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-2">Why Next.js?</h2>
+            <p className={theme.muted}>For production apps that need more</p>
+          </div>
+          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4 text-center`}>
+              <span className="text-2xl">⚡</span>
+              <h4 className="font-semibold mt-2">Server Components</h4>
+              <p className={`${theme.mutedMore} text-sm mt-1`}>Less JS shipped to client</p>
+            </div>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4 text-center`}>
+              <span className="text-2xl">🔍</span>
+              <h4 className="font-semibold mt-2">SEO Optimized</h4>
+              <p className={`${theme.mutedMore} text-sm mt-1`}>Server-rendered HTML</p>
+            </div>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4 text-center`}>
+              <span className="text-2xl">🌐</span>
+              <h4 className="font-semibold mt-2">Edge Ready</h4>
+              <p className={`${theme.mutedMore} text-sm mt-1`}>Deploy to Vercel Edge</p>
+            </div>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4 text-center`}>
+              <span className="text-2xl">📁</span>
+              <h4 className="font-semibold mt-2">App Router</h4>
+              <p className={`${theme.mutedMore} text-sm mt-1`}>Modern routing patterns</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Next.js Templates */}
+      <section className="py-8 px-4">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-2xl font-bold mb-2">Next.js Templates</h2>
+          <p className={`${theme.muted} mb-8`}>
+            Next.js 14 + App Router + TypeScript. Server components, SEO, edge deployment.
+          </p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {nextTemplates.map((template) => (
+              <TemplateCard key={template.name} template={template} theme={theme} accent={accent} primaryBtn={primaryBtn} secondaryBtn={secondaryBtn} />
             ))}
           </div>
         </div>
@@ -214,11 +243,11 @@ export default function Templates() {
           <div className={`${theme.codeBg} rounded-xl p-6 overflow-x-auto`}>
             <pre className="text-sm">
               <code>
-                <span className={theme.mutedMore}># 1. Download or clone</span>{'\n'}
-                <span className={accent.text}>git clone</span> https://github.com/panacea-tech/dream-saas-basic{'\n\n'}
+                <span className={theme.mutedMore}># 1. Clone any template</span>{'\n'}
+                <span className={accent.text}>git clone</span> https://github.com/Fruitloop24/dream-saas-basic{'\n\n'}
                 <span className={theme.mutedMore}># 2. Install dependencies</span>{'\n'}
                 <span className={accent.text}>npm install</span>{'\n\n'}
-                <span className={theme.mutedMore}># 3. Run AI setup (in Claude Code, Cursor, etc.)</span>{'\n'}
+                <span className={theme.mutedMore}># 3. Run AI setup (Claude Code, Cursor, Windsurf)</span>{'\n'}
                 <span className="text-amber-400">/setup</span>{'\n\n'}
                 <span className={theme.mutedMore}># 4. Start dev server</span>{'\n'}
                 <span className={accent.text}>npm run dev</span>{'\n\n'}
@@ -230,16 +259,42 @@ export default function Templates() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Self-Host Section */}
       <section className="py-16 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8 text-center`}>
+            <span className="text-4xl mb-4 block">🔧</span>
+            <h2 className="text-2xl font-bold mb-2">Self-Host the Backend</h2>
+            <p className={`${theme.muted} mb-6 max-w-lg mx-auto`}>
+              Want to run your own Dream API instance? <strong>plug-saas</strong> is the open-source backend.
+              Deploy your own auth + billing infrastructure on Cloudflare Workers.
+            </p>
+            <a
+              href={CONFIG.links.plugSaas}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-2 px-6 py-3 ${secondaryBtn}`}
+            >
+              <GithubIcon />
+              View plug-saas on GitHub
+            </a>
+            <p className={`${theme.mutedMore} text-sm mt-4`}>
+              MIT License - Do whatever you want with it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className={`py-16 px-4 ${theme.sectionAlt}`}>
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold mb-4">Ready to build?</h2>
           <p className={`${theme.muted} mb-8`}>
-            Get your API keys from the dashboard, download a template, and ship your product today.
+            Get your API keys, download a template, and ship your product today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a href="/sign-up" className={`px-8 py-4 ${primaryBtn} text-lg`}>Get API Keys</a>
-            <a href="/" className={`px-8 py-4 ${secondaryBtn} text-lg`}>Learn More</a>
+            <a href="/docs" className={`px-8 py-4 ${secondaryBtn} text-lg`}>Read the Docs</a>
           </div>
         </div>
       </section>
@@ -251,11 +306,56 @@ export default function Templates() {
             <p className={`${theme.mutedMore} text-sm`}>{CONFIG.footer.copyright}</p>
             <div className={`flex gap-6 text-sm ${theme.mutedMore}`}>
               <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
+              <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>plug-saas</a>
               <a href={CONFIG.links.docs} className={theme.navTextHover}>Documentation</a>
             </div>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// Template Card Component
+function TemplateCard({ template, theme, accent, primaryBtn, secondaryBtn }: {
+  template: { name: string; icon: string; description: string; features: string[]; githubUrl: string; downloadUrl: string };
+  theme: any;
+  accent: any;
+  primaryBtn: string;
+  secondaryBtn: string;
+}) {
+  return (
+    <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 flex flex-col`}>
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-3xl">{template.icon}</span>
+        <h3 className="text-xl font-bold">{template.name}</h3>
+      </div>
+      <p className={`${theme.muted} text-sm mb-4`}>{template.description}</p>
+      <div className="space-y-2 mb-6 flex-1">
+        {template.features.map((feature, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm">
+            <CheckIcon className={accent.text} />
+            <span className={theme.body}>{feature}</span>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        <a
+          href={template.downloadUrl}
+          className={`flex items-center justify-center gap-2 w-full py-2.5 ${primaryBtn} text-sm`}
+        >
+          Download ZIP
+        </a>
+        <a
+          href={template.githubUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex items-center justify-center gap-2 w-full py-2.5 ${secondaryBtn} text-sm`}
+        >
+          <GithubIcon />
+          GitHub
+        </a>
+      </div>
     </div>
   );
 }

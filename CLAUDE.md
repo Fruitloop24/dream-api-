@@ -140,10 +140,40 @@ AND publishableKey LIKE 'pk_live_%'
 
 Free templates to onboard devs to the API:
 
-| Template | Type | Purpose |
-|----------|------|---------|
-| `dream-saas-basic` | SaaS | Usage-metered apps, AI wrappers |
-| `dream-store-basic` | Store | E-commerce, guest checkout |
+| Template | Type | Purpose | GitHub |
+|----------|------|---------|--------|
+| `dream-saas-basic` | SaaS | Usage-metered apps, AI wrappers | Fruitloop24/dream-saas-basic |
+| `dream-saas-next` | SaaS | Next.js version | Fruitloop24/dream-saas-next |
+| `dream-store-basic` | Store | E-commerce, guest checkout | Fruitloop24/dream-store-basic |
+| `dream-store-next` | Store | Next.js version | Fruitloop24/dream-store-next |
+| `dream-membership-basic` | Membership | Content gating, paywalls | Fruitloop24/dream-membership-basic |
+| `dream-membership-next` | Membership | Next.js version | Fruitloop24/dream-membership-next |
+
+### Template Repository Structure
+
+**Important:** Templates are separate GitHub repos, ignored by the main dream-api repo.
+
+```
+dream-api/                    # Main platform repo
+├── api-multi/                # ✓ In main repo
+├── oauth-api/                # ✓ In main repo
+├── front-auth-api/           # ✓ In main repo
+├── dream-sdk/                # ✓ In main repo
+├── dream-saas-basic/         # ✗ Separate repo (gitignored)
+├── dream-saas-next/          # ✗ Separate repo (gitignored)
+├── dream-store-basic/        # ✗ Separate repo (gitignored)
+├── dream-store-next/         # ✗ Separate repo (gitignored)
+├── dream-membership-basic/   # ✗ Separate repo (gitignored)
+└── dream-membership-next/    # ✗ Separate repo (gitignored)
+```
+
+**Why separate repos?**
+- Devs clone individual templates, not entire platform
+- Each template has clean git history
+- Can be forked independently
+- Cleaner npm/GitHub discovery
+
+**Branch convention:** Templates use `master` branch (some older ones use `main`)
 
 ### Template Architecture (dream-saas-basic)
 
@@ -181,10 +211,16 @@ The config.ts has two layers:
 
 When user asks for custom branding (gradients, glassmorphism, custom colors), AI modifies the THEMES object directly. User never touches it.
 
+### Completed Template Types
+
+- **SaaS** - Usage-metered apps (React + Next.js) ✓
+- **Store** - E-commerce with guest checkout (React + Next.js) ✓
+- **Membership** - Content gating/paywalls (React + Next.js) ✓
+
 ### Planned
 
-- **More templates** - Gated content, courses, membership
-- **Framework variants** - Next.js, Vue versions
+- **Vue versions** - Vue/Nuxt variants of all templates
+- **/deploy command** - One-click deployment to Cloudflare/Vercel
 
 ## Security Summary
 

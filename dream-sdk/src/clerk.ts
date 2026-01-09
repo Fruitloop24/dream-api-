@@ -17,6 +17,7 @@ interface ClerkInstance {
   user?: {
     id: string;
     primaryEmailAddress?: { emailAddress: string };
+    emailAddresses?: Array<{ emailAddress: string }>;
     publicMetadata?: Record<string, unknown>;
   };
   session?: {
@@ -119,9 +120,14 @@ export class ClerkManager {
     const user = clerk.user;
     const metadata = user.publicMetadata || {};
 
+    // Get email - try primaryEmailAddress first, then fall back to emailAddresses array (for OAuth)
+    const email = user.primaryEmailAddress?.emailAddress
+      || user.emailAddresses?.[0]?.emailAddress
+      || '';
+
     return {
       id: user.id,
-      email: user.primaryEmailAddress?.emailAddress || '',
+      email,
       plan: (metadata.plan as string) || 'free',
       publishableKey: (metadata.publishableKey as string) || '',
     };

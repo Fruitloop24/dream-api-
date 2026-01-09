@@ -1,6 +1,6 @@
 {
   "name": "@dream-api/sdk",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Official SDK for Dream API - Auth, billing, and usage tracking in one API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

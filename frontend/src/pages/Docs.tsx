@@ -11,7 +11,7 @@ import { getTheme, getAccent, CONFIG } from '../config';
 
 type Tab = 'saas' | 'store' | 'api' | 'ai';
 
-const GITHUB_BASE = CONFIG.links.github;
+// Links now in CONFIG.links
 
 // AI Prompt for copy/paste into Claude Code, Cursor, Windsurf, etc.
 const AI_PROMPT = `I'm building with Dream API SDK. Here's the complete reference:
@@ -94,7 +94,6 @@ export default function Docs() {
                 <SidebarLink href="#quick-start" theme={theme}>Quick Start</SidebarLink>
                 <SidebarLink href="#react" theme={theme}>React</SidebarLink>
                 <SidebarLink href="#nextjs" theme={theme}>Next.js</SidebarLink>
-                <SidebarLink href="#vue" theme={theme}>Vue</SidebarLink>
                 <SidebarLink href="#gotchas" theme={theme}>Quick Tips</SidebarLink>
               </>
             )}
@@ -265,7 +264,7 @@ const { url } = await api.billing.openPortal();
 window.location.href = url;`}</CodeBlock>
 
         <TemplateLink
-          href={`${GITHUB_BASE}/tree/main/dream-saas-basic`}
+          href={CONFIG.links.saasBasic}
           theme={theme}
           accent={accent}
         >
@@ -276,6 +275,9 @@ window.location.href = url;`}</CodeBlock>
       {/* Next.js */}
       <section id="nextjs">
         <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Next.js</h2>
+        <p className={`${theme.body} mb-4`}>
+          Server components, app router, SEO-friendly. Best for production apps that need SSR.
+        </p>
         <CodeBlock theme={theme} title="lib/api.ts">{`import { DreamAPI } from '@dream-api/sdk';
 
 export const api = new DreamAPI({
@@ -311,60 +313,11 @@ export default function Dashboard() {
 }`}</CodeBlock>
 
         <TemplateLink
-          href={`${GITHUB_BASE}/tree/main/dream-saas-next`}
+          href={CONFIG.links.saasNext}
           theme={theme}
           accent={accent}
         >
-          Next.js Template → coming soon
-        </TemplateLink>
-      </section>
-
-      {/* Vue */}
-      <section id="vue">
-        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Vue</h2>
-        <CodeBlock theme={theme} title="composables/useApi.ts">{`import { ref, onMounted } from 'vue';
-import { DreamAPI } from '@dream-api/sdk';
-
-const api = new DreamAPI({
-  publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY
-});
-
-const ready = ref(false);
-
-export function useApi() {
-  onMounted(async () => {
-    if (!ready.value) {
-      await api.auth.init();
-      ready.value = true;
-    }
-  });
-
-  return { api, ready };
-}`}</CodeBlock>
-
-        <CodeBlock theme={theme} title="Usage in components">{`<script setup>
-import { useApi } from '@/composables/useApi';
-
-const { api } = useApi();
-
-async function handleAction() {
-  const result = await api.usage.track();
-  if (!result.success) {
-    // show upgrade modal
-  }
-}
-</script>
-
-<template>
-  <button @click="handleAction">Do Action</button>
-</template>`}</CodeBlock>
-
-        <TemplateLink
-          href={`${GITHUB_BASE}/tree/main/dream-saas-vue`}
-          theme={theme}
-          accent={accent}
-        >
-          Vue Template → coming soon
+          Next.js Template → dream-saas-next
         </TemplateLink>
       </section>
     </div>
@@ -419,7 +372,7 @@ const { url } = await api.products.cartCheckout({
 window.location.href = url;`}</CodeBlock>
 
         <TemplateLink
-          href={`${GITHUB_BASE}/tree/main/dream-store-basic`}
+          href={CONFIG.links.storeBasic}
           theme={theme}
           accent={accent}
         >
@@ -430,6 +383,9 @@ window.location.href = url;`}</CodeBlock>
       {/* Next.js */}
       <section id="nextjs">
         <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Next.js</h2>
+        <p className={`${theme.body} mb-4`}>
+          Server components, app router, SEO-friendly. Best for production stores that need SSR.
+        </p>
         <CodeBlock theme={theme} title="Server Component">{`// app/page.tsx
 import { DreamAPI } from '@dream-api/sdk';
 
@@ -467,48 +423,11 @@ export function CheckoutButton({ items }) {
 }`}</CodeBlock>
 
         <TemplateLink
-          href={`${GITHUB_BASE}/tree/main/dream-store-next`}
+          href={CONFIG.links.storeNext}
           theme={theme}
           accent={accent}
         >
-          Next.js Template → coming soon
-        </TemplateLink>
-      </section>
-
-      {/* Vue */}
-      <section id="vue">
-        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Vue</h2>
-        <CodeBlock theme={theme} title="Load Products">{`<script setup>
-import { ref, onMounted } from 'vue';
-import { DreamAPI } from '@dream-api/sdk';
-
-const api = new DreamAPI({
-  publishableKey: import.meta.env.VITE_DREAM_PUBLISHABLE_KEY
-});
-
-const products = ref([]);
-
-onMounted(async () => {
-  const res = await api.products.list();
-  products.value = res.products;
-});
-</script>`}</CodeBlock>
-
-        <CodeBlock theme={theme} title="Checkout">{`async function checkout(cart) {
-  const { url } = await api.products.cartCheckout({
-    items: cart,
-    successUrl: '/thank-you',
-    cancelUrl: '/cart'
-  });
-  window.location.href = url;
-}`}</CodeBlock>
-
-        <TemplateLink
-          href={`${GITHUB_BASE}/tree/main/dream-store-vue`}
-          theme={theme}
-          accent={accent}
-        >
-          Vue Template → coming soon
+          Next.js Template → dream-store-next
         </TemplateLink>
       </section>
     </div>
@@ -798,25 +717,25 @@ interface Usage {
       <section className={`p-6 rounded-lg ${theme.cardBg}`}>
         <h3 className={`text-lg font-semibold ${theme.heading} mb-2`}>Templates</h3>
         <p className={`${theme.muted} mb-4`}>
-          Pre-built React apps with everything wired up. Clone and customize.
+          Production-ready apps with everything wired up. Clone and customize with AI.
         </p>
-        <div className="flex flex-wrap gap-4">
-          <a
-            href={`${GITHUB_BASE}/tree/main/dream-saas-basic`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`inline-flex items-center gap-2 ${accent.text} hover:underline`}
-          >
-            dream-saas-basic →
-          </a>
-          <a
-            href={`${GITHUB_BASE}/tree/main/dream-store-basic`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`inline-flex items-center gap-2 ${accent.text} hover:underline`}
-          >
-            dream-store-basic →
-          </a>
+        <div className="space-y-3">
+          <div>
+            <p className={`text-xs font-semibold ${theme.muted} mb-2`}>React (Vite)</p>
+            <div className="flex flex-wrap gap-4">
+              <a href={CONFIG.links.saasBasic} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline text-sm`}>dream-saas-basic →</a>
+              <a href={CONFIG.links.storeBasic} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline text-sm`}>dream-store-basic →</a>
+              <a href={CONFIG.links.membershipBasic} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline text-sm`}>dream-membership-basic →</a>
+            </div>
+          </div>
+          <div>
+            <p className={`text-xs font-semibold ${theme.muted} mb-2`}>Next.js</p>
+            <div className="flex flex-wrap gap-4">
+              <a href={CONFIG.links.saasNext} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline text-sm`}>dream-saas-next →</a>
+              <a href={CONFIG.links.storeNext} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline text-sm`}>dream-store-next →</a>
+              <a href={CONFIG.links.membershipNext} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline text-sm`}>dream-membership-next →</a>
+            </div>
+          </div>
         </div>
       </section>
     </div>

@@ -31,12 +31,18 @@ export const CONFIG = {
   // LINKS
   // -------------------------------------------------------------------------
   links: {
-    github: 'https://github.com/panacea-tech/dream-api',
+    github: 'https://github.com/Fruitloop24',
     docs: '/docs',
-    saasDemo: '#', // TODO: Add SaaS demo URL
-    storeDemo: '#', // TODO: Add Store demo URL
-    saasRepo: 'https://github.com/panacea-tech/dream-api/tree/main/dream-saas-basic',
-    storeRepo: 'https://github.com/panacea-tech/dream-api/tree/main/dream-store-basic',
+    // Templates - React (Vite)
+    saasBasic: 'https://github.com/Fruitloop24/dream-saas-basic',
+    storeBasic: 'https://github.com/Fruitloop24/dream-store-basic',
+    membershipBasic: 'https://github.com/Fruitloop24/dream-membership-basic',
+    // Templates - Next.js
+    saasNext: 'https://github.com/Fruitloop24/dream-saas-next',
+    storeNext: 'https://github.com/Fruitloop24/dream-store-next',
+    membershipNext: 'https://github.com/Fruitloop24/dream-membership-next',
+    // Self-host backend
+    plugSaas: 'https://github.com/Fruitloop24/plug-saas',
   },
 
   // -------------------------------------------------------------------------

@@ -78,6 +78,12 @@ temp/
 # Other
 value.txt
 
-# Templates (separate repos)
+# Templates (separate repos - each has its own GitHub repo)
+# Basic templates (React + Vite)
 dream-saas-basic/
 dream-store-basic/
+dream-membership-basic/
+# Next.js templates
+dream-saas-next/
+dream-store-next/
+dream-membership-next/
