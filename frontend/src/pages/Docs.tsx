@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { getTheme, getAccent, CONFIG } from '../config';
 
-type Tab = 'saas' | 'store' | 'ai';
+type Tab = 'saas' | 'store' | 'api' | 'ai';
 
 const GITHUB_BASE = CONFIG.links.github;
 
@@ -89,7 +89,7 @@ export default function Docs() {
             <p className={`text-xs font-semibold uppercase tracking-wider ${theme.muted} mb-3`}>
               On this page
             </p>
-            {activeTab !== 'ai' ? (
+            {(activeTab === 'saas' || activeTab === 'store') && (
               <>
                 <SidebarLink href="#quick-start" theme={theme}>Quick Start</SidebarLink>
                 <SidebarLink href="#react" theme={theme}>React</SidebarLink>
@@ -97,7 +97,19 @@ export default function Docs() {
                 <SidebarLink href="#vue" theme={theme}>Vue</SidebarLink>
                 <SidebarLink href="#gotchas" theme={theme}>Quick Tips</SidebarLink>
               </>
-            ) : (
+            )}
+            {activeTab === 'api' && (
+              <>
+                <SidebarLink href="#install" theme={theme}>Installation</SidebarLink>
+                <SidebarLink href="#auth" theme={theme}>Auth</SidebarLink>
+                <SidebarLink href="#usage" theme={theme}>Usage Tracking</SidebarLink>
+                <SidebarLink href="#billing" theme={theme}>Billing</SidebarLink>
+                <SidebarLink href="#products" theme={theme}>Products</SidebarLink>
+                <SidebarLink href="#backend" theme={theme}>Backend (Admin)</SidebarLink>
+                <SidebarLink href="#types" theme={theme}>Types</SidebarLink>
+              </>
+            )}
+            {activeTab === 'ai' && (
               <>
                 <SidebarLink href="#" theme={theme}>Copy Prompt</SidebarLink>
                 <SidebarLink href="/templates" theme={theme}>Templates</SidebarLink>
@@ -111,10 +123,10 @@ export default function Docs() {
           {/* Title */}
           <h1 className={`text-4xl font-bold ${theme.heading} mb-4`}>Documentation</h1>
           <p className={`text-lg ${theme.body} mb-8`}>
-            {activeTab === 'ai'
-              ? 'Give your AI editor everything it needs to build with Dream API.'
-              : `One SDK. One key. Auth, billing, and ${activeTab === 'saas' ? 'usage tracking' : 'checkout'} included.`
-            }
+            {activeTab === 'ai' && 'Give your AI editor everything it needs to build with Dream API.'}
+            {activeTab === 'api' && 'Complete SDK reference. Every method, type, and return value.'}
+            {activeTab === 'saas' && 'One SDK. One key. Auth, billing, and usage tracking included.'}
+            {activeTab === 'store' && 'One SDK. One key. Auth, billing, and checkout included.'}
           </p>
 
           {/* Tabs */}
@@ -136,6 +148,14 @@ export default function Docs() {
               Store
             </TabButton>
             <TabButton
+              active={activeTab === 'api'}
+              onClick={() => setActiveTab('api')}
+              theme={theme}
+              accent={accent}
+            >
+              API Reference
+            </TabButton>
+            <TabButton
               active={activeTab === 'ai'}
               onClick={() => setActiveTab('ai')}
               theme={theme}
@@ -148,10 +168,11 @@ export default function Docs() {
           {/* Content */}
           {activeTab === 'saas' && <SaasContent theme={theme} accent={accent} />}
           {activeTab === 'store' && <StoreContent theme={theme} accent={accent} />}
+          {activeTab === 'api' && <ApiReferenceContent theme={theme} accent={accent} />}
           {activeTab === 'ai' && <AiContent theme={theme} accent={accent} />}
 
           {/* Gotchas - shared (only show for saas/store tabs) */}
-          {activeTab !== 'ai' && (
+          {(activeTab === 'saas' || activeTab === 'store') && (
             <section id="gotchas" className={`mt-16 pt-8 border-t ${theme.divider}`}>
               <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Quick Tips</h2>
               <div className="space-y-4">
@@ -582,6 +603,221 @@ function AiContent({ theme, accent }: { theme: any; accent: any }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </a>
+      </section>
+    </div>
+  );
+}
+
+// =============================================================================
+// API Reference Content
+// =============================================================================
+
+function ApiReferenceContent({ theme, accent }: { theme: any; accent: any }) {
+  return (
+    <div className="space-y-12">
+      {/* Installation */}
+      <section id="install">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Installation</h2>
+        <CodeBlock theme={theme}>{`npm install @dream-api/sdk`}</CodeBlock>
+        <CodeBlock theme={theme} title="Frontend (PK only)">{`import { DreamAPI } from '@dream-api/sdk';
+
+const api = new DreamAPI({
+  publishableKey: 'pk_test_xxx'
+});`}</CodeBlock>
+        <CodeBlock theme={theme} title="Backend (SK + PK)">{`import { DreamAPI } from '@dream-api/sdk';
+
+const api = new DreamAPI({
+  secretKey: 'sk_test_xxx',
+  publishableKey: 'pk_test_xxx'
+});`}</CodeBlock>
+      </section>
+
+      {/* Auth */}
+      <section id="auth">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Auth</h2>
+        <p className={`${theme.body} mb-4`}>Frontend only. Initialize once on app load.</p>
+        <CodeBlock theme={theme}>{`// Initialize (call once in useEffect/onMounted)
+await api.auth.init();
+
+// Get auth URLs
+api.auth.getSignUpUrl({ redirect: '/dashboard' })  // → URL string
+api.auth.getSignInUrl({ redirect: '/dashboard' })  // → URL string
+api.auth.getCustomerPortalUrl()                    // → URL string (account settings)
+
+// Check auth state
+api.auth.isSignedIn()  // → boolean
+api.auth.getUser()     // → { id, email, plan } or null
+
+// Sign out
+await api.auth.signOut()`}</CodeBlock>
+      </section>
+
+      {/* Usage */}
+      <section id="usage">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Usage Tracking</h2>
+        <p className={`${theme.body} mb-4`}>Track billable actions. Requires signed-in user.</p>
+        <CodeBlock theme={theme}>{`// Track a usage event (increments counter)
+const result = await api.usage.track();
+// → { success: true, usage: { usageCount, limit, remaining, plan } }
+
+if (!result.success) {
+  // User hit their limit - show upgrade prompt
+}
+
+// Check usage without incrementing
+const usage = await api.usage.check();
+// → { usageCount, limit, remaining, plan, periodStart, periodEnd }`}</CodeBlock>
+      </section>
+
+      {/* Billing */}
+      <section id="billing">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Billing</h2>
+        <p className={`${theme.body} mb-4`}>Subscription checkout and management. Requires signed-in user.</p>
+        <CodeBlock theme={theme}>{`// Create checkout session for upgrade
+const { url } = await api.billing.createCheckout({
+  tier: 'pro',              // or priceId: 'price_xxx'
+  successUrl: '/dashboard',
+  cancelUrl: '/pricing'
+});
+window.location.href = url;
+
+// Open billing portal (manage subscription)
+const { url } = await api.billing.openPortal({
+  returnUrl: '/dashboard'
+});
+window.location.href = url;`}</CodeBlock>
+      </section>
+
+      {/* Products */}
+      <section id="products">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Products</h2>
+        <p className={`${theme.body} mb-4`}>Public endpoints. No auth required.</p>
+        <CodeBlock theme={theme}>{`// List subscription tiers (SaaS)
+const { tiers } = await api.products.listTiers();
+// → [{ name, displayName, price, limit, priceId, features, popular }]
+
+// List products (Store)
+const { products } = await api.products.list();
+// → [{ name, displayName, price, priceId, imageUrl, inventory, soldOut, features }]
+
+// Guest checkout (Store - no auth needed)
+const { url } = await api.products.cartCheckout({
+  items: [
+    { priceId: 'price_xxx', quantity: 2 },
+    { priceId: 'price_yyy', quantity: 1 }
+  ],
+  customerEmail: 'customer@example.com',  // optional
+  successUrl: '/thank-you',
+  cancelUrl: '/cart'
+});
+window.location.href = url;`}</CodeBlock>
+        <div className={`mt-4 p-4 rounded-lg ${theme.cardBg}`}>
+          <p className={`text-sm ${theme.muted}`}>
+            <strong>Note:</strong> <code>price</code> is in cents. Divide by 100 for display: <code>${`{(product.price / 100).toFixed(2)}`}</code>
+          </p>
+        </div>
+      </section>
+
+      {/* Backend / Admin */}
+      <section id="backend">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Backend (Admin)</h2>
+        <p className={`${theme.body} mb-4`}>Requires secret key. Server-side only.</p>
+
+        <h3 className={`text-lg font-semibold ${theme.heading} mt-6 mb-3`}>Customers</h3>
+        <CodeBlock theme={theme}>{`// Create customer
+const { customer } = await api.customers.create({
+  email: 'user@example.com',
+  firstName: 'John',
+  lastName: 'Doe',
+  plan: 'free'
+});
+
+// Get customer
+const { customer } = await api.customers.get('user_xxx');
+
+// Update customer plan
+const { customer } = await api.customers.update('user_xxx', {
+  plan: 'pro'
+});
+
+// Delete customer
+const { success } = await api.customers.delete('user_xxx');`}</CodeBlock>
+
+        <h3 className={`text-lg font-semibold ${theme.heading} mt-6 mb-3`}>Dashboard</h3>
+        <CodeBlock theme={theme}>{`// Get dashboard metrics
+const dashboard = await api.dashboard.get();
+// → {
+//   activeSubscriptions, cancelingSubscriptions, mrr,
+//   usageThisPeriod, customers, tiers, webhookStatus
+// }
+
+// Get totals across all projects
+const totals = await api.dashboard.getTotals();
+// → { totalRevenue, totalCustomers, totalMRR }`}</CodeBlock>
+      </section>
+
+      {/* Types */}
+      <section id="types">
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Types</h2>
+        <CodeBlock theme={theme}>{`interface Tier {
+  name: string;
+  displayName: string;
+  price: number;        // cents
+  limit: number;
+  priceId: string;
+  productId: string;
+  features?: string[];
+  popular?: boolean;
+}
+
+interface Product {
+  name: string;
+  displayName?: string;
+  description?: string;
+  price: number;        // cents
+  priceId: string;
+  productId: string;
+  imageUrl?: string;
+  inventory?: number;
+  soldOut?: boolean;
+  features?: string[];
+}
+
+interface Usage {
+  userId: string;
+  plan: string;
+  usageCount: number;
+  limit: number | 'unlimited';
+  remaining: number | 'unlimited';
+  periodStart: string;
+  periodEnd: string;
+}`}</CodeBlock>
+      </section>
+
+      {/* Templates */}
+      <section className={`p-6 rounded-lg ${theme.cardBg}`}>
+        <h3 className={`text-lg font-semibold ${theme.heading} mb-2`}>Templates</h3>
+        <p className={`${theme.muted} mb-4`}>
+          Pre-built React apps with everything wired up. Clone and customize.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href={`${GITHUB_BASE}/tree/main/dream-saas-basic`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`inline-flex items-center gap-2 ${accent.text} hover:underline`}
+          >
+            dream-saas-basic →
+          </a>
+          <a
+            href={`${GITHUB_BASE}/tree/main/dream-store-basic`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`inline-flex items-center gap-2 ${accent.text} hover:underline`}
+          >
+            dream-store-basic →
+          </a>
+        </div>
       </section>
     </div>
   );
