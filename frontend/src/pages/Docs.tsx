@@ -9,9 +9,50 @@
 import { useState } from 'react';
 import { getTheme, getAccent, CONFIG } from '../config';
 
-type Tab = 'saas' | 'store';
+type Tab = 'saas' | 'store' | 'ai';
 
 const GITHUB_BASE = CONFIG.links.github;
+
+// AI Prompt for copy/paste into Claude Code, Cursor, Windsurf, etc.
+const AI_PROMPT = `I'm building with Dream API SDK. Here's the complete reference:
+
+## Installation
+npm install @dream-api/sdk
+
+## Setup
+import { DreamAPI } from '@dream-api/sdk';
+const api = new DreamAPI({ publishableKey: 'pk_xxx' });
+
+## SaaS Methods (5 core)
+api.auth.init()                                    // Call once on load, client-side only
+api.auth.getSignUpUrl({ redirect: '/dashboard' })  // Returns URL string for new users
+api.auth.getSignInUrl({ redirect: '/dashboard' })  // Returns URL string for returning users
+api.usage.track()                                  // Returns { success, usage: { usageCount, limit, remaining } }
+api.usage.check()                                  // Read usage without incrementing
+api.billing.createCheckout({ tier, successUrl, cancelUrl })  // Returns { url }
+api.billing.openPortal()                           // Returns { url } for billing management
+api.products.listTiers()                           // Returns { tiers } for pricing page
+
+## Store Methods (2 core)
+api.products.list()                                // Returns { products } with price, imageUrl, soldOut
+api.products.cartCheckout({ items, successUrl, cancelUrl })  // Returns { url }, items = [{ priceId, quantity }]
+
+## Environment Variables
+VITE_DREAM_PUBLISHABLE_KEY=pk_xxx          (Vite/React)
+NEXT_PUBLIC_DREAM_PUBLISHABLE_KEY=pk_xxx   (Next.js)
+
+## Key Rules
+- Publishable key is safe for frontend (like Stripe)
+- auth.init() is client-side only - call in useEffect/onMounted
+- features is an array, not a string - use .map() not .split()
+- Prices, tiers, products are controlled in Dream API dashboard
+- price is in cents - divide by 100 for display
+
+## User Object
+const user = api.auth.getUser();  // { id, email, plan, publishableKey } or null
+api.auth.isSignedIn()             // boolean
+
+Help me build my app using this SDK.`;
 
 export default function Docs() {
   const theme = getTheme();
@@ -48,11 +89,20 @@ export default function Docs() {
             <p className={`text-xs font-semibold uppercase tracking-wider ${theme.muted} mb-3`}>
               On this page
             </p>
-            <SidebarLink href="#quick-start" theme={theme}>Quick Start</SidebarLink>
-            <SidebarLink href="#react" theme={theme}>React</SidebarLink>
-            <SidebarLink href="#nextjs" theme={theme}>Next.js</SidebarLink>
-            <SidebarLink href="#vue" theme={theme}>Vue</SidebarLink>
-            <SidebarLink href="#gotchas" theme={theme}>Gotchas</SidebarLink>
+            {activeTab !== 'ai' ? (
+              <>
+                <SidebarLink href="#quick-start" theme={theme}>Quick Start</SidebarLink>
+                <SidebarLink href="#react" theme={theme}>React</SidebarLink>
+                <SidebarLink href="#nextjs" theme={theme}>Next.js</SidebarLink>
+                <SidebarLink href="#vue" theme={theme}>Vue</SidebarLink>
+                <SidebarLink href="#gotchas" theme={theme}>Quick Tips</SidebarLink>
+              </>
+            ) : (
+              <>
+                <SidebarLink href="#" theme={theme}>Copy Prompt</SidebarLink>
+                <SidebarLink href="/templates" theme={theme}>Templates</SidebarLink>
+              </>
+            )}
           </nav>
         </aside>
 
@@ -61,7 +111,10 @@ export default function Docs() {
           {/* Title */}
           <h1 className={`text-4xl font-bold ${theme.heading} mb-4`}>Documentation</h1>
           <p className={`text-lg ${theme.body} mb-8`}>
-            One SDK. One key. Auth, billing, and {activeTab === 'saas' ? 'usage tracking' : 'checkout'} included.
+            {activeTab === 'ai'
+              ? 'Give your AI editor everything it needs to build with Dream API.'
+              : `One SDK. One key. Auth, billing, and ${activeTab === 'saas' ? 'usage tracking' : 'checkout'} included.`
+            }
           </p>
 
           {/* Tabs */}
@@ -82,29 +135,35 @@ export default function Docs() {
             >
               Store
             </TabButton>
+            <TabButton
+              active={activeTab === 'ai'}
+              onClick={() => setActiveTab('ai')}
+              theme={theme}
+              accent={accent}
+            >
+              AI Prompt
+            </TabButton>
           </div>
 
           {/* Content */}
-          {activeTab === 'saas' ? <SaasContent theme={theme} accent={accent} /> : <StoreContent theme={theme} accent={accent} />}
+          {activeTab === 'saas' && <SaasContent theme={theme} accent={accent} />}
+          {activeTab === 'store' && <StoreContent theme={theme} accent={accent} />}
+          {activeTab === 'ai' && <AiContent theme={theme} accent={accent} />}
 
-          {/* Gotchas - shared */}
-          <section id="gotchas" className={`mt-16 pt-8 border-t ${theme.divider}`}>
-            <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Gotchas</h2>
-            <div className="space-y-4">
-              <Gotcha theme={theme} title="auth.init() is client-side only">
-                Call it in useEffect or onMounted. It's SSR-safe (returns early on server), but won't do anything server-side.
-              </Gotcha>
-              <Gotcha theme={theme} title="Auth URLs work everywhere">
-                getSignUpUrl() and getSignInUrl() just return strings. Use them in server components, API routes, anywhere.
-              </Gotcha>
-              <Gotcha theme={theme} title="features is an array">
-                Tier and product features come as an array, not a comma-separated string. Use .map(), not .split().
-              </Gotcha>
-              <Gotcha theme={theme} title="Control everything in your dashboard">
-                Prices, limits, tiers, products - all controlled in your Dream API dashboard. Change them there, your app updates automatically.
-              </Gotcha>
-            </div>
-          </section>
+          {/* Gotchas - shared (only show for saas/store tabs) */}
+          {activeTab !== 'ai' && (
+            <section id="gotchas" className={`mt-16 pt-8 border-t ${theme.divider}`}>
+              <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Quick Tips</h2>
+              <div className="space-y-4">
+                <Gotcha theme={theme} title="auth.init() is client-side only">
+                  Call in useEffect or onMounted. SSR-safe but does nothing server-side.
+                </Gotcha>
+                <Gotcha theme={theme} title="Dashboard controls everything">
+                  Prices, limits, features - change in dashboard, app updates automatically.
+                </Gotcha>
+              </div>
+            </section>
+          )}
         </main>
       </div>
     </div>
@@ -430,6 +489,99 @@ onMounted(async () => {
         >
           Vue Template → coming soon
         </TemplateLink>
+      </section>
+    </div>
+  );
+}
+
+// =============================================================================
+// AI Content
+// =============================================================================
+
+function AiContent({ theme, accent }: { theme: any; accent: any }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyPrompt = () => {
+    navigator.clipboard.writeText(AI_PROMPT);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Intro */}
+      <section>
+        <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Build with AI</h2>
+        <p className={`${theme.body} mb-6`}>
+          Copy this prompt into Claude Code, Cursor, Windsurf, or any AI coding assistant.
+          It contains the complete SDK reference - everything the AI needs to help you build.
+        </p>
+
+        {/* Copy Button */}
+        <button
+          onClick={copyPrompt}
+          className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg ${accent.bg} text-white ${accent.bgHover} transition-colors font-medium`}
+        >
+          {copied ? (
+            <>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy AI Prompt
+            </>
+          )}
+        </button>
+      </section>
+
+      {/* Preview */}
+      <section>
+        <h3 className={`text-lg font-semibold ${theme.heading} mb-3`}>What the AI Gets</h3>
+        <pre className={`p-4 rounded-lg bg-gray-900 text-gray-100 text-sm overflow-x-auto max-h-96 overflow-y-auto`}>
+          <code>{AI_PROMPT}</code>
+        </pre>
+      </section>
+
+      {/* How to Use */}
+      <section className={`p-6 rounded-lg ${theme.cardBg}`}>
+        <h3 className={`text-lg font-semibold ${theme.heading} mb-4`}>How to Use</h3>
+        <ol className={`space-y-3 ${theme.body}`}>
+          <li className="flex gap-3">
+            <span className={`flex-shrink-0 w-6 h-6 rounded-full ${accent.bg} text-white text-sm flex items-center justify-center`}>1</span>
+            <span>Copy the prompt above</span>
+          </li>
+          <li className="flex gap-3">
+            <span className={`flex-shrink-0 w-6 h-6 rounded-full ${accent.bg} text-white text-sm flex items-center justify-center`}>2</span>
+            <span>Paste into your AI editor (Claude Code, Cursor, Windsurf)</span>
+          </li>
+          <li className="flex gap-3">
+            <span className={`flex-shrink-0 w-6 h-6 rounded-full ${accent.bg} text-white text-sm flex items-center justify-center`}>3</span>
+            <span>Ask it to build - "Add a pricing page" or "Set up auth"</span>
+          </li>
+        </ol>
+      </section>
+
+      {/* Templates Link */}
+      <section className={`p-6 rounded-lg border-2 border-dashed ${theme.divider}`}>
+        <h3 className={`text-lg font-semibold ${theme.heading} mb-2`}>Start Faster with Templates</h3>
+        <p className={`${theme.muted} mb-4`}>
+          Templates come with CLAUDE.md files - drop into any AI editor and run /setup.
+        </p>
+        <a
+          href="/templates"
+          className={`inline-flex items-center gap-2 ${accent.text} hover:underline`}
+        >
+          View Templates
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </a>
       </section>
     </div>
   );

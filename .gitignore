@@ -3,6 +3,8 @@
 .env.local
 .env*.local
 .dev.vars
+dev.vars
+**/dev.vars
 *.env
 
 # API keys and secrets
