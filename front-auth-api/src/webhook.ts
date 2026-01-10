@@ -3,6 +3,64 @@ import { createClerkClient } from '@clerk/backend';
 import Stripe from 'stripe';
 import { Env, SubscriptionStatus } from './types';
 
+// ============================================================================
+// SUBSCRIPTION ENFORCEMENT CONSTANTS
+// ============================================================================
+// Grace period: Days after subscription ends before API access is blocked
+const GRACE_PERIOD_DAYS = 7;
+
+// ============================================================================
+// KV CACHE FOR SUBSCRIPTION STATUS
+// ============================================================================
+// We cache subscription status in KV for fast lookups in api-multi.
+// This avoids D1 queries on every API call while ensuring subscription enforcement.
+//
+// Key format: platform:{platformId}:subscription
+// Value: JSON { status, currentPeriodEnd, gracePeriodEnd }
+// ============================================================================
+
+interface SubscriptionCache {
+    status: SubscriptionStatus;
+    currentPeriodEnd: number | null;
+    gracePeriodEnd: number | null;
+}
+
+/**
+ * Write subscription status to KV cache for fast api-multi lookups
+ * Called after every D1 update to keep cache in sync
+ *
+ * IMPORTANT: Writes to BOTH KV namespaces:
+ * - TOKENS_KV (front-auth-api's KV) - for consistency
+ * - API_MULTI_KV (api-multi's KV) - for enforcement (this is what api-multi reads)
+ */
+async function cacheSubscriptionStatus(
+    env: Env,
+    platformId: string,
+    status: SubscriptionStatus,
+    currentPeriodEnd: number | null
+): Promise<void> {
+    const gracePeriodEnd = currentPeriodEnd
+        ? currentPeriodEnd + (GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
+        : null;
+
+    const cache: SubscriptionCache = {
+        status,
+        currentPeriodEnd,
+        gracePeriodEnd,
+    };
+
+    const cacheJson = JSON.stringify(cache);
+    const kvOptions = { expirationTtl: 30 * 24 * 60 * 60 }; // TTL: 30 days
+
+    // Write to BOTH KV namespaces
+    await Promise.all([
+        env.TOKENS_KV.put(`platform:${platformId}:subscription`, cacheJson, kvOptions),
+        env.API_MULTI_KV.put(`platform:${platformId}:subscription`, cacheJson, kvOptions),
+    ]);
+
+    console.log(`[Subscription Cache] Updated ${platformId} in BOTH KVs: ${status}, grace ends: ${gracePeriodEnd ? new Date(gracePeriodEnd).toISOString() : 'N/A'}`);
+}
+
 async function getPlatformIdFromDb(userId: string, env: Env): Promise<string | null> {
     const row = await env.DB.prepare('SELECT platformId FROM platforms WHERE clerkUserId = ?')
         .bind(userId)
@@ -194,7 +252,10 @@ export async function handleStripeWebhook(
                     }
 
                     const trialEnd = sub.trial_end ? sub.trial_end * 1000 : null;
-                    const periodEnd = (sub as any).current_period_end * 1000;
+                    // Handle null current_period_end (can happen during trial operations)
+                    const periodEnd = (sub as any).current_period_end
+                        ? (sub as any).current_period_end * 1000
+                        : (trialEnd || Date.now() + 14 * 24 * 60 * 60 * 1000);
 
                     await updatePlatformSubscription(env, userPlatformId, {
                         stripeCustomerId: session.customer as string,
@@ -203,6 +264,10 @@ export async function handleStripeWebhook(
                         trialEndsAt: trialEnd,
                         currentPeriodEnd: periodEnd,
                     });
+
+                    // Cache subscription status in KV for fast api-multi lookups
+                    await cacheSubscriptionStatus(env, userPlatformId, status, periodEnd);
+
                     console.log(`Updated platform ${userPlatformId} with subscription: ${status}, trial ends: ${trialEnd}`);
                 }
             } catch (err) {
@@ -234,7 +299,10 @@ export async function handleStripeWebhook(
             }
 
             const trialEnd = subscription.trial_end ? subscription.trial_end * 1000 : null;
-            const periodEnd = (subscription as any).current_period_end * 1000;
+            // Handle null current_period_end (can happen during trial operations)
+            const periodEnd = (subscription as any).current_period_end
+                ? (subscription as any).current_period_end * 1000
+                : (trialEnd || Date.now() + 14 * 24 * 60 * 60 * 1000);
 
             // Update D1 first (by customer ID if we have it)
             let subPlatformId = await getPlatformIdByStripeCustomer(customerId, env);
@@ -250,6 +318,10 @@ export async function handleStripeWebhook(
                     trialEndsAt: trialEnd,
                     currentPeriodEnd: periodEnd,
                 });
+
+                // Cache subscription status in KV for fast api-multi lookups
+                await cacheSubscriptionStatus(env, subPlatformId, status, periodEnd);
+
                 console.log(`Updated platform ${subPlatformId} subscription: ${status}`);
             }
 
@@ -285,10 +357,20 @@ export async function handleStripeWebhook(
             }
 
             if (deletedPlatformId) {
+                // Get current period end before marking as canceled
+                const platform = await env.DB.prepare(
+                    'SELECT currentPeriodEnd FROM platforms WHERE platformId = ?'
+                ).bind(deletedPlatformId).first<{ currentPeriodEnd: number | null }>();
+
                 await updatePlatformSubscription(env, deletedPlatformId, {
                     subscriptionStatus: 'canceled',
                     stripeSubscriptionId: undefined,
                 });
+
+                // Cache subscription status in KV - use existing period end for grace calculation
+                const periodEnd = platform?.currentPeriodEnd ?? Date.now();
+                await cacheSubscriptionStatus(env, deletedPlatformId, 'canceled', periodEnd);
+
                 console.log(`Marked platform ${deletedPlatformId} as canceled`);
             }
 

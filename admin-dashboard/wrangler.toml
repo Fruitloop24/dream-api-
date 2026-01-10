@@ -1,0 +1,18 @@
+name = "admin-dashboard"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# D1 - Same database as everything else
+[[d1_databases]]
+binding = "DB"
+database_name = "dream-api-ssot"
+database_id = "07e784d5-2c3f-4bb0-a79c-094c1d05410f"
+
+# Access control via Cloudflare Access (configure in CF dashboard)
+# Add email whitelist: k.c.sheffield012376@gmail.com
+
+# Clerk API for fetching user emails
+# Set via: npx wrangler secret put CLERK_SECRET_KEY
+
+[dev]
+port = 8790

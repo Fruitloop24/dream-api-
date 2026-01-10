@@ -32,6 +32,16 @@ binding = "TOKENS_KV"
 id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 preview_id = "d09d8bf4e63a47c495384e9ed9b4ec7e"
 
+# API_MULTI_KV: api-multi's KV namespace (for subscription enforcement)
+# We write subscription status here so api-multi can check it on every API call.
+# - platform:{platformId}:subscription → {status, currentPeriodEnd, gracePeriodEnd}
+# Only used for subscription cache writes - keeps dev/end-user KV separation.
+# Cloudflare name: api-multi-TOKENS_KV
+[[kv_namespaces]]
+binding = "API_MULTI_KV"
+id = "a9f3331b0c8b48d58c32896482484208"
+preview_id = "a9f3331b0c8b48d58c32896482484208"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "dream-api-ssot"

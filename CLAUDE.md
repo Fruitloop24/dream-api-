@@ -76,6 +76,7 @@ await api.dashboard.get();
 | `oauth-api` | Stripe Connect, tier management |
 | `front-auth-api` | Dev auth, credentials, $19/mo billing, usage metering |
 | `sign-up` | End-user signup with metadata |
+| `admin-dashboard` | Internal admin metrics (CF Access protected) |
 
 ## Infrastructure Features
 
@@ -136,6 +137,73 @@ AND publishableKey LIKE 'pk_live_%'
 
 **Store mode:** No Clerk users created (guest checkout), no count, no overage.
 
+## Subscription Enforcement (API Access Gating)
+
+Dev API access is gated by subscription status. This ensures devs can't use the API without paying.
+
+### Timeline After Cancellation
+
+| Status | Dashboard | API Access | Data | Notes |
+|--------|-----------|------------|------|-------|
+| `trialing` | ✅ | ✅ | ✅ | 14-day trial, full access |
+| `active` | ✅ | ✅ | ✅ | Paid and current |
+| `past_due` | ✅ | ✅ | ✅ | Stripe is dunning (retrying payment) |
+| `canceled` (0-7 days) | ❌ | ✅ | ✅ | Grace period - time to reactivate |
+| `canceled` (7+ days) | ❌ | ❌ | ✅ | API blocked, data retained |
+| `canceled` (30+ days) | ❌ | ❌ | 🗑️ | Data permanently deleted |
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. WEBHOOK (front-auth-api/src/webhook.ts)                  │
+│    Stripe event → Update D1 + Cache in KV                   │
+│    Key: platform:{platformId}:subscription                  │
+│    Value: { status, currentPeriodEnd, gracePeriodEnd }      │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 2. API CHECK (api-multi/src/middleware/apiKey.ts)           │
+│    On every API call: verify key → check KV subscription    │
+│    If canceled + grace expired → 403 "Subscription expired" │
+│    Fast: ~1ms KV lookup                                     │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 3. DAILY CRON (front-auth-api scheduled handler)            │
+│    - Log platforms in grace period (monitoring)             │
+│    - Log blocked platforms (past grace)                     │
+│    - Delete data for 30+ day cancellations (cleanup)        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### KV Cache Structure
+
+```typescript
+// Key: platform:{platformId}:subscription
+{
+  "status": "canceled",           // trialing|active|past_due|canceled
+  "currentPeriodEnd": 1736553600000,  // When they paid until
+  "gracePeriodEnd": 1737158400000     // currentPeriodEnd + 7 days
+}
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `front-auth-api/src/webhook.ts` | Caches subscription status on Stripe events |
+| `api-multi/src/middleware/apiKey.ts` | Checks subscription before allowing API calls |
+| `front-auth-api/src/lib/usage.ts` | `runGracePeriodEnforcement()` daily cleanup |
+
+### Why This Design
+
+1. **Fast** - KV lookup is ~1ms, doesn't slow down API calls
+2. **Reliable** - Webhook-driven, always in sync with Stripe
+3. **Graceful** - 7-day grace period for payment issues
+4. **Clean** - 30-day retention then full cleanup
+5. **Backward compatible** - Missing cache = allow (for existing platforms)
+
 ## Templates
 
 Free templates to onboard devs to the API:
@@ -158,7 +226,10 @@ dream-api/                    # Main platform repo
 ├── api-multi/                # ✓ In main repo
 ├── oauth-api/                # ✓ In main repo
 ├── front-auth-api/           # ✓ In main repo
+├── sign-up/                  # ✓ In main repo
+├── admin-dashboard/          # ✓ In main repo (CF Access protected)
 ├── dream-sdk/                # ✓ In main repo
+├── frontend/                 # ✓ In main repo (dev dashboard)
 ├── dream-saas-basic/         # ✗ Separate repo (gitignored)
 ├── dream-saas-next/          # ✗ Separate repo (gitignored)
 ├── dream-store-basic/        # ✗ Separate repo (gitignored)
@@ -234,6 +305,7 @@ When user asks for custom branding (gradients, glassmorphism, custom colors), AI
 - [x] Rate limiting (KV-based)
 - [x] DDoS protection (Cloudflare)
 - [x] CORS configured
+- [x] **Subscription enforcement** (API blocked when dev doesn't pay)
 
 ## Deploy
 
@@ -242,9 +314,23 @@ cd api-multi && npx wrangler deploy
 cd oauth-api && npx wrangler deploy
 cd front-auth-api && npx wrangler deploy
 cd sign-up && npx wrangler deploy
+cd admin-dashboard && npx wrangler deploy
 ```
 
 All workers auto-deploy via GitHub/Cloudflare connector.
+
+## Admin Dashboard
+
+Internal metrics dashboard at `admin-dashboard.k-c-sheffield012376.workers.dev`
+
+**Protected by Cloudflare Access** - email whitelist only, blocked at edge.
+
+Shows:
+- Total devs, paying devs, trialing devs
+- MRR (paying × $19), overage revenue
+- Live/test end-users per dev
+- Subscription status, trial countdown
+- Dev emails (via Clerk API)
 
 ## SDK Published
 

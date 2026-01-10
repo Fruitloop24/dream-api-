@@ -163,6 +163,25 @@ sign-up/src/
     └── POST /oauth/complete  # Verify token, sync D1
 ```
 
+### admin-dashboard
+**URL:** `https://admin-dashboard.k-c-sheffield012376.workers.dev`
+
+Internal admin metrics dashboard. Protected by Cloudflare Access (email whitelist).
+
+```
+admin-dashboard/src/
+└── index.ts              # Single file (~400 lines)
+    ├── GET /             # Dashboard HTML (inline)
+    └── GET /api/data     # JSON metrics
+```
+
+**Shows:**
+- Total devs, paying devs, trialing devs
+- MRR (paying × $19), overage revenue
+- Live/test end-users per dev
+- Subscription status, trial countdown
+- Dev emails (via Clerk API)
+
 ---
 
 ## SDK
@@ -264,8 +283,9 @@ End User
 |--------|----|----|-----|------|
 | api-multi | TOKENS_KV | DB | dream_api_assets | - |
 | oauth-api | PLATFORM_TOKENS_KV, CUSTOMER_TOKENS_KV | DB | - | - |
-| front-auth-api | TOKENS_KV, USAGE_KV | DB | dream_api_assets | Daily 00:00 UTC |
+| front-auth-api | TOKENS_KV, USAGE_KV, API_MULTI_KV | DB | dream_api_assets | Daily 00:00 UTC |
 | sign-up | TOKENS_KV | DB | - | - |
+| admin-dashboard | - | DB | - | - |
 
 ---
 
@@ -359,6 +379,53 @@ End-user → Stripe Checkout (guest) → Dev's Stripe account
          No overage billing
 ```
 
+### Subscription Enforcement (API Access Gating)
+
+Dev API access is gated by subscription status to ensure devs can't use the API without paying.
+
+**KV Cache Structure:**
+```typescript
+// Key: platform:{platformId}:subscription
+// Written by: front-auth-api webhook
+// Read by: api-multi apiKey middleware
+{
+  "status": "active",              // trialing|active|past_due|canceled
+  "currentPeriodEnd": 1736553600000,
+  "gracePeriodEnd": 1737158400000  // currentPeriodEnd + 7 days
+}
+```
+
+**Enforcement Flow:**
+```
+1. Stripe event (subscription change)
+       ↓
+2. front-auth-api/webhook.ts
+   - Update D1 platforms table
+   - Cache status in KV (platform:{platformId}:subscription)
+       ↓
+3. api-multi/middleware/apiKey.ts
+   - On every API call: verify key → check KV subscription
+   - If canceled + grace expired → 403 "Subscription expired"
+       ↓
+4. front-auth-api/cron (daily)
+   - Log platforms in grace period
+   - Delete data for platforms 30+ days past cancellation
+```
+
+**Status Behavior:**
+| Status | Dashboard | API Access | Data |
+|--------|-----------|------------|------|
+| `trialing` | ✅ | ✅ | ✅ |
+| `active` | ✅ | ✅ | ✅ |
+| `past_due` | ✅ | ✅ | ✅ |
+| `canceled` (0-7 days) | ❌ | ✅ | ✅ |
+| `canceled` (7+ days) | ❌ | ❌ | ✅ |
+| `canceled` (30+ days) | ❌ | ❌ | 🗑️ |
+
+**Constants:**
+- Grace period: 7 days after `currentPeriodEnd`
+- Data retention: 30 days after `currentPeriodEnd`
+
 ---
 
 ## Key Concepts
@@ -371,3 +438,4 @@ End-user → Stripe Checkout (guest) → Dev's Stripe account
 6. **Webhook idempotency** - Events table prevents duplicates
 7. **Live vs Test users** - Only `pk_live_%` users count toward billing
 8. **Store mode is free** - Guest checkout creates no Clerk users
+9. **Subscription enforcement** - API blocked when dev subscription expires (7-day grace)

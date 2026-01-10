@@ -160,7 +160,7 @@ const { tiers } = await api.products.listTiers();
 // Each tier:
 // - name: internal identifier (e.g., "pro")
 // - displayName: shown to users (e.g., "Pro Plan")
-// - price: monthly cost in dollars (not cents)
+// - price: monthly cost in cents (not cents)
 // - limit: requests per month (-1 for unlimited)
 // - priceId: Stripe price ID
 // - features: string array
@@ -241,7 +241,7 @@ const { products } = await api.products.list();
 // - name: internal identifier
 // - displayName: shown to customers
 // - description: product description
-// - price: in dollars (not cents)
+// - price: in cents (not cents)
 // - priceId: use this for checkout
 // - productId: Stripe product ID
 // - imageUrl: product image (not "image")
@@ -624,7 +624,7 @@ useEffect(() => {
 |---------|-------|-----|
 | "User token required" | JWT not set | Call `api.auth.init()` or `api.setUserToken()` |
 | Empty products/tiers | Wrong project type | SaaS has tiers, Store has products |
-| Price shows $0.29 | Dividing by 100 | Prices are already in dollars |
+| Price shows $0.29 | Dividing by 100 | Prices are already in cents |
 | `features.split()` fails | Features is array | Don't call split, iterate directly |
 | Checkout returns undefined | Using wrong property | Use `result.url`, not `result.checkoutUrl` |
 | Sign-in doesn't persist | Didn't use sign-up worker | New users must go through `getSignUpUrl()` |

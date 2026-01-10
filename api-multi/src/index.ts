@@ -218,6 +218,20 @@ export default {
 				);
 			}
 
+			// Check for subscription error
+			if (pkAuth.error === 'subscription_expired') {
+				return new Response(
+					JSON.stringify({
+						error: 'subscription_expired',
+						message: pkAuth.errorMessage || 'Platform subscription expired. Please renew to restore API access.',
+					}),
+					{
+						status: 403,
+						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+					}
+				);
+			}
+
 			const { platformId, publishableKey, mode } = pkAuth;
 
 			// Create Clerk client for JWT verification
@@ -376,6 +390,20 @@ export default {
 					}),
 					{
 						status: 401,
+						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+					}
+				);
+			}
+
+			// Check for subscription error
+			if (authResult.error === 'subscription_expired') {
+				return new Response(
+					JSON.stringify({
+						error: 'subscription_expired',
+						message: authResult.errorMessage || 'Platform subscription expired. Please renew to restore API access.',
+					}),
+					{
+						status: 403,
 						headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 					}
 				);

@@ -159,11 +159,11 @@ api.products.cartCheckout()  // Guest purchase
 
 ## Pricing
 
-**14-day free trial. No credit card required.**
+**14-day free trial. Credit card required.**
 
 | Plan | Price | What You Get |
 |------|-------|--------------|
-| **Trial** | Free | 14 days, full access |
+| **Trial** | Free | 14 days, full access (CC required) |
 | **Pro** | $19/month | SaaS: 2,000 end-users included |
 | | | Store: Unlimited guest checkout |
 | **Overage** | $0.03/user | SaaS only, after 2,000 users |

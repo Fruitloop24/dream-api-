@@ -15,7 +15,7 @@ API-as-a-Service for indie devs. Auth + billing + usage tracking in one SDK, one
 
 | Plan | Price | Details |
 |------|-------|---------|
-| Trial | Free | 14 days, full access, no CC required |
+| Trial | Free | 14 days, full access, CC required |
 | Pro | $19/mo | SaaS: 2,000 end-users included / Store: unlimited |
 | Overage | $0.03/user | SaaS only, after 2,000 users |
 
@@ -24,9 +24,9 @@ Revenue scales with customer success. Low entry price, grows with them.
 ## Current State
 
 **Done:**
-- 4 Cloudflare Workers (api-multi, oauth-api, front-auth-api, sign-up)
+- 5 Cloudflare Workers (api-multi, oauth-api, front-auth-api, sign-up, admin-dashboard)
 - SDK on npm (@dream-api/sdk)
-- 2 React templates (dream-saas-basic, dream-store-basic)
+- 6 React templates (saas, store, membership - each with basic + next.js)
 - Theme system (light/dark toggle)
 - /setup and /pwa commands for AI-assisted config
 - Docs (SDK guide, API reference, architecture)
@@ -91,11 +91,11 @@ Revenue scales with customer success. Low entry price, grows with them.
 dream-api/
 ├── api-multi/          # Main API worker
 ├── oauth-api/          # Stripe Connect + tier management
-├── front-auth-api/     # Developer authentication
+├── front-auth-api/     # Developer authentication + platform billing
 ├── sign-up/            # End-user signup with metadata
-├── sdk/                # @dream-api/sdk npm package
-├── dream-saas-basic/   # SaaS template (separate repo)
-├── dream-store-basic/  # Store template (separate repo)
+├── admin-dashboard/    # Internal admin metrics (CF Access protected)
+├── dream-sdk/          # @dream-api/sdk npm package
+├── frontend/           # Developer dashboard (React)
 └── docs/               # Documentation
 ```
 

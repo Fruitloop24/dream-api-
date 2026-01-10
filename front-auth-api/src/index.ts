@@ -53,7 +53,7 @@ import { ensurePlatformForUser, getPlatformIdFromDb } from './lib/auth';
 import { ensureApiKeySchema, ensurePlatformSchema } from './lib/schema';
 import { handleListProjects } from './lib/projectsRoute';
 import { rotateSecretKey } from './lib/keyRotation';
-import { getLiveEndUserCount, runDailyUsageReport } from './lib/usage';
+import { getLiveEndUserCount, runDailyUsageReport, runGracePeriodEnforcement } from './lib/usage';
 
 // ============================================================================ //
 // Constants                                                                    //
@@ -493,11 +493,18 @@ export default {
   },
 
   /**
-   * Cron trigger - Daily usage reporting to Stripe Meter
+   * Cron trigger - Daily jobs:
+   * 1. Usage reporting to Stripe Meter (for billing)
+   * 2. Grace period enforcement (for canceled subscriptions)
    */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log(`[front-auth-api] Cron triggered at ${new Date(event.scheduledTime).toISOString()}`);
     await ensurePlatformSchema(env);
-    ctx.waitUntil(runDailyUsageReport(env));
+
+    // Run both jobs in parallel
+    ctx.waitUntil(Promise.all([
+      runDailyUsageReport(env),
+      runGracePeriodEnforcement(env),
+    ]));
   },
 };

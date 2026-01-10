@@ -16,7 +16,7 @@ Dream API is the backend. You build your frontend, we handle:
 
 | Plan | Price | Includes |
 |------|-------|----------|
-| **Trial** | Free | 14 days, full access, no credit card |
+| **Trial** | Free | 14 days, full access, credit card required |
 | **Pro** | $19/month | SaaS: 2,000 end-users / Store: unlimited guest checkout |
 | **Overage** | $0.03/user | SaaS only, after 2,000 users |
 
@@ -114,6 +114,30 @@ Built on Cloudflare Workers:
 | Data | Isolated by publishableKey |
 | SQL | Parameterized queries |
 | Webhooks | Stripe signatures verified |
+| Subscription | API access blocked when subscription expires |
+
+## Subscription Enforcement
+
+API access is gated by subscription status. When a developer's subscription lapses:
+
+| Timeline | Dashboard | API Access | Data |
+|----------|-----------|------------|------|
+| Active/Trialing | ✅ Full access | ✅ Full access | ✅ Retained |
+| Past Due | ✅ Full access | ✅ Full access | ✅ Retained |
+| Canceled (grace: 7d) | ❌ Locked | ✅ Still works | ✅ Retained |
+| Canceled (expired) | ❌ Locked | ❌ **Blocked** | ✅ Retained |
+| Canceled (30d+) | ❌ Locked | ❌ Blocked | 🗑️ **Deleted** |
+
+**How it works:**
+1. Stripe webhook fires on subscription change
+2. `front-auth-api` updates D1 + caches status in KV
+3. `api-multi` checks KV cache on every API call (~1ms)
+4. Blocked requests return: `"Subscription expired. Please renew at dashboard."`
+5. Daily cron cleans up data for subscriptions canceled 30+ days
+
+**Grace period:** 7 days after subscription ends. Allows time to fix payment issues.
+
+**Data retention:** 30 days after cancellation. After that, all data is permanently deleted.
 
 ## Project Structure
 
@@ -125,8 +149,9 @@ dream-api/
 ├── oauth-api/         # Stripe Connect OAuth
 ├── front-auth-api/    # Dev authentication
 ├── sign-up/           # End-user signup worker
-├── dream-saas-basic/  # SaaS template
-└── dream-store-basic/ # Store template
+├── admin-dashboard/   # Internal admin (CF Access protected)
+├── dream-saas-basic/  # SaaS template (separate repo)
+└── dream-store-basic/ # Store template (separate repo)
 ```
 
 ## Documentation
@@ -168,6 +193,7 @@ cd api-multi && npx wrangler deploy
 cd oauth-api && npx wrangler deploy
 cd front-auth-api && npx wrangler deploy
 cd sign-up && npx wrangler deploy
+cd admin-dashboard && npx wrangler deploy
 # Frontend: Cloudflare Pages auto-deploy
 ```
 

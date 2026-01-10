@@ -22,6 +22,7 @@ export interface Env {
   // Bindings
   TOKENS_KV: KVNamespace;
   USAGE_KV: KVNamespace;
+  API_MULTI_KV: KVNamespace;  // api-multi's KV for subscription enforcement
   DB: D1Database;
   dream_api_assets?: R2Bucket;
   ASSETS?: R2Bucket;                    // Alias for R2

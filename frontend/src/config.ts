@@ -34,7 +34,7 @@ export const CONFIG = {
     github: 'https://github.com/Fruitloop24',
     docs: '/docs',
     // Demos
-    saasDemo: '#',
+    saasDemo: 'https://clerk-frontend.pages.dev',
     storeDemo: '#',
     // Templates - React (Vite)
     saasBasic: 'https://github.com/Fruitloop24/dream-saas-basic',

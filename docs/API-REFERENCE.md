@@ -383,7 +383,7 @@ Response: { success: boolean }
 {
   name: string;           // Internal ID: "free", "pro"
   displayName: string;    // UI display: "Free Plan"
-  price: number;          // Monthly cost in DOLLARS
+  price: number;          // Monthly cost in CENTS
   limit: number;          // Requests/month (-1 = unlimited)
   priceId: string;        // Stripe price ID
   productId: string;      // Stripe product ID

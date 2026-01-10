@@ -90,7 +90,7 @@ CREATE TABLE tiers (
   platformId TEXT NOT NULL,              -- Owner platform
   name TEXT NOT NULL,                    -- Internal ID: 'free', 'pro', etc.
   displayName TEXT,                      -- UI display: 'Free Plan'
-  price REAL,                            -- Monthly price in DOLLARS
+  price REAL,                            -- Monthly price in CENTS
   requestLimit INTEGER,                  -- Requests/month (-1 = unlimited)
   priceId TEXT,                          -- Stripe price ID
   productId TEXT,                        -- Stripe product ID
@@ -113,7 +113,7 @@ CREATE INDEX idx_tiers_platform ON tiers(platformId);
 
 **Notes:**
 - `features` is JSON: `["Feature 1", "Feature 2"]`
-- `price` is in DOLLARS, not cents (different from Stripe)
+- `price` is in CENTS (same as Stripe)
 - `inventory = NULL` means unlimited stock
 - `popular = 1` shows "Popular" badge in UI
 
@@ -320,3 +320,4 @@ Columns added after initial schema (safe `ALTER TABLE ADD COLUMN`):
 | oauth-api | platforms, api_keys, tiers |
 | api-multi | tiers, subscriptions, usage_counts, end_users, events |
 | sign-up | end_users |
+| admin-dashboard | platforms, end_users (read-only) |
