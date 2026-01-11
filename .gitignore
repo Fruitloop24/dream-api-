@@ -87,3 +87,6 @@ dream-membership-basic/
 dream-saas-next/
 dream-store-next/
 dream-membership-next/
+
+# Playwright MCP
+.playwright-mcp/
