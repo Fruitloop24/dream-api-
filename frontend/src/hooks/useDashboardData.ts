@@ -153,8 +153,8 @@ export function useDashboardData() {
         if (!result?.data?.metrics) return;
         const { metrics, customers } = result.data;
 
-        if (result.type === 'saas' || result.type === 'membership') {
-          // SaaS and Membership both use subscriptions/MRR
+        if (result.type === 'saas') {
+          // SaaS uses subscriptions/MRR
           const mrr = metrics.mrr || 0;
           totals.saasRevenue += mrr;
           totals.totalRevenue += mrr;

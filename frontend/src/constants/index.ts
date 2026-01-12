@@ -49,12 +49,10 @@ export function getApiUrl(key: keyof typeof API_URLS): string {
 // ============================================================================
 
 export const PROJECT_TYPES = {
-  /** Subscription-based SaaS with usage limits */
+  /** Subscription-based SaaS with usage limits (can include trial periods) */
   SAAS: 'saas',
   /** One-time purchase store with inventory */
   STORE: 'store',
-  /** Subscription-based membership with trial periods (no usage limits) */
-  MEMBERSHIP: 'membership',
 } as const;
 
 export type ProjectType = typeof PROJECT_TYPES[keyof typeof PROJECT_TYPES];
@@ -193,7 +191,6 @@ export const STATUS_STYLES: Record<string, string> = {
 export const TYPE_STYLES: Record<ProjectType, string> = {
   saas: 'bg-blue-900/30 border border-blue-700 text-blue-200',
   store: 'bg-purple-900/30 border border-purple-700 text-purple-200',
-  membership: 'bg-emerald-900/30 border border-emerald-700 text-emerald-200',
 };
 
 /** Mode badge color mappings */

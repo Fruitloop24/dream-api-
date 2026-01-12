@@ -13,7 +13,7 @@ import { useUser, useAuth, UserButton } from '@clerk/clerk-react';
 const OAUTH_API = import.meta.env.VITE_OAUTH_API_URL || 'http://localhost:8789';
 const FRONT_AUTH_API = import.meta.env.VITE_FRONT_AUTH_API_URL || 'http://localhost:8788';
 
-type ConfigTab = 'saas' | 'store' | 'membership';
+type ConfigTab = 'saas' | 'store';
 type ModeType = 'test' | 'live';
 
 interface SaasTier {
@@ -21,6 +21,7 @@ interface SaasTier {
   displayName: string;
   price: number;
   limit: number | 'unlimited';
+  trialDays?: number | null;  // Optional trial period for membership-style plans
   popular?: boolean;
   priceId?: string;
   productId?: string;
@@ -34,17 +35,6 @@ interface StoreProduct {
   imageUrl: string;
   inventory: number | null;
   features: string;
-  priceId?: string;
-  productId?: string;
-}
-
-interface MembershipTier {
-  name: string;
-  displayName: string;
-  price: number;
-  trialDays: number | null;
-  features: string;
-  popular?: boolean;
   priceId?: string;
   productId?: string;
 }
@@ -85,12 +75,6 @@ export default function ApiTierConfig() {
   // Store products
   const [storeProducts, setStoreProducts] = useState<StoreProduct[]>([
     { name: 'product1', displayName: 'My Product', price: 49, description: '', imageUrl: '', inventory: null, features: '' },
-  ]);
-
-  // Membership tiers
-  const [membershipTiers, setMembershipTiers] = useState<MembershipTier[]>([
-    { name: 'basic', displayName: 'Basic', price: 9, trialDays: 7, features: '', popular: false },
-    { name: 'premium', displayName: 'Premium', price: 29, trialDays: 7, features: '', popular: true },
   ]);
 
   // Original tiers for comparison (edit mode)
@@ -136,10 +120,9 @@ export default function ApiTierConfig() {
         const tiers = data.tiers || [];
         setOriginalTiers(tiers);
 
-        // Separate into SaaS, Store, and Membership
+        // Separate into SaaS and Store
         const saasList: SaasTier[] = [];
         const storeList: StoreProduct[] = [];
-        const membershipList: MembershipTier[] = [];
 
         for (const tier of tiers) {
           // Parse features JSON if present
@@ -153,7 +136,6 @@ export default function ApiTierConfig() {
           }
 
           const billingMode = parsedFeatures.billingMode || 'subscription';
-          const projectType = tier.projectType;
 
           if (billingMode === 'one_off') {
             storeList.push({
@@ -167,24 +149,14 @@ export default function ApiTierConfig() {
               priceId: tier.priceId,
               productId: tier.productId,
             });
-          } else if (projectType === 'membership' || tier.trialDays !== undefined) {
-            // Membership tier
-            membershipList.push({
-              name: tier.name,
-              displayName: tier.displayName || tier.name,
-              price: (tier.price || 0) / 100, // Convert cents to dollars for display
-              trialDays: tier.trialDays ?? null,
-              features: Array.isArray(parsedFeatures.features) ? parsedFeatures.features.join(', ') : '',
-              popular: !!tier.popular,
-              priceId: tier.priceId,
-              productId: tier.productId,
-            });
           } else {
+            // SaaS tier (includes membership-style with trialDays)
             saasList.push({
               name: tier.name,
               displayName: tier.displayName || tier.name,
               price: (tier.price || 0) / 100, // Convert cents to dollars for display
               limit: tier.limit === null ? 'unlimited' : tier.limit,
+              trialDays: tier.trialDays ?? null,
               popular: !!tier.popular,
               priceId: tier.priceId,
               productId: tier.productId,
@@ -198,17 +170,12 @@ export default function ApiTierConfig() {
         if (storeList.length > 0) {
           setStoreProducts(storeList);
         }
-        if (membershipList.length > 0) {
-          setMembershipTiers(membershipList);
-        }
 
         // Respect projectType from URL if provided, otherwise infer from data
         if (projectTypeFromUrl) {
           setActiveTab(projectTypeFromUrl);
-        } else if (storeList.length > 0 && saasList.length === 0 && membershipList.length === 0) {
+        } else if (storeList.length > 0 && saasList.length === 0) {
           setActiveTab('store');
-        } else if (membershipList.length > 0 && saasList.length === 0 && storeList.length === 0) {
-          setActiveTab('membership');
         } else if (saasList.length > 0) {
           setActiveTab('saas');
         }
@@ -307,25 +274,6 @@ export default function ApiTierConfig() {
     setStoreProducts(storeProducts.filter((_, i) => i !== index));
   };
 
-  // Membership tier helpers
-  const updateMembershipTier = (index: number, field: keyof MembershipTier, value: any) => {
-    const updated = [...membershipTiers];
-    updated[index] = { ...updated[index], [field]: value };
-    setMembershipTiers(updated);
-  };
-
-  const addMembershipTier = () => {
-    setMembershipTiers([
-      ...membershipTiers,
-      { name: '', displayName: '', price: 0, trialDays: 7, features: '', popular: false },
-    ]);
-  };
-
-  const removeMembershipTier = (index: number) => {
-    if (membershipTiers.length <= 1) return;
-    setMembershipTiers(membershipTiers.filter((_, i) => i !== index));
-  };
-
   // Submit handler - handles create, update, and promote
   const handleSubmit = async () => {
     // Validate project name (only for new projects)
@@ -384,6 +332,7 @@ export default function ApiTierConfig() {
         limit: t.limit,
         billingMode: 'subscription',
         popular: t.popular,
+        trialDays: t.trialDays || null,  // Include trial period if set
       }));
     } else if (activeTab === 'store') {
       const incomplete = storeProducts.some(p => !p.name || !p.displayName);
@@ -400,22 +349,6 @@ export default function ApiTierConfig() {
         description: p.description,
         imageUrl: p.imageUrl,
         inventory: p.inventory,
-      }));
-    } else {
-      // Membership
-      const incomplete = membershipTiers.some(t => !t.name || !t.displayName);
-      if (incomplete) {
-        throw new Error('Please fill in all tier fields (name and display name required)');
-      }
-      tiers = membershipTiers.map(t => ({
-        name: t.name.toLowerCase().replace(/\s+/g, '_'),
-        displayName: t.displayName,
-        price: Math.round(t.price * 100), // Convert dollars to cents for API
-        limit: 0, // Membership doesn't use limits
-        billingMode: 'subscription',
-        trialDays: t.trialDays,
-        features: t.features,
-        popular: t.popular,
       }));
     }
 
@@ -446,8 +379,7 @@ export default function ApiTierConfig() {
     const token = await getToken({ template: 'dream-api' });
     if (!token) throw new Error('Not authenticated');
 
-    const currentTiers = activeTab === 'saas' ? saasTiers :
-                        activeTab === 'membership' ? membershipTiers : storeProducts;
+    const currentTiers = activeTab === 'saas' ? saasTiers : storeProducts;
     const originalNames = new Set(originalTiers.map(t => t.name));
     const currentNames = new Set(currentTiers.map(t => t.name));
 
@@ -469,15 +401,9 @@ export default function ApiTierConfig() {
       };
 
       if (activeTab === 'saas') {
-        updates.limit = 'limit' in tier ? (tier.limit === 'unlimited' ? 'unlimited' : tier.limit) : 0;
-      } else if (activeTab === 'membership') {
-        // Membership tiers - cast to MembershipTier for type safety
-        const membershipTier = tier as MembershipTier;
-        updates.trialDays = membershipTier.trialDays ?? null;
-        updates.features = JSON.stringify({
-          features: membershipTier.features ? membershipTier.features.split(',').map((f: string) => f.trim()) : [],
-          billingMode: 'subscription',
-        });
+        const saasTier = tier as SaasTier;
+        updates.limit = saasTier.limit === 'unlimited' ? 'unlimited' : saasTier.limit;
+        updates.trialDays = saasTier.trialDays ?? null;
       } else {
         // Store products - cast to StoreProduct for type safety
         const storeProduct = tier as StoreProduct;
@@ -518,9 +444,8 @@ export default function ApiTierConfig() {
         popular: 'popular' in tier ? tier.popular : false,
       };
 
-      if (activeTab === 'membership') {
-        tierData.trialDays = 'trialDays' in tier ? (tier as MembershipTier).trialDays : null;
-        tierData.features = 'features' in tier ? (tier as MembershipTier).features : '';
+      if (activeTab === 'saas') {
+        tierData.trialDays = 'trialDays' in tier ? (tier as SaasTier).trialDays : null;
       } else if (activeTab === 'store') {
         tierData.features = 'features' in tier ? (tier as StoreProduct).features : '';
         tierData.description = 'description' in tier ? (tier as StoreProduct).description : '';
@@ -579,17 +504,7 @@ export default function ApiTierConfig() {
         limit: t.limit,
         billingMode: 'subscription',
         popular: t.popular,
-      }));
-    } else if (activeTab === 'membership') {
-      tiers = membershipTiers.map(t => ({
-        name: t.name,
-        displayName: t.displayName,
-        price: Math.round(t.price * 100), // Convert dollars to cents for API
-        limit: 0, // Membership doesn't use limits
-        billingMode: 'subscription',
-        trialDays: t.trialDays,
-        features: t.features,
-        popular: t.popular,
+        trialDays: t.trialDays || null,
       }));
     } else {
       tiers = storeProducts.map(p => ({
@@ -809,7 +724,7 @@ export default function ApiTierConfig() {
             <h2 className="text-xl font-bold mb-2">Choose Your Business Type</h2>
             <p className="text-gray-400 mb-6">This determines what kind of products you can create. Choose wisely - this can't be changed later for this project.</p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* SaaS Card */}
               <button
                 onClick={() => handleChooseType('saas')}
@@ -826,25 +741,7 @@ export default function ApiTierConfig() {
                   <li>• Tiers with monthly limits</li>
                   <li>• Usage tracking per user</li>
                   <li>• Recurring billing</li>
-                </ul>
-              </button>
-
-              {/* Membership Card */}
-              <button
-                onClick={() => handleChooseType('membership')}
-                className="bg-gray-800 border-2 border-gray-700 hover:border-emerald-500 rounded-xl p-6 text-left transition-all group"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-3xl">🔐</span>
-                  <h3 className="text-lg font-bold group-hover:text-emerald-400">Membership / Access</h3>
-                </div>
-                <p className="text-gray-400 text-sm mb-4">
-                  Content gating with trial periods. Courses, communities, premium content.
-                </p>
-                <ul className="text-sm text-gray-500 space-y-1">
-                  <li>• Trial period support</li>
-                  <li>• Content gating (no usage limits)</li>
-                  <li>• Recurring billing</li>
+                  <li>• Optional trial periods</li>
                 </ul>
               </button>
 
@@ -876,12 +773,9 @@ export default function ApiTierConfig() {
             <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
               activeTab === 'saas'
                 ? 'bg-blue-900/30 border border-blue-700 text-blue-200'
-                : activeTab === 'membership'
-                ? 'bg-emerald-900/30 border border-emerald-700 text-emerald-200'
                 : 'bg-purple-900/30 border border-purple-700 text-purple-200'
             }`}>
-              {activeTab === 'saas' ? '📊 SaaS / Subscriptions' :
-               activeTab === 'membership' ? '🔐 Membership / Access' : '🛒 Store / One-offs'}
+              {activeTab === 'saas' ? '📊 SaaS / Subscriptions' : '🛒 Store / One-offs'}
             </span>
             <button
               onClick={() => setHasChosenType(false)}
@@ -898,12 +792,9 @@ export default function ApiTierConfig() {
             <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
               activeTab === 'saas'
                 ? 'bg-blue-900/30 border border-blue-700 text-blue-200'
-                : activeTab === 'membership'
-                ? 'bg-emerald-900/30 border border-emerald-700 text-emerald-200'
                 : 'bg-purple-900/30 border border-purple-700 text-purple-200'
             }`}>
-              {activeTab === 'saas' ? '📊 SaaS / Subscriptions' :
-               activeTab === 'membership' ? '🔐 Membership / Access' : '🛒 Store / One-offs'}
+              {activeTab === 'saas' ? '📊 SaaS / Subscriptions' : '🛒 Store / One-offs'}
             </span>
           </div>
         )}
@@ -957,7 +848,7 @@ export default function ApiTierConfig() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Price ($/month)</label>
                     <input
@@ -984,6 +875,17 @@ export default function ApiTierConfig() {
                         updateSaasTier(index, 'limit', val === 'unlimited' ? 'unlimited' : Number(val) || 0);
                       }}
                       placeholder="100, 1000, unlimited"
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Trial Days</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={tier.trialDays ?? ''}
+                      onChange={(e) => updateSaasTier(index, 'trialDays', e.target.value === '' ? null : Number(e.target.value))}
+                      placeholder="0 (none)"
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
                     />
                   </div>
@@ -1153,110 +1055,6 @@ export default function ApiTierConfig() {
           </div>
         )}
 
-        {/* Membership Tab Content */}
-        {(isEditMode || isPromoteMode || hasChosenType) && activeTab === 'membership' && (
-          <div className="space-y-4">
-            {membershipTiers.map((tier, index) => (
-              <div key={`membership-${index}-${tier.priceId || 'new'}`} className="bg-gray-800 rounded-lg p-4 border border-gray-700 relative">
-                {membershipTiers.length > 1 && (
-                  <button
-                    onClick={() => removeMembershipTier(index)}
-                    className="absolute top-2 right-2 text-gray-500 hover:text-red-400"
-                    title="Remove tier"
-                  >
-                    ✕
-                  </button>
-                )}
-
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Tier Name</label>
-                    <input
-                      type="text"
-                      value={tier.name}
-                      onChange={(e) => updateMembershipTier(index, 'name', e.target.value)}
-                      placeholder="basic"
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Display Name</label>
-                    <input
-                      type="text"
-                      value={tier.displayName}
-                      onChange={(e) => updateMembershipTier(index, 'displayName', e.target.value)}
-                      placeholder="Basic"
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Price ($/month)</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      defaultValue={tier.price || ''}
-                      key={`membership-price-${index}-${tier.priceId || 'new'}`}
-                      onBlur={(e) => {
-                        const val = e.target.value.replace(/[^0-9.]/g, '');
-                        updateMembershipTier(index, 'price', val === '' ? 0 : parseFloat(val) || 0);
-                      }}
-                      placeholder="9"
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Trial Period (days)</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={tier.trialDays ?? ''}
-                      onChange={(e) => updateMembershipTier(index, 'trialDays', e.target.value === '' ? null : Number(e.target.value))}
-                      placeholder="7"
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Leave blank for no trial</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Popular</label>
-                    <button
-                      type="button"
-                      onClick={() => updateMembershipTier(index, 'popular', !tier.popular)}
-                      className={`w-full px-3 py-2 rounded-lg font-medium transition-colors ${
-                        tier.popular
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-gray-900 border border-gray-700 text-gray-400'
-                      }`}
-                    >
-                      {tier.popular ? '★ Popular' : 'Mark Popular'}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Features (comma separated)</label>
-                  <input
-                    type="text"
-                    value={tier.features}
-                    onChange={(e) => updateMembershipTier(index, 'features', e.target.value)}
-                    placeholder="Unlimited access, Premium content, Priority support"
-                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-                  />
-                </div>
-              </div>
-            ))}
-
-            <button
-              onClick={addMembershipTier}
-              className="w-full py-3 border-2 border-dashed border-gray-700 rounded-lg text-gray-400 hover:border-gray-600 hover:text-gray-300"
-            >
-              + Add Tier
-            </button>
-          </div>
-        )}
-
         {/* Submit Button - Only show after type chosen */}
         {(isEditMode || isPromoteMode || hasChosenType) && (
         <div className="mt-8 pt-6 border-t border-gray-700">
@@ -1276,10 +1074,10 @@ export default function ApiTierConfig() {
             {loading
               ? (isPromoteMode ? 'Creating Live Products...' : isEditMode ? 'Saving Changes...' : 'Creating Products...')
               : isPromoteMode
-                ? `🚀 Create Live ${activeTab === 'saas' ? 'Subscriptions' : activeTab === 'membership' ? 'Memberships' : 'Products'}`
+                ? `🚀 Create Live ${activeTab === 'saas' ? 'Subscriptions' : 'Products'}`
                 : isEditMode
                   ? 'Save Changes'
-                  : `Create Test ${activeTab === 'saas' ? 'Subscriptions' : activeTab === 'membership' ? 'Memberships' : 'Products'} →`
+                  : `Create Test ${activeTab === 'saas' ? 'Subscriptions' : 'Products'} →`
             }
           </button>
           <p className="text-center text-sm text-gray-500 mt-3">
