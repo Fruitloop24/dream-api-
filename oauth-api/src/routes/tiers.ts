@@ -108,7 +108,7 @@ export async function handleGetTiers(
   let query = `
     SELECT name, displayName, price, "limit", priceId, productId,
            features, popular, inventory, soldOut, mode,
-           publishableKey, projectType
+           publishableKey, projectType, trialDays
     FROM tiers
     WHERE platformId = ?
       AND (mode = ? OR mode IS NULL)
@@ -181,6 +181,7 @@ export async function handleUpdateTier(
       popular?: boolean;
       inventory?: number | null;
       soldOut?: boolean;
+      trialDays?: number | null;  // Trial period for membership
     };
   };
 
@@ -344,6 +345,10 @@ export async function handleUpdateTier(
     setClauses.push('soldOut = ?');
     values.push(updates.soldOut ? 1 : 0);
   }
+  if (updates.trialDays !== undefined) {
+    setClauses.push('trialDays = ?');
+    values.push(updates.trialDays);
+  }
 
   if (setClauses.length === 0) {
     return new Response(
@@ -416,6 +421,7 @@ export async function handleAddTier(
       imageUrl?: string;
       inventory?: number | null;
       popular?: boolean;
+      trialDays?: number | null;  // Trial period for membership
     };
   };
 
@@ -462,10 +468,16 @@ export async function handleAddTier(
   const projectType = existingKey.projectType as ProjectType;
 
   // Validate tier type matches project type
+  // membership and saas use subscription billing, store uses one_off
   const tierBillingMode = tier.billingMode || 'subscription';
   const tierType = tierBillingMode === 'one_off' ? 'store' : 'saas';
 
-  if (tierType !== projectType) {
+  // For membership projects, we allow subscription-based tiers
+  const isCompatible = projectType === 'membership'
+    ? tierBillingMode === 'subscription'
+    : tierType === projectType;
+
+  if (!isCompatible) {
     return new Response(
       JSON.stringify({
         error: `Cannot add ${tierType} tier to ${projectType} project. Project type is locked.`
@@ -573,8 +585,8 @@ export async function handleAddTier(
     INSERT INTO tiers (
       platformId, publishableKey, projectType, name, displayName,
       price, "limit", priceId, productId, features, popular,
-      inventory, soldOut, mode, createdAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      inventory, soldOut, mode, createdAt, trialDays
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     platformId,
     publishableKey,
@@ -590,7 +602,8 @@ export async function handleAddTier(
     tier.inventory ?? null,
     0, // soldOut starts false
     mode,
-    new Date().toISOString().replace('T', ' ').slice(0, 19)
+    new Date().toISOString().replace('T', ' ').slice(0, 19),
+    tier.trialDays ?? null  // Trial period for membership
   ).run();
 
   console.log(`[Tiers] Added new tier ${tierNameSlug} to project ${publishableKey}`);

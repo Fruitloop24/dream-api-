@@ -117,7 +117,7 @@ export async function ensureTierSchema(env: Env) {
     await env.DB.prepare('ALTER TABLE tiers ADD COLUMN publishableKey TEXT').run();
   } catch {}
 
-  // projectType - saas or store
+  // projectType - saas, store, or membership
   try {
     await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectType TEXT').run();
   } catch {}
@@ -135,6 +135,11 @@ export async function ensureTierSchema(env: Env) {
   // mode - test or live
   try {
     await env.DB.prepare("ALTER TABLE tiers ADD COLUMN mode TEXT DEFAULT 'live'").run();
+  } catch {}
+
+  // trialDays - trial period for membership subscriptions
+  try {
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN trialDays INTEGER').run();
   } catch {}
 }
 

@@ -28,11 +28,12 @@
  * tiers
  *   - platformId: Which developer owns this
  *   - publishableKey: Which project this tier belongs to (NEW!)
- *   - projectType: 'saas' or 'store'
+ *   - projectType: 'saas', 'store', or 'membership'
  *   - name, displayName, price, limit: Tier properties
  *   - priceId, productId: Stripe IDs
  *   - mode: 'test' or 'live'
  *   - inventory, soldOut: For store products
+ *   - trialDays: For membership (trial period before billing)
  *
  * stripe_tokens
  *   - platformId: Which developer
@@ -101,6 +102,11 @@ export async function ensureTierSchema(env: Env) {
   // Legacy: projectId (keeping for backwards compat, but publishableKey is preferred)
   try {
     await env.DB.prepare('ALTER TABLE tiers ADD COLUMN projectId TEXT').run();
+  } catch {}
+
+  // trialDays - trial period for membership subscriptions
+  try {
+    await env.DB.prepare('ALTER TABLE tiers ADD COLUMN trialDays INTEGER').run();
   } catch {}
 }
 

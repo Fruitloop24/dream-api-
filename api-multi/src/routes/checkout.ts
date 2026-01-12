@@ -20,7 +20,7 @@
  */
 
 import { Env } from '../types';
-import { getPriceIdMap } from '../config/configLoader';
+import { getPriceIdMap, getTrialDays } from '../config/configLoader';
 import type { ClerkClient } from '@clerk/backend';
 import { ensureStripeTokenSchema, getProjectSettings } from '../services/d1';
 
@@ -184,6 +184,13 @@ export async function handleCreateCheckout(
 		if (projectSettings?.enableTax) {
 			checkoutParams['automatic_tax[enabled]'] = 'true';
 			console.log(`[Checkout] Automatic tax enabled for project ${publishableKey}`);
+		}
+
+		// Add trial period if configured for this tier (membership projects)
+		const trialDays = await getTrialDays(env, platformId, targetTier, mode, publishableKey);
+		if (trialDays && trialDays > 0) {
+			checkoutParams['subscription_data[trial_period_days]'] = String(trialDays);
+			console.log(`[Checkout] Trial period of ${trialDays} days for tier ${targetTier}`);
 		}
 
 		// Create Stripe checkout session on DEV's Stripe account

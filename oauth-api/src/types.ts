@@ -11,4 +11,4 @@ export interface Env {
   ALLOWED_ORIGINS?: string; // Comma-separated list of allowed origins
 }
 
-export type ProjectType = 'saas' | 'store';
+export type ProjectType = 'saas' | 'store' | 'membership';

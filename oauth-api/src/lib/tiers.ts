@@ -17,6 +17,11 @@
  *   - Have inventory counts
  *   - One-time purchase
  *
+ * For Membership projects:
+ *   - Tiers are access levels (Basic, Premium, VIP)
+ *   - Have trial periods (7 days, 14 days, etc.)
+ *   - Recurring billing with content gating (no usage tracking)
+ *
  * KEY RELATIONSHIP:
  *   Each tier belongs to a publishableKey (the project).
  *   This lets us filter tiers by project in the dashboard.
@@ -37,12 +42,13 @@ export type TierInput = {
   limit: number | 'unlimited';           // Usage limit (SaaS) or null
   billingMode?: 'subscription' | 'one_off';  // How to bill
   publishableKey?: string;               // Which project this belongs to
-  projectType?: ProjectType;             // saas or store
+  projectType?: ProjectType;             // saas, store, or membership
   description?: string;                  // Product description (for store)
   imageUrl?: string;                     // Product image URL (for store)
   inventory?: number | null;             // Stock count (for store)
   features?: string | string[];          // Feature list
   popular?: boolean;                     // Highlight in UI
+  trialDays?: number | null;             // Trial period in days (for membership)
   priceId: string;                       // Stripe price ID
   productId: string;                     // Stripe product ID
   mode?: 'live' | 'test';               // test or live
@@ -75,8 +81,9 @@ export async function upsertTiers(env: Env, platformId: string, tiers: TierInput
       productId,
       inventory,
       soldOut,
-      mode
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      mode,
+      trialDays
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   // Insert each tier
@@ -93,6 +100,7 @@ export async function upsertTiers(env: Env, platformId: string, tiers: TierInput
     });
 
     // Determine project type from billing mode if not specified
+    // membership is explicit, store is one_off, saas is default subscription
     const projectType = tier.projectType ||
       (tier.billingMode === 'one_off' ? 'store' : 'saas');
 
@@ -120,7 +128,8 @@ export async function upsertTiers(env: Env, platformId: string, tiers: TierInput
         tier.productId,
         tier.inventory ?? null,
         soldOutFlag,
-        tier.mode || 'live'
+        tier.mode || 'live',
+        tier.trialDays ?? null          // Trial period for membership
       )
       .run();
 
@@ -149,7 +158,7 @@ export async function getTiers(
   let query = `
     SELECT name, displayName, price, "limit", priceId, productId,
            features, popular, inventory, soldOut, mode,
-           publishableKey, projectType
+           publishableKey, projectType, trialDays
     FROM tiers
     WHERE platformId = ?
   `;
@@ -209,6 +218,7 @@ export async function getTiers(
       mode: row.mode,
       publishableKey: row.publishableKey,
       projectType: row.projectType,
+      trialDays: row.trialDays ?? null,
     } as TierInput;
   });
 }

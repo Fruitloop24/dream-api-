@@ -28,6 +28,7 @@ interface ConfigTier {
   stripePriceId?: string | null;
   priceId?: string | null;
   productId?: string | null;
+  trialDays?: number | null;  // Trial period for membership subscriptions
 }
 
 interface Config {
@@ -53,7 +54,7 @@ async function loadTiersFromDb(
   await ensureTierSchema(env);
 
   let query = `
-    SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, projectType, publishableKey
+    SELECT name, displayName, price, "limit", priceId, productId, features, popular, inventory, soldOut, projectType, publishableKey, trialDays
     FROM tiers
     WHERE platformId = ? AND (mode = ? OR mode IS NULL)
   `;
@@ -78,6 +79,7 @@ async function loadTiersFromDb(
       inventory?: number | null;
       soldOut?: number | null;
       projectType?: string | null;
+      trialDays?: number | null;
     }>();
 
   if (!rows.results || rows.results.length === 0) return null;
@@ -151,6 +153,7 @@ async function loadTiersFromDb(
       stripePriceId: row.priceId,
       priceId: row.priceId,
       productId: row.productId,
+      trialDays: row.trialDays ?? null,
     };
   });
 
@@ -273,6 +276,26 @@ export async function getAllTiers(
     imageUrl: t.imageUrl || null,
     inventory: t.inventory ?? null,
   }));
+}
+
+/**
+ * Get trial days for a specific tier
+ */
+export async function getTrialDays(
+  env: Env,
+  platformId: string,
+  tierName: string,
+  mode: string = 'live',
+  publishableKey?: string | null
+): Promise<number | null> {
+  const tiers = await getAllTiers(env, platformId, mode, publishableKey);
+  const tier = tiers.find(t =>
+    t.id === tierName ||
+    t.id?.toLowerCase() === tierName.toLowerCase() ||
+    t.name === tierName ||
+    t.name?.toLowerCase() === tierName.toLowerCase()
+  );
+  return tier?.trialDays ?? null;
 }
 
 export type { ConfigTier };

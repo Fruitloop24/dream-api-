@@ -99,6 +99,7 @@ CREATE TABLE tiers (
   description TEXT,                      -- Product description
   imageUrl TEXT,                         -- Product image URL
   popular INTEGER DEFAULT 0,             -- Highlight badge (1 = true)
+  trialDays INTEGER,                     -- Membership only: free trial days before billing
   createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
 
   PRIMARY KEY (publishableKey, name),
@@ -114,8 +115,10 @@ CREATE INDEX idx_tiers_platform ON tiers(platformId);
 **Notes:**
 - `features` is JSON: `["Feature 1", "Feature 2"]`
 - `price` is in CENTS (same as Stripe)
-- `inventory = NULL` means unlimited stock
+- `inventory = NULL` means unlimited stock (Store only)
 - `popular = 1` shows "Popular" badge in UI
+- `trialDays` sets Stripe trial period (Membership only)
+- `projectType`: `'saas'` (usage limits), `'store'` (one-off), `'membership'` (trial + content gating)
 
 ---
 

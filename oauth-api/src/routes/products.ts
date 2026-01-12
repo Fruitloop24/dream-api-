@@ -225,7 +225,7 @@ async function configureStripePortal(
  *   - userId: Clerk user ID
  *   - mode: 'test' | 'live'
  *   - projectName: Display name for this project
- *   - projectType: 'saas' | 'store' (LOCKED after creation)
+ *   - projectType: 'saas' | 'store' | 'membership' (LOCKED after creation)
  *   - tiers: Array of tier definitions
  *
  * What happens:
@@ -256,7 +256,7 @@ export async function handleCreateProducts(
     userId?: string;
     mode?: 'live' | 'test';
     projectName?: string;
-    projectType?: 'saas' | 'store';
+    projectType?: 'saas' | 'store' | 'membership';
     enableTax?: boolean;  // Enable Stripe automatic tax collection
     tiers: Array<{
       name: string;
@@ -267,12 +267,15 @@ export async function handleCreateProducts(
       description?: string;
       imageUrl?: string;
       inventory?: number | null;
+      trialDays?: number | null;  // Trial period for membership
     }>;
   };
 
   const { tiers, projectName } = body;
   const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
-  const projectType: ProjectType = body.projectType === 'store' ? 'store' : 'saas';
+  // Determine project type - membership and saas use subscriptions, store uses one_off
+  const projectType: ProjectType = body.projectType === 'store' ? 'store' :
+                                   body.projectType === 'membership' ? 'membership' : 'saas';
   const userId = authenticatedUserId;
 
   // Validate required fields
@@ -366,11 +369,12 @@ export async function handleCreateProducts(
 
     const tierConfig: TierInput[] = tiers.map((tier, i) => ({
       ...tier,
-      publishableKey,           // NEW: Link tier to this key/project
-      projectType,              // saas or store - LOCKED
+      publishableKey,           // Link tier to this key/project
+      projectType,              // saas, store, or membership - LOCKED
       priceId: priceIds[i].priceId,
       productId: priceIds[i].productId,
       mode,
+      trialDays: tier.trialDays ?? null,  // Trial period for membership
     }));
 
     // =========================================================================
