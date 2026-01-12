@@ -352,7 +352,7 @@ export default function Dashboard() {
             />
 
             {/* Dashboard Content by Type */}
-            {selectedProject.type === 'saas' && (
+            {(selectedProject.type === 'saas' || selectedProject.type === 'membership') && (
               <SaasDashboard
                 project={selectedProject}
                 metrics={metrics}
