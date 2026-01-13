@@ -112,9 +112,11 @@ if (api.auth.isSignedIn()) {
 
 **Sign Up (new users)** - Routes through sign-up worker to set metadata:
 ```typescript
-const url = api.auth.getSignUpUrl({ redirect: '/dashboard' });
+const url = api.auth.getSignUpUrl({ redirect: '/choose-plan' });
 // Redirect user to this URL
 ```
+
+**Important:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute race conditions. See `docs/SIGN-UP-FLOW.md` for details.
 
 **Sign In (returning users)** - Direct to Clerk hosted page:
 ```typescript
@@ -628,3 +630,28 @@ useEffect(() => {
 | `features.split()` fails | Features is array | Don't call split, iterate directly |
 | Checkout returns undefined | Using wrong property | Use `result.url`, not `result.checkoutUrl` |
 | Sign-in doesn't persist | Didn't use sign-up worker | New users must go through `getSignUpUrl()` |
+| `client.signIn: false` | Clerk not fully initialized | Increase wait time in SDK |
+| `Ticket present: NO` | Worker didn't add token | Check /oauth/complete response |
+| `Ticket error: expired` | Token TTL is 5 minutes | User took too long, retry |
+| `Ticket error: already used` | Token is single-use | Don't refresh page with ticket |
+| OAuth redirects to landing | ProtectedRoute race condition | Use `/choose-plan` not `/dashboard` |
+
+---
+
+## Cross-Domain Sign-In (Ticket Mechanism)
+
+The SDK uses Clerk's sign-in ticket mechanism for cross-domain authentication. After sign-up, the sign-up worker creates a sign-in token and redirects to the dev's app with `__clerk_ticket` parameter.
+
+**Critical: Use `clerk.client.signIn`, NOT `clerk.signIn`**
+
+When Clerk is loaded via CDN (which the SDK does), the signIn object is at `clerk.client.signIn`:
+
+```typescript
+// WRONG - clerk.signIn doesn't exist on CDN-loaded Clerk!
+clerk.signIn.create({ strategy: 'ticket', ticket })
+
+// CORRECT - must use clerk.client.signIn
+clerk.client.signIn.create({ strategy: 'ticket', ticket })
+```
+
+The SDK handles this automatically in `dream-sdk/src/clerk.ts`. See `docs/SIGN-UP-FLOW.md` for complete flow documentation.

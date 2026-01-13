@@ -351,27 +351,47 @@ Response: { livePublishableKey, liveSecretKey }
 ## Sign-Up Worker (sign-up)
 
 Handles end-user signup flow with metadata injection.
+**Full documentation:** `docs/SIGN-UP-FLOW.md`
 
 **GET /signup** - Start signup flow
 ```
 Auth: None
 Query: pk (publishable key), redirect (return URL)
-Action: Validates PK, redirects to Clerk hosted signup
+Action: Validates PK, sets cookie with {pk, redirect}, redirects to Clerk hosted signup
 ```
 
-**GET /callback** - Return from Clerk signup
+**GET /callback** OR **GET /** - Return from Clerk signup
 ```
 Auth: None
-Query: Clerk callback params
-Action: Sets user metadata (publishableKey, plan), renders callback page
+Query: Clerk callback params (__clerk_db_jwt in dev mode)
+Action: Renders page that loads Clerk SDK and calls /oauth/complete
+Note: Worker handles BOTH /callback AND / paths (Clerk dev mode redirects to root)
 ```
 
-**POST /oauth/complete** - API endpoint for OAuth completion
+**POST /oauth/complete** - Complete signup and create sign-in token
 ```
-Auth: Bearer JWT
+Auth: Bearer JWT (Clerk session token)
 Body: { publishableKey }
-Action: Verify token, set metadata, sync to D1
-Response: { success: boolean }
+Action:
+  1. Verify JWT with Clerk
+  2. Set publicMetadata: { publishableKey, plan: 'free' }
+  3. Sync to D1 (end_users + usage_counts)
+  4. Create sign-in token via Clerk API
+Response: { success: boolean, signInToken: string }
+```
+
+### Cross-Domain Sign-In Flow
+
+After `/oauth/complete` succeeds, the worker redirects to:
+```
+{redirect}?__clerk_ticket={signInToken}
+```
+
+The SDK then consumes the ticket using `clerk.client.signIn` (NOT `clerk.signIn`):
+```javascript
+// CRITICAL: Use clerk.client.signIn for CDN-loaded Clerk
+const result = await clerk.client.signIn.create({ strategy: 'ticket', ticket });
+await clerk.setActive({ session: result.createdSessionId });
 ```
 
 ---

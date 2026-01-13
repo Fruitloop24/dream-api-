@@ -43,6 +43,9 @@ await api.dashboard.get();
 | `docs/SDK-GUIDE.md` | Complete SDK reference |
 | `docs/API-REFERENCE.md` | Endpoints and data types |
 | `docs/ARCHITECTURE.md` | Technical details |
+| `docs/SIGN-UP-FLOW.md` | End-user sign-up flow (critical `clerk.client.signIn` fix) |
+| `docs/D1-SCHEMA.md` | Database schema reference |
+| `docs/LIMITATIONS.md` | Constraints and considerations |
 | `docs/HYPE.md` | Marketing/pitch document |
 
 ## Architecture
@@ -75,7 +78,7 @@ await api.dashboard.get();
 | `api-multi` | Main API - usage, billing, products, dashboard |
 | `oauth-api` | Stripe Connect, tier management |
 | `front-auth-api` | Dev auth, credentials, $19/mo billing, usage metering |
-| `sign-up` | End-user signup with metadata |
+| `sign-up` | End-user signup flow (Clerk hosted → metadata → D1 sync) |
 | `admin-dashboard` | Internal admin metrics (CF Access protected) |
 
 ## Infrastructure Features
@@ -103,6 +106,58 @@ All provided by Cloudflare Workers:
 3. **PK/SK split** - Same model as Stripe
 4. **Plan in JWT** - Set by webhooks, not user input
 5. **publishableKey isolation** - All queries filter by PK
+
+## Sign-Up Worker (End-User Flow)
+
+**URL:** `https://sign-up.k-c-sheffield012376.workers.dev`
+
+### Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/signup?pk=xxx&redirect=url` | GET | Validate PK, set cookie, redirect to Clerk hosted signup |
+| `/callback` or `/` | GET | Return from Clerk, load SDK, call /oauth/complete |
+| `/oauth/complete` | POST | Verify token, set publicMetadata, sync to D1 |
+
+### Flow
+
+```
+1. Dev's app → /signup?pk=xxx&redirect=/choose-plan
+2. Worker validates PK in D1, sets cookie with {pk, redirect}
+3. Redirect to Clerk hosted signup page
+4. User signs up (email or Google OAuth)
+5. Clerk redirects to /callback (or / in dev mode with __clerk_db_jwt)
+6. Callback page loads Clerk SDK, gets session token
+7. POST /oauth/complete with token + publishableKey
+8. Worker: verify token → set publicMetadata {publishableKey, plan: 'free'} → sync D1
+9. Worker creates sign-in token via Clerk API
+10. Redirect to dev's app with __clerk_ticket param
+11. SDK consumes ticket via clerk.client.signIn (NOT clerk.signIn!)
+12. User is signed in with plan='free'
+```
+
+**Important:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute race conditions.
+**Full documentation:** `docs/SIGN-UP-FLOW.md`
+
+### Important: Clerk Dev Mode
+
+Clerk dev mode redirects to `/` with `__clerk_db_jwt` param instead of `/callback`. The worker handles BOTH paths:
+
+```typescript
+// Line 94 - handles both /callback and /
+if ((path === '/callback' || path === '/') && request.method === 'GET') {
+```
+
+### What Gets Set
+
+**Clerk publicMetadata:**
+```json
+{ "publishableKey": "pk_test_xxx", "plan": "free" }
+```
+
+**D1 Tables:**
+- `end_users`: clerkUserId, email, publishableKey, platformId
+- `usage_counts`: initial record with usageCount=0
 
 ## Developer Dashboard
 
@@ -287,6 +342,82 @@ When user asks for custom branding (gradients, glassmorphism, custom colors), AI
 - **SaaS** - Usage-metered apps (React + Next.js) ✓
 - **Store** - E-commerce with guest checkout (React + Next.js) ✓
 - **Membership** - Content gating/paywalls (React + Next.js) ✓
+
+### Membership Template Flow (IMPORTANT PATTERN)
+
+**The correct flow for membership sites:**
+
+```
+Landing page
+    │
+    └─► Sign up (redirect: /choose-plan)
+            │
+            └─► Clerk signup → sign-up worker → plan='free'
+                    │
+                    └─► /choose-plan?__clerk_ticket=xxx
+                            │
+                            └─► SDK consumes ticket (clerk.client.signIn)
+                                    │
+                                    └─► ChoosePlanPage checks plan
+                                            │
+                                            ├─► plan !== 'free' → Redirect to /dashboard
+                                            │
+                                            └─► plan === 'free' → Auto-checkout:
+                                                    1. Fetch tiers
+                                                    2. createCheckout()
+                                                    3. Redirect to Stripe
+                                                    4. Stripe → /dashboard?success=true
+                                                    5. Webhook sets plan='pro'
+```
+
+**Key insight:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute blocking before ticket is consumed.
+**Full documentation:** `docs/SIGN-UP-FLOW.md`
+
+**Dashboard.tsx pattern:**
+```typescript
+const checkoutStarted = useRef(false);
+
+useEffect(() => {
+  async function handleCheckout() {
+    if (!isReady || !user || plan !== 'free') return;
+    if (searchParams.get('success')) return; // Just paid
+    if (checkoutStarted.current) return;
+
+    checkoutStarted.current = true;
+
+    const res = await dreamAPI.products.listTiers();
+    const paidTier = res.tiers?.find(t => t.price > 0);
+
+    const result = await api.billing.createCheckout({
+      tier: paidTier.name,
+      priceId: paidTier.priceId,
+      successUrl: window.location.origin + '/dashboard?success=true',
+      cancelUrl: window.location.origin + '/',
+    });
+
+    if (result.url) window.location.href = result.url;
+  }
+  handleCheckout();
+}, [isReady, user, plan, api, searchParams]);
+```
+
+**DON'T do this (causes loop):**
+```typescript
+// ❌ WRONG - Dashboard ProtectedRoute redirects before ticket is consumed
+dreamAPI.auth.getSignUpUrl({ redirect: '/dashboard' })
+
+// ✓ CORRECT - ChoosePlanPage waits for SDK to consume ticket
+dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })
+```
+
+**Critical SDK Fix:**
+```typescript
+// ❌ WRONG - clerk.signIn doesn't exist on CDN-loaded Clerk!
+clerk.signIn.create({ strategy: 'ticket', ticket })
+
+// ✓ CORRECT - must use clerk.client.signIn
+clerk.client.signIn.create({ strategy: 'ticket', ticket })
+```
 
 ### Planned
 

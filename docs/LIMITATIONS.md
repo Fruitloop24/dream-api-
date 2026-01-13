@@ -44,6 +44,12 @@
    - 60 requests/minute default
    - Requires USAGE_KV binding (gracefully skipped if missing)
 
+5. **Cross-Domain Auth via Tickets**
+   - Sign-up uses `__clerk_ticket` param for cross-domain session
+   - Tickets expire in 5 minutes and are single-use
+   - If user refreshes before ticket consumed, they must sign in again
+   - See `docs/SIGN-UP-FLOW.md` for details
+
 ### Security Considerations
 
 1. **Sign-up redirect parameter** - FIXED
@@ -59,6 +65,19 @@
 3. **JWT Clock Skew**
    - 5-minute tolerance for clock differences
    - Standard practice, acceptable tradeoff
+
+### Clerk API Quirks
+
+1. **CDN-Loaded Clerk: `clerk.client.signIn` not `clerk.signIn`**
+   - When Clerk is loaded via CDN script (not npm), `signIn` lives at `clerk.client.signIn`
+   - SDK uses CDN loading for cross-domain compatibility
+   - This caused auth failures until fixed in `dream-sdk/src/clerk.ts`
+   - See `docs/SIGN-UP-FLOW.md` for details
+
+2. **Dev Mode Callback Path**
+   - Clerk dev mode redirects to `/` with `__clerk_db_jwt` param
+   - Clerk prod mode redirects to `/callback`
+   - Sign-up worker handles BOTH paths
 
 ### What's NOT a Limitation
 
@@ -91,6 +110,8 @@
 **Completed:**
 - ~~Redirect allowlist validation~~ → Fixed with JSON.stringify, low risk
 - ~~X-Publishable-Key override validation~~ → Protected by AND condition
+- ~~Subscription enforcement~~ → API blocked when dev subscription expires (7-day grace)
+- ~~Cross-domain sign-in~~ → Fixed `clerk.client.signIn` (not `clerk.signIn`) for CDN-loaded Clerk
 
 **High Value, Low Effort:**
 - USAGE_KV binding documentation
@@ -100,7 +121,6 @@
 - Metered billing support (Stripe meters)
 - Multi-currency
 - Webhook retry UI
-- dream-store-basic template completion
 
 **High Value, High Effort:**
 - Team/org accounts (Clerk Organizations)

@@ -176,12 +176,21 @@ Simple. Predictable. Scales with you.
 
 ## Free Templates (Optional)
 
-Want a head start? We have React templates:
+Want a head start? We have React and Next.js templates:
 
-- **dream-saas-basic** - Usage-metered SaaS starter
-- **dream-store-basic** - E-commerce with guest checkout
+| Type | React | Next.js |
+|------|-------|---------|
+| **SaaS** | dream-saas-basic | dream-saas-next |
+| **Store** | dream-store-basic | dream-store-next |
+| **Membership** | dream-membership-basic | dream-membership-next |
 
-Templates have AI-assisted setup. Clone, configure with your AI editor, deploy.
+All templates have:
+- **`/setup` command** - AI-assisted configuration (Claude Code, Cursor, Windsurf)
+- **`/pwa` command** - Make it an installable app
+- **Single config file** - Change branding in one place
+- **Dark/light themes** - One toggle
+
+Clone, configure with your AI editor, deploy.
 
 But you don't need them. The SDK works with any frontend.
 
@@ -191,8 +200,9 @@ But you don't need them. The SDK works with any frontend.
 
 - **SaaS builders** - Usage tracking and subscription billing
 - **AI wrapper makers** - Meter tokens, API calls, generations
-- **Course creators** - Gated content with subscriptions
-- **E-commerce** - Products and guest checkout
+- **Course creators** - Gated content with membership paywalls
+- **Newsletter/community owners** - Premium content access
+- **E-commerce** - Products and guest checkout (no user accounts needed)
 - **Side projects** - Ship fast, don't build infrastructure
 
 ---

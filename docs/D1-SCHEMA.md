@@ -322,5 +322,30 @@ Columns added after initial schema (safe `ALTER TABLE ADD COLUMN`):
 | front-auth-api | platforms, api_keys, events |
 | oauth-api | platforms, api_keys, tiers |
 | api-multi | tiers, subscriptions, usage_counts, end_users, events |
-| sign-up | end_users |
+| sign-up | end_users, usage_counts (creates initial records) |
 | admin-dashboard | platforms, end_users (read-only) |
+
+---
+
+## Sign-Up Data Flow
+
+When a user signs up through the sign-up worker:
+
+1. **Clerk `publicMetadata` set:**
+   ```json
+   { "publishableKey": "pk_test_xxx", "plan": "free" }
+   ```
+
+2. **`end_users` table insert:**
+   ```sql
+   INSERT INTO end_users (platformId, publishableKey, clerkUserId, email, plan)
+   VALUES (?, ?, ?, ?, 'free')
+   ```
+
+3. **`usage_counts` table insert:**
+   ```sql
+   INSERT INTO usage_counts (platformId, publishableKey, userId, plan, usageCount)
+   VALUES (?, ?, ?, 'free', 0)
+   ```
+
+See `docs/SIGN-UP-FLOW.md` for the complete sign-up flow documentation.

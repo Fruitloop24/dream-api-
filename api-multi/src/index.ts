@@ -57,8 +57,7 @@ async function verifyEndUserToken(
 		throw new Error('Missing end-user token (send X-Clerk-Token with a valid JWT)');
 	}
 
-	// Verify the JWT signature using standalone verifyToken function
-	// Returns { data, error } in newer Clerk SDK versions
+	// Verify Clerk JWT
 	// Allow 5 minutes clock skew to handle timezone/clock sync issues
 	const result = await verifyToken(token, {
 		secretKey: env.CLERK_SECRET_KEY,

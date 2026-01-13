@@ -22,9 +22,9 @@ Dream API is the backend. You build your frontend, we handle:
 
 Plus Stripe's standard transaction fees (2.9% + $0.30). Funds go directly to your Stripe account.
 
-## Two Modes
+## Three Project Types
 
-### SaaS Mode
+### SaaS
 Usage-metered subscriptions. Track API calls, tokens, or any billable action.
 
 ```typescript
@@ -33,8 +33,8 @@ await api.usage.check();  // Get remaining
 await api.billing.createCheckout({ tier: 'pro' });  // Upgrade
 ```
 
-### Store Mode
-E-commerce with products, inventory, guest checkout.
+### Store
+E-commerce with products, inventory, guest checkout. No Clerk users = no overage.
 
 ```typescript
 await api.products.list();  // Get products
@@ -42,6 +42,17 @@ await api.products.cartCheckout({  // Guest checkout
   items: [{ priceId: 'price_xxx', quantity: 1 }],
   customerEmail: 'buyer@email.com',
 });
+```
+
+### Membership
+Content gating with paywalls. Optional trial periods, auto-checkout flow.
+
+```typescript
+const plan = user?.plan || 'free';
+const hasPaidAccess = plan !== 'free';
+
+// Gate content based on plan
+{hasPaidAccess ? <PremiumContent /> : <UpgradePrompt />}
 ```
 
 ## Quick Start
@@ -78,14 +89,15 @@ Manage everything from the dashboard:
 
 ## Templates
 
-Free React templates with AI-assisted setup:
+Free templates with AI-assisted setup (both React and Next.js versions):
 
 | Template | Type | Features |
 |----------|------|----------|
-| `dream-saas-basic` | SaaS | Auth, usage tracking, billing, dashboard |
-| `dream-store-basic` | Store | Products, cart, guest checkout |
+| `dream-saas-basic` / `dream-saas-next` | SaaS | Auth, usage tracking, billing, dashboard |
+| `dream-store-basic` / `dream-store-next` | Store | Products, cart, guest checkout |
+| `dream-membership-basic` / `dream-membership-next` | Membership | Content gating, paywalls, auto-checkout |
 
-Both have `/setup` command for Claude Code, Cursor, or Windsurf.
+All templates have `/setup` command for Claude Code, Cursor, or Windsurf.
 
 Clone from GitHub, open in your AI editor, run `/setup`.
 
@@ -143,16 +155,32 @@ API access is gated by subscription status. When a developer's subscription laps
 
 ```
 dream-api/
-├── dream-sdk/         # @dream-api/sdk (npm published)
-├── frontend/          # Developer dashboard (React)
-├── api-multi/         # Main API worker
-├── oauth-api/         # Stripe Connect OAuth
-├── front-auth-api/    # Dev authentication
-├── sign-up/           # End-user signup worker
-├── admin-dashboard/   # Internal admin (CF Access protected)
-├── dream-saas-basic/  # SaaS template (separate repo)
-└── dream-store-basic/ # Store template (separate repo)
+├── dream-sdk/              # @dream-api/sdk (npm published)
+├── frontend/               # Developer dashboard (React + Vite)
+├── api-multi/              # Main API - usage, billing, products
+├── oauth-api/              # Stripe Connect OAuth + tier management
+├── front-auth-api/         # Dev auth, $19/mo billing, usage metering
+├── sign-up/                # End-user signup (Clerk → metadata → D1)
+├── admin-dashboard/        # Internal metrics (CF Access protected)
+├── docs/                   # SDK, API, Architecture docs
+└── [templates]/            # Separate GitHub repos, gitignored:
+    ├── dream-saas-basic/       # React SaaS
+    ├── dream-saas-next/        # Next.js SaaS
+    ├── dream-store-basic/      # React Store
+    ├── dream-store-next/       # Next.js Store
+    ├── dream-membership-basic/ # React Membership
+    └── dream-membership-next/  # Next.js Membership
 ```
+
+### Workers Detail
+
+| Worker | URL | Purpose |
+|--------|-----|---------|
+| `api-multi` | api-multi.k-c-sheffield012376.workers.dev | Main customer-facing API |
+| `oauth-api` | oauth-api.k-c-sheffield012376.workers.dev | Stripe Connect, tiers |
+| `front-auth-api` | front-auth-api.k-c-sheffield012376.workers.dev | Dev auth, platform billing |
+| `sign-up` | sign-up.k-c-sheffield012376.workers.dev | End-user signup flow |
+| `admin-dashboard` | admin-dashboard.k-c-sheffield012376.workers.dev | Internal admin |
 
 ## Documentation
 
@@ -161,6 +189,9 @@ dream-api/
 | `docs/SDK-GUIDE.md` | SDK methods and usage |
 | `docs/API-REFERENCE.md` | Endpoints, params, responses |
 | `docs/ARCHITECTURE.md` | Technical deep dive |
+| `docs/SIGN-UP-FLOW.md` | End-user sign-up flow (critical for debugging) |
+| `docs/D1-SCHEMA.md` | Database schema reference |
+| `docs/LIMITATIONS.md` | Constraints and considerations |
 | `docs/HYPE.md` | Marketing pitch |
 
 ## Current State
@@ -168,14 +199,16 @@ dream-api/
 **Working:**
 - SaaS flow: signup → usage → limits → checkout → subscription
 - Store flow: products → cart → checkout → inventory updates
+- Membership flow: signup → auto-checkout → content gating
 - Dashboard: projects, tiers, products, customers, metrics
-- Templates: SaaS and Store with `/setup` command
+- Templates: SaaS, Store, and Membership (React + Next.js) with `/setup` and `/pwa` commands
 - SDK: Published on npm, handles auth/refresh automatically
+- Sign-up worker: Clerk hosted signup → metadata → D1 sync → cross-domain ticket
+- Subscription enforcement: API blocked when dev subscription expires (7-day grace)
 
 **Planned:**
-- `/pwa` command for installable apps
-- More templates (gated content, courses)
-- Framework variants (Next.js, Vue)
+- Vue/Nuxt variants of templates
+- `/deploy` command for one-click deployment
 
 ## Local Dev
 
