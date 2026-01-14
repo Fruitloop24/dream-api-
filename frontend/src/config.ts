@@ -129,10 +129,14 @@ export const CONFIG = {
   // TECH HIGHLIGHTS
   // -------------------------------------------------------------------------
   techHighlights: [
-    { icon: '⚡', title: 'Edge Compute', subtitle: '<50ms latency' },
+    { icon: '⚡', title: 'Edge Compute', subtitle: '<50ms worldwide' },
     { icon: '☁️', title: 'Serverless', subtitle: 'Auto-scaling' },
-    { icon: '🗄️', title: 'No DB to Maintain', subtitle: 'We handle it' },
+    { icon: '🗄️', title: 'No DB to Manage', subtitle: 'We handle it' },
     { icon: '🛡️', title: 'DDoS Protection', subtitle: 'Built-in' },
+    { icon: '🔐', title: 'Webhook Security', subtitle: 'Signed payloads' },
+    { icon: '📦', title: 'TypeScript SDK', subtitle: 'npm install' },
+    { icon: '🚦', title: 'Rate Limiting', subtitle: 'Per-user controls' },
+    { icon: '🌍', title: 'Global CDN', subtitle: '99.9% uptime' },
   ],
 
   // -------------------------------------------------------------------------

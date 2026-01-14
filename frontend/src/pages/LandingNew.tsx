@@ -330,13 +330,13 @@ export default function Landing() {
 
       {/* Tech Stack */}
       <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {CONFIG.techHighlights.map((item, i) => (
               <div key={i}>
-                <div className="text-2xl mb-2">{item.icon}</div>
-                <p className="font-medium">{item.title}</p>
-                <p className={`text-xs ${theme.mutedMore}`}>{item.subtitle}</p>
+                <div className="text-4xl mb-3">{item.icon}</div>
+                <p className="font-bold text-lg">{item.title}</p>
+                <p className={`text-sm ${theme.muted}`}>{item.subtitle}</p>
               </div>
             ))}
           </div>
