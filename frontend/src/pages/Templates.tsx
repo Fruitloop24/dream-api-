@@ -29,24 +29,27 @@ export default function Templates() {
       icon: '📊',
       description: 'Usage-metered apps with subscription tiers. Perfect for AI tools, APIs, developer tools.',
       features: ['Auth (sign up, sign in, sign out)', 'Usage tracking with limits', 'Subscription billing', 'Dashboard with usage display'],
+      demoUrl: CONFIG.links.saasDemo,
       githubUrl: CONFIG.links.saasBasic,
-      downloadUrl: 'https://github.com/Fruitloop24/dream-saas-basic/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-saas-basic/archive/refs/heads/master.zip',
     },
     {
       name: 'Store Basic',
       icon: '🛒',
       description: 'E-commerce with guest checkout. Perfect for digital products, merch, courses.',
       features: ['Product catalog from dashboard', 'Shopping cart', 'Guest checkout (no auth)', 'Inventory management'],
+      demoUrl: CONFIG.links.storeDemo,
       githubUrl: CONFIG.links.storeBasic,
-      downloadUrl: 'https://github.com/Fruitloop24/dream-store-basic/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-store-basic/archive/refs/heads/master.zip',
     },
     {
       name: 'Membership Basic',
       icon: '🔐',
       description: 'Gated content with paid access. Perfect for courses, communities, premium content.',
-      features: ['Content gating (free vs paid)', 'Member dashboard', 'Subscription management', 'Upgrade prompts'],
+      features: ['Content gating (free vs paid)', 'Member dashboard', 'Auto-checkout flow', 'Upgrade prompts'],
+      demoUrl: CONFIG.links.membershipDemo,
       githubUrl: CONFIG.links.membershipBasic,
-      downloadUrl: 'https://github.com/Fruitloop24/dream-membership-basic/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-membership-basic/archive/refs/heads/master.zip',
     },
   ];
 
@@ -56,24 +59,27 @@ export default function Templates() {
       icon: '📊',
       description: 'Same features as SaaS Basic, built with Next.js App Router.',
       features: ['Server components', 'SEO optimized', 'Edge-ready', 'App Router'],
+      demoUrl: '', // No Next.js demo yet
       githubUrl: CONFIG.links.saasNext,
-      downloadUrl: 'https://github.com/Fruitloop24/dream-saas-next/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-saas-next/archive/refs/heads/master.zip',
     },
     {
       name: 'Store Next',
       icon: '🛒',
       description: 'Same features as Store Basic, built with Next.js App Router.',
       features: ['Server components', 'SEO optimized', 'Edge-ready', 'App Router'],
+      demoUrl: '', // No Next.js demo yet
       githubUrl: CONFIG.links.storeNext,
-      downloadUrl: 'https://github.com/Fruitloop24/dream-store-next/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-store-next/archive/refs/heads/master.zip',
     },
     {
       name: 'Membership Next',
       icon: '🔐',
       description: 'Same features as Membership Basic, built with Next.js App Router.',
       features: ['Server components', 'SEO optimized', 'Edge-ready', 'App Router'],
+      demoUrl: '', // No Next.js demo yet
       githubUrl: CONFIG.links.membershipNext,
-      downloadUrl: 'https://github.com/Fruitloop24/dream-membership-next/archive/refs/heads/main.zip',
+      downloadUrl: 'https://github.com/Fruitloop24/dream-membership-next/archive/refs/heads/master.zip',
     },
   ];
 
@@ -102,9 +108,12 @@ export default function Templates() {
       <section className="pt-16 pb-12 px-4">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Free Templates</h1>
-          <p className={`text-xl ${theme.muted} max-w-2xl mx-auto`}>
+          <p className={`text-xl ${theme.muted} max-w-2xl mx-auto mb-4`}>
             Production-ready apps with auth, billing, and usage tracking wired up.
             Clone, run <code className={accent.text}>/setup</code>, and ship.
+          </p>
+          <p className={`${theme.mutedMore} text-sm`}>
+            Try demos with test card: <code className={`${accent.text} bg-gray-800 px-2 py-1 rounded`}>4242 4242 4242 4242</code>
           </p>
         </div>
       </section>
@@ -318,7 +327,7 @@ export default function Templates() {
 
 // Template Card Component
 function TemplateCard({ template, theme, accent, primaryBtn, secondaryBtn }: {
-  template: { name: string; icon: string; description: string; features: string[]; githubUrl: string; downloadUrl: string };
+  template: { name: string; icon: string; description: string; features: string[]; demoUrl?: string; githubUrl: string; downloadUrl: string };
   theme: any;
   accent: any;
   primaryBtn: string;
@@ -340,21 +349,33 @@ function TemplateCard({ template, theme, accent, primaryBtn, secondaryBtn }: {
         ))}
       </div>
       <div className="space-y-2">
-        <a
-          href={template.downloadUrl}
-          className={`flex items-center justify-center gap-2 w-full py-2.5 ${primaryBtn} text-sm`}
-        >
-          Download ZIP
-        </a>
-        <a
-          href={template.githubUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`flex items-center justify-center gap-2 w-full py-2.5 ${secondaryBtn} text-sm`}
-        >
-          <GithubIcon />
-          GitHub
-        </a>
+        {template.demoUrl && (
+          <a
+            href={template.demoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center justify-center gap-2 w-full py-2.5 ${primaryBtn} text-sm`}
+          >
+            Try Demo
+          </a>
+        )}
+        <div className="flex gap-2">
+          <a
+            href={template.githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center justify-center gap-2 flex-1 py-2.5 ${secondaryBtn} text-sm`}
+          >
+            <GithubIcon />
+            GitHub
+          </a>
+          <a
+            href={template.downloadUrl}
+            className={`flex items-center justify-center gap-2 flex-1 py-2.5 ${secondaryBtn} text-sm`}
+          >
+            ZIP
+          </a>
+        </div>
       </div>
     </div>
   );

@@ -67,7 +67,7 @@ export default function Landing() {
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-20 px-4">
+      <section className="pt-32 pb-12 px-4">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
             {CONFIG.hero.headline}
@@ -79,11 +79,46 @@ export default function Landing() {
             <a href="/sign-up" className={`px-8 py-4 ${primaryBtn} text-lg`}>
               {CONFIG.hero.ctaPrimary}
             </a>
-            <a href="#video" className={`px-8 py-4 ${secondaryBtn} text-lg`}>
-              {CONFIG.hero.ctaSecondary}
+            <a href="#demos" className={`px-8 py-4 ${secondaryBtn} text-lg`}>
+              Try Live Demos
             </a>
           </div>
           <p className={`text-sm ${theme.mutedMore}`}>{CONFIG.hero.subtext}</p>
+        </div>
+      </section>
+
+      {/* Live Demos Banner */}
+      <section id="demos" className={`py-8 px-4 ${accent.bg}`}>
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-white mb-2">Try Working Demos - Full Auth &amp; Payments</h2>
+            <p className="text-white/80">
+              Test card: <code className="bg-white/20 px-2 py-1 rounded font-mono text-sm">4242 4242 4242 4242</code>
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            <a href={CONFIG.links.saasDemo} target="_blank" rel="noopener noreferrer"
+               className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-center transition">
+              <div className="text-2xl mb-2">📊</div>
+              <div className="font-bold text-white">SaaS Demo</div>
+              <div className="text-white/70 text-sm">Usage tracking, tiers</div>
+            </a>
+            <a href={CONFIG.links.storeDemo} target="_blank" rel="noopener noreferrer"
+               className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-center transition">
+              <div className="text-2xl mb-2">🛒</div>
+              <div className="font-bold text-white">Store Demo</div>
+              <div className="text-white/70 text-sm">Cart, guest checkout</div>
+            </a>
+            <a href={CONFIG.links.membershipDemo} target="_blank" rel="noopener noreferrer"
+               className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-center transition">
+              <div className="text-2xl mb-2">🔐</div>
+              <div className="font-bold text-white">Membership Demo</div>
+              <div className="text-white/70 text-sm">Paywall, content gating</div>
+            </a>
+          </div>
+          <p className="text-center text-white/60 text-sm mt-4">
+            5 minutes to launch your own. Clone template → add key → deploy.
+          </p>
         </div>
       </section>
 
@@ -217,32 +252,30 @@ export default function Landing() {
 
       {/* Templates Section */}
       <section id="templates" className={`py-20 px-4 ${theme.sectionAlt}`}>
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Free Templates + Live Demos</h2>
-            <p className={`${theme.muted} text-lg mb-4`}>Try our fully functional demos. Then clone and customize.</p>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Free Templates - AI Customizable</h2>
+            <p className={`${theme.muted} text-lg mb-4`}>Clone, run <code className={accent.text}>/setup</code>, deploy. Done in 5 minutes.</p>
             <a href="/templates" className={`inline-block px-6 py-2 ${secondaryBtn} text-sm`}>
               View All Templates →
             </a>
           </div>
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-3 gap-6">
             {/* SaaS Template */}
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="text-2xl">📊</div>
-                <h3 className="text-xl font-bold">SaaS Basic</h3>
+                <h3 className="text-xl font-bold">SaaS</h3>
               </div>
+              <p className={`${theme.muted} text-sm mb-4`}>Usage tracking, subscription tiers, automatic limits. Perfect for AI tools, APIs.</p>
               <ul className={`space-y-2 text-sm ${theme.muted} mb-6`}>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> React + TypeScript</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Auth wired up</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Billing integrated</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Usage tracking ready</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/setup</code> AI config wizard</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/pwa</code> make installable</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Auth + Billing wired</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Usage enforcement</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/setup</code> + <code className={accent.text}>/pwa</code></li>
               </ul>
               <div className="flex gap-3">
-                <a href={CONFIG.links.saasDemo} className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Try Demo</a>
-                <a href="/templates" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>Learn More</a>
+                <a href={CONFIG.links.saasDemo} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Demo</a>
+                <a href={CONFIG.links.saasBasic} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>GitHub</a>
               </div>
             </div>
 
@@ -250,19 +283,35 @@ export default function Landing() {
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="text-2xl">🛒</div>
-                <h3 className="text-xl font-bold">Store Basic</h3>
+                <h3 className="text-xl font-bold">Store</h3>
               </div>
+              <p className={`${theme.muted} text-sm mb-4`}>Products, cart, guest checkout. No per-user fees. Perfect for merch, courses.</p>
               <ul className={`space-y-2 text-sm ${theme.muted} mb-6`}>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> React + TypeScript</li>
                 <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Product catalog</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Cart functionality</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Guest checkout</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/setup</code> AI config wizard</li>
-                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/pwa</code> make installable</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Cart + Checkout</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/setup</code> + <code className={accent.text}>/pwa</code></li>
               </ul>
               <div className="flex gap-3">
-                <a href={CONFIG.links.storeDemo} className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Try Demo</a>
-                <a href="/templates" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>Learn More</a>
+                <a href={CONFIG.links.storeDemo} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Demo</a>
+                <a href={CONFIG.links.storeBasic} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>GitHub</a>
+              </div>
+            </div>
+
+            {/* Membership Template */}
+            <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="text-2xl">🔐</div>
+                <h3 className="text-xl font-bold">Membership</h3>
+              </div>
+              <p className={`${theme.muted} text-sm mb-4`}>Content gating, paywalls, auto-checkout. Perfect for courses, communities.</p>
+              <ul className={`space-y-2 text-sm ${theme.muted} mb-6`}>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Auto-checkout flow</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> Content gating</li>
+                <li className="flex items-center gap-2"><CheckIcon className={accent.text} /> <code className={accent.text}>/setup</code> + <code className={accent.text}>/pwa</code></li>
+              </ul>
+              <div className="flex gap-3">
+                <a href={CONFIG.links.membershipDemo} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${primaryBtn} text-sm`}>Demo</a>
+                <a href={CONFIG.links.membershipBasic} target="_blank" rel="noopener noreferrer" className={`flex-1 text-center py-2 ${secondaryBtn} text-sm`}>GitHub</a>
               </div>
             </div>
           </div>

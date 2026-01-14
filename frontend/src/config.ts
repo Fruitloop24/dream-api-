@@ -33,9 +33,10 @@ export const CONFIG = {
   links: {
     github: 'https://github.com/Fruitloop24',
     docs: '/docs',
-    // Demos
+    // Live Demos (working auth + payments with test card 4242)
     saasDemo: 'https://clerk-frontend.pages.dev',
-    storeDemo: '#',
+    storeDemo: 'https://ember-wick-demo.pages.dev',
+    membershipDemo: 'https://fit-flow.pages.dev',
     // Templates - React (Vite)
     saasBasic: 'https://github.com/Fruitloop24/dream-saas-basic',
     storeBasic: 'https://github.com/Fruitloop24/dream-store-basic',
