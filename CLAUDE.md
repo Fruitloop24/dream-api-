@@ -136,16 +136,16 @@ All provided by Cloudflare Workers:
 12. User is signed in with plan='free'
 ```
 
-**Important:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute race conditions.
+**Redirects:** Both `/dashboard` and `/choose-plan` work - the SDK consumes the ticket synchronously before `isReady` becomes true.
 **Full documentation:** `docs/SIGN-UP-FLOW.md`
 
 ### Important: Clerk Dev Mode
 
-Clerk dev mode redirects to `/` with `__clerk_db_jwt` param instead of `/callback`. The worker handles BOTH paths:
+Clerk dev mode redirects to `/` with `__clerk_db_jwt` param instead of `/callback`. The worker handles both `/signup` and `/` (with Clerk params):
 
 ```typescript
-// Line 94 - handles both /callback and /
-if ((path === '/callback' || path === '/') && request.method === 'GET') {
+// Line 56 - handles /signup and / with Clerk params
+if ((path === '/signup' || (path === '/' && (hasClerkParams || hasSignupCookie))) && request.method === 'GET') {
 ```
 
 ### What Gets Set
@@ -320,7 +320,7 @@ src/
 ### Template Features
 
 - **`/setup` command** - AI-assisted configuration (Claude Code, Cursor, Windsurf)
-- **`/pwa` command** - Add PWA support (installable app, works offline)
+- **`/pwa` command** - Add PWA support (installable app, works offline) for React/Vite templates only.
 - **Single config file** - `src/config.ts` controls all branding
 - **Theme system** - `theme: 'light' | 'dark'` - one toggle switches entire app
 - **Accent colors** - Pick from 6 colors, applies to all buttons/highlights
@@ -370,7 +370,7 @@ Landing page
                                                     5. Webhook sets plan='pro'
 ```
 
-**Key insight:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute blocking before ticket is consumed.
+**Key insight:** The SDK handles ticket consumption synchronously in `clerk.load()` before `isReady` becomes true. Both `/choose-plan` and `/dashboard` work as redirect destinations.
 **Full documentation:** `docs/SIGN-UP-FLOW.md`
 
 **Dashboard.tsx pattern:**
@@ -401,14 +401,19 @@ useEffect(() => {
 }, [isReady, user, plan, api, searchParams]);
 ```
 
-**DON'T do this (causes loop):**
+**Both redirects work:**
 ```typescript
-// ❌ WRONG - Dashboard ProtectedRoute redirects before ticket is consumed
+// ✓ Works - SDK consumes ticket before isReady=true
 dreamAPI.auth.getSignUpUrl({ redirect: '/dashboard' })
 
-// ✓ CORRECT - ChoosePlanPage waits for SDK to consume ticket
+// ✓ Also works - has extra ticket-wait safety code
 dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })
 ```
+
+**Choose based on your flow:**
+- SaaS: `/choose-plan` if user picks tier, `/dashboard` if auto-checkout
+- Store: `/` (guest checkout, no auth needed)
+- Membership: `/dashboard` (auto-checkout to single tier)
 
 **Critical SDK Fix:**
 ```typescript

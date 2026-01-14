@@ -201,7 +201,7 @@ dream-api/
 - Store flow: products → cart → checkout → inventory updates
 - Membership flow: signup → auto-checkout → content gating
 - Dashboard: projects, tiers, products, customers, metrics
-- Templates: SaaS, Store, and Membership (React + Next.js) with `/setup` and `/pwa` commands
+- Templates: SaaS, Store, and Membership (React + Next.js) with `/setup` commands; React/Vite templates also include `/pwa`.
 - SDK: Published on npm, handles auth/refresh automatically
 - Sign-up worker: Clerk hosted signup → metadata → D1 sync → cross-domain ticket
 - Subscription enforcement: API blocked when dev subscription expires (7-day grace)

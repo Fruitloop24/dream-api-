@@ -418,7 +418,7 @@ await clerk.setActive({ session: result.createdSessionId });
   name: string;
   displayName?: string;
   description?: string;
-  price: number;          // In DOLLARS (not cents)
+  price: number;          // In CENTS (divide by 100 for display)
   priceId: string;
   productId: string;
   imageUrl?: string;      // NOT "image"

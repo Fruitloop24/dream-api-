@@ -71,7 +71,7 @@ clerk.client.signIn.create({ strategy: 'ticket', ticket })
 2. Returning users: `api.auth.getSignInUrl()` - direct to Clerk
 3. Account settings: `clerk.openUserProfile()` or `api.auth.getCustomerPortalUrl()`
 
-**Always redirect to `/choose-plan` not `/dashboard`** to avoid ProtectedRoute race conditions.
+**Both `/dashboard` and `/choose-plan` work** - the SDK consumes tickets synchronously before `isReady` becomes true.
 
 ### Key/JWT Model
 

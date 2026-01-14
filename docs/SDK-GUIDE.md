@@ -112,11 +112,11 @@ if (api.auth.isSignedIn()) {
 
 **Sign Up (new users)** - Routes through sign-up worker to set metadata:
 ```typescript
-const url = api.auth.getSignUpUrl({ redirect: '/choose-plan' });
+const url = api.auth.getSignUpUrl({ redirect: '/dashboard' });
 // Redirect user to this URL
 ```
 
-**Important:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute race conditions. See `docs/SIGN-UP-FLOW.md` for details.
+**Note:** The SDK consumes the `__clerk_ticket` synchronously before `isReady` becomes true, so both `/dashboard` and `/choose-plan` work as redirect destinations. See `docs/SIGN-UP-FLOW.md` for details.
 
 **Sign In (returning users)** - Direct to Clerk hosted page:
 ```typescript
@@ -162,7 +162,7 @@ const { tiers } = await api.products.listTiers();
 // Each tier:
 // - name: internal identifier (e.g., "pro")
 // - displayName: shown to users (e.g., "Pro Plan")
-// - price: monthly cost in cents (not cents)
+// - price: monthly cost in cents
 // - limit: requests per month (-1 for unlimited)
 // - priceId: Stripe price ID
 // - features: string array
@@ -243,7 +243,7 @@ const { products } = await api.products.list();
 // - name: internal identifier
 // - displayName: shown to customers
 // - description: product description
-// - price: in cents (not cents)
+// - price: in cents
 // - priceId: use this for checkout
 // - productId: Stripe product ID
 // - imageUrl: product image (not "image")
@@ -634,7 +634,7 @@ useEffect(() => {
 | `Ticket present: NO` | Worker didn't add token | Check /oauth/complete response |
 | `Ticket error: expired` | Token TTL is 5 minutes | User took too long, retry |
 | `Ticket error: already used` | Token is single-use | Don't refresh page with ticket |
-| OAuth redirects to landing | ProtectedRoute race condition | Use `/choose-plan` not `/dashboard` |
+| OAuth redirects to landing | Ticket not consumed | SDK handles this - check `__clerk_ticket` in URL |
 
 ---
 

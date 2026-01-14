@@ -135,21 +135,24 @@ Successful flow shows:
 | `Ticket error: expired` | Token TTL is 5 minutes | User took too long, retry |
 | `Ticket error: already used` | Token is single-use | Don't refresh page with ticket |
 | `404 on /` | Worker not handling callback | Check signup cookie exists |
-| Redirected to landing | ProtectedRoute blocked before ticket consumed | Use `/choose-plan` not `/dashboard` |
+| Redirected to landing | Ticket not consumed (rare) | SDK handles this - check console logs |
 
 ## Template Redirect Pattern
 
-Templates should redirect to `/choose-plan` (not `/dashboard`) because:
-- `/choose-plan` handles its own auth check (waits for ticket)
-- `/dashboard` has ProtectedRoute that redirects before ticket is consumed
+Both `/dashboard` and `/choose-plan` work because the SDK consumes the ticket synchronously in `clerk.load()` before `isReady` becomes true.
 
 ```typescript
-// CORRECT - ChoosePlanPage waits for auth
-dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })
-
-// WRONG - ProtectedRoute may redirect before ticket consumed
+// ✓ Works - SDK consumes ticket before isReady=true
 dreamAPI.auth.getSignUpUrl({ redirect: '/dashboard' })
+
+// ✓ Also works - has extra ticket-wait safety code
+dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })
 ```
+
+**Recommended by template type:**
+- **SaaS**: `/choose-plan` if user picks tier, `/dashboard` if auto-checkout
+- **Store**: `/` (guest checkout, no auth needed)
+- **Membership**: `/dashboard` (auto-checkout to single tier)
 
 ## Clerk Test Credentials
 

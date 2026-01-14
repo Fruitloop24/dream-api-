@@ -204,7 +204,7 @@ const { products } = await api.products.list();
 //   name: 'tshirt',
 //   displayName: 'Classic T-Shirt',
 //   description: '100% cotton',
-//   price: 29,              // in dollars
+//   price: 2900,            // in cents (divide by 100 for display)
 //   priceId: 'price_xxx',   // use this for checkout
 //   imageUrl: 'https://...',
 //   inventory: 50,          // null = unlimited
@@ -474,16 +474,16 @@ imageUrl: 'https://your-r2-bucket.com/image.jpg'
 imageUrl: '/images/product.jpg'
 ```
 
-### Prices in Dollars
+### Prices in Cents
 
-Prices are in **dollars**, not cents. Set $29 in dashboard, get `29` in API.
+Prices are in **cents** (same as Stripe). Set $29 in dashboard, get `2900` in API.
 
 ```typescript
 const { tiers } = await api.products.listTiers();
-// tier.price = 29 (not 2900)
+// tier.price = 2900 (cents)
 
-// Display directly
-<span>${tier.price}/mo</span>
+// Divide by 100 for display
+<span>${(tier.price / 100).toFixed(2)}/mo</span>
 ```
 
 ### auth.init() is Client-Side Only
@@ -552,7 +552,7 @@ Key methods:
 
 Rules:
 - Call auth.init() once on app load (client-side)
-- Prices are in dollars, not cents
+- Prices are in cents (divide by 100 for display)
 - features is an array, not a string
 - Auth URLs (getSignUpUrl, etc) work anywhere, just return strings
 ```

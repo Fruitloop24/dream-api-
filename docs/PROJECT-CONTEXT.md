@@ -28,7 +28,7 @@ Revenue scales with customer success. Low entry price, grows with them.
 - SDK on npm (@dream-api/sdk)
 - 6 React templates (saas, store, membership - each with basic + next.js)
 - Theme system (light/dark toggle)
-- /setup and /pwa commands for AI-assisted config
+- /setup commands for AI-assisted config (React/Vite templates also include /pwa)
 - Docs (SDK guide, API reference, architecture)
 
 **Not Done:**

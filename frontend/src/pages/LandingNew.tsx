@@ -49,7 +49,9 @@ export default function Landing() {
       }`}>
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <a href="/" className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</a>
+            <a href="/" className="flex items-center gap-2">
+              <img src="/dream-api-logo.png" alt="Dream API" className="h-10 w-auto" />
+            </a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
               <a href="/docs" className={theme.navTextHover}>Docs</a>
               <a href="/templates" className={theme.navTextHover}>Templates</a>

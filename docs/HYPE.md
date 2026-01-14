@@ -186,7 +186,7 @@ Want a head start? We have React and Next.js templates:
 
 All templates have:
 - **`/setup` command** - AI-assisted configuration (Claude Code, Cursor, Windsurf)
-- **`/pwa` command** - Make it an installable app
+- **`/pwa` command** - Make it an installable app (React/Vite templates only)
 - **Single config file** - Change branding in one place
 - **Dark/light themes** - One toggle
 

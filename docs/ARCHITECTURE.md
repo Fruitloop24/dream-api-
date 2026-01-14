@@ -285,7 +285,7 @@ End User
 14. User is signed in with plan='free'
 ```
 
-**Important:** Redirect to `/choose-plan` not `/dashboard` to avoid ProtectedRoute race conditions.
+**Note:** Both `/dashboard` and `/choose-plan` work - the SDK consumes the ticket synchronously before `isReady` becomes true.
 
 ### Membership Auto-Checkout (after Sign-Up)
 ```
