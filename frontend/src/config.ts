@@ -14,11 +14,11 @@ export const CONFIG = {
   // -------------------------------------------------------------------------
   // BRAND
   // -------------------------------------------------------------------------
-  appName: 'dream-api',
+  appName: 'Dream-API',
   tagline: 'Auth + Billing + Usage Tracking for Indie Devs',
 
   // Logo: place file in public/ folder, or null for text-only
-  logo: null as string | null, // e.g., '/logo.png'
+  logo: '/panacea_pup_color_clean.png',
 
   // Theme: 'dark' (current) or 'light'
   theme: 'dark' as 'light' | 'dark',

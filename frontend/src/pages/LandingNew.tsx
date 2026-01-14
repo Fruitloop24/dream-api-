@@ -50,8 +50,8 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <a href="/" className="flex items-center gap-2">
-              <img src="/panacea_pup_color_clean.png" alt="Dream API" className="h-10 w-auto rounded-lg" />
-              <span className={`text-xl font-bold ${theme.heading}`}>Dream-API</span>
+              {CONFIG.logo && <img src={CONFIG.logo} alt={CONFIG.appName} className="h-10 w-auto rounded-lg" />}
+              <span className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</span>
             </a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
               <a href="/docs" className={theme.navTextHover}>Docs</a>
@@ -125,6 +125,30 @@ export default function Landing() {
           <p className="text-center text-white/60 text-sm mt-6">
             5 minutes to launch your own. Clone template → add key → deploy.
           </p>
+
+          {/* Stripe Requirement + Benefits */}
+          <div className="mt-12 pt-8 border-t border-white/20">
+            <h3 className="text-2xl font-bold text-white text-center mb-8">
+              All you need is a verified Stripe account
+            </h3>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
+                <div className="text-3xl mb-4">💸</div>
+                <h4 className="text-lg font-bold text-white mb-2">Zero Platform Fees</h4>
+                <p className={`${theme.muted} text-sm`}>We never touch your money. Payments go direct to your Stripe. You handle disputes & refunds.</p>
+              </div>
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
+                <div className="text-3xl mb-4">⚡</div>
+                <h4 className="text-lg font-bold text-white mb-2">OAuth in Seconds</h4>
+                <p className={`${theme.muted} text-sm`}>Connect your Stripe via OAuth. Configure products in dashboard. Test mode → Live with one key swap.</p>
+              </div>
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
+                <div className="text-3xl mb-4">🎛️</div>
+                <h4 className="text-lg font-bold text-white mb-2">You Control Everything</h4>
+                <p className={`${theme.muted} text-sm`}>Trial periods, tax collection, pricing changes. All from your dashboard. No code, no deploys.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
