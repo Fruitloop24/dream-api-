@@ -90,36 +90,39 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Live Demos Banner */}
-      <section id="demos" className={`py-8 px-4 ${accent.bg}`}>
+      {/* Live Demos Banner - Dark Contrasted Cards */}
+      <section id="demos" className={`py-12 px-4 ${accent.bg}`}>
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-6">
+          <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-white mb-2">Try Working Demos - Full Auth &amp; Payments</h2>
             <p className="text-white/80">
               Test card: <code className="bg-white/20 px-2 py-1 rounded font-mono text-sm">4242 4242 4242 4242</code>
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* SaaS Demo */}
             <a href={CONFIG.links.saasDemo} target="_blank" rel="noopener noreferrer"
-               className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-center transition">
-              <div className="text-2xl mb-2">📊</div>
-              <div className="font-bold text-white">SaaS Demo</div>
-              <div className="text-white/70 text-sm">Usage tracking, tiers</div>
+               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 hover:border-white/30 transition block`}>
+              <div className="text-3xl mb-4">📊</div>
+              <h3 className="text-xl font-bold text-white mb-2">SaaS Demo</h3>
+              <p className={`${theme.muted} text-sm`}>Usage tracking, subscription tiers, automatic limits.</p>
             </a>
+            {/* Store Demo */}
             <a href={CONFIG.links.storeDemo} target="_blank" rel="noopener noreferrer"
-               className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-center transition">
-              <div className="text-2xl mb-2">🛒</div>
-              <div className="font-bold text-white">Store Demo</div>
-              <div className="text-white/70 text-sm">Cart, guest checkout</div>
+               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 hover:border-white/30 transition block`}>
+              <div className="text-3xl mb-4">🛒</div>
+              <h3 className="text-xl font-bold text-white mb-2">Store Demo</h3>
+              <p className={`${theme.muted} text-sm`}>Products, cart, guest checkout. No per-user fees.</p>
             </a>
+            {/* Membership Demo */}
             <a href={CONFIG.links.membershipDemo} target="_blank" rel="noopener noreferrer"
-               className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-center transition">
-              <div className="text-2xl mb-2">🔐</div>
-              <div className="font-bold text-white">Membership Demo</div>
-              <div className="text-white/70 text-sm">Paywall, content gating</div>
+               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 hover:border-white/30 transition block`}>
+              <div className="text-3xl mb-4">🔐</div>
+              <h3 className="text-xl font-bold text-white mb-2">Membership Demo</h3>
+              <p className={`${theme.muted} text-sm`}>Content gating, paywalls, auto-checkout.</p>
             </a>
           </div>
-          <p className="text-center text-white/60 text-sm mt-4">
+          <p className="text-center text-white/60 text-sm mt-6">
             5 minutes to launch your own. Clone template → add key → deploy.
           </p>
         </div>
