@@ -25,7 +25,7 @@ export const CONFIG = {
 
   // Primary accent color
   // Options: 'blue', 'emerald', 'violet', 'rose', 'amber', 'sky'
-  accentColor: 'sky',
+  accentColor: 'blue',
 
   // -------------------------------------------------------------------------
   // LINKS
@@ -232,39 +232,39 @@ const ACCENT_COLORS = {
 const THEMES = {
   dark: {
     // Page
-    pageBg: 'bg-slate-950',
-    pageGradient: 'bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950',
+    pageBg: 'bg-gray-900',
+    pageGradient: 'bg-gradient-to-b from-gray-900 to-gray-800',
     // Nav
-    navBg: 'bg-slate-950/95 backdrop-blur',
-    navBorder: 'border-slate-700',
-    navText: 'text-slate-300',
+    navBg: 'bg-gray-900/95 backdrop-blur',
+    navBorder: 'border-gray-700',
+    navText: 'text-gray-300',
     navTextHover: 'hover:text-white',
     // Cards
-    cardBg: 'bg-slate-800/80',
-    cardBgAlt: 'bg-slate-800/50',
-    cardBorder: 'border-slate-700',
-    cardHover: 'hover:border-sky-500/50',
+    cardBg: 'bg-gray-800',
+    cardBgAlt: 'bg-gray-800/50',
+    cardBorder: 'border-gray-700',
+    cardHover: 'hover:border-gray-600',
     // Text
     heading: 'text-white',
-    body: 'text-slate-300',
-    muted: 'text-slate-400',
-    mutedMore: 'text-slate-500',
+    body: 'text-gray-300',
+    muted: 'text-gray-400',
+    mutedMore: 'text-gray-500',
     // Sections
-    sectionAlt: 'bg-slate-900/50',
+    sectionAlt: 'bg-gray-800/30',
     // Inputs
-    inputBg: 'bg-slate-800',
-    inputBorder: 'border-slate-600',
+    inputBg: 'bg-gray-700',
+    inputBorder: 'border-gray-600',
     inputText: 'text-white',
     // Code blocks
-    codeBg: 'bg-slate-950',
-    codeText: 'text-sky-400',
+    codeBg: 'bg-gray-950',
+    codeText: 'text-green-400',
     // Buttons
-    buttonSecondary: 'border border-slate-600 text-slate-300 hover:border-sky-500 hover:text-white',
+    buttonSecondary: 'border border-gray-600 text-gray-300 hover:border-gray-500 hover:text-white',
     // Dividers
-    divider: 'border-slate-700',
+    divider: 'border-gray-700',
     // Footer
-    footerBg: 'bg-slate-950',
-    footerBorder: 'border-slate-800',
+    footerBg: 'bg-gray-900',
+    footerBorder: 'border-gray-800',
   },
   light: {
     // Page
