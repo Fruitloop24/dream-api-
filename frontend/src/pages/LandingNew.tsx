@@ -125,51 +125,31 @@ export default function Landing() {
           <p className="text-center text-white/60 text-sm mt-6">
             5 minutes to launch your own. Clone template → add key → deploy.
           </p>
-
-          {/* Stripe Requirement + Benefits */}
-          <div className="mt-12 pt-8 border-t border-white/20">
-            <h3 className="text-2xl font-bold text-white text-center mb-8">
-              All you need is a verified Stripe account
-            </h3>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
-                <div className="text-3xl mb-4">💸</div>
-                <h4 className="text-lg font-bold text-white mb-2">Zero Platform Fees</h4>
-                <p className={`${theme.muted} text-sm`}>We never touch your money. Payments go direct to your Stripe. You handle disputes & refunds.</p>
-              </div>
-              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
-                <div className="text-3xl mb-4">⚡</div>
-                <h4 className="text-lg font-bold text-white mb-2">OAuth in Seconds</h4>
-                <p className={`${theme.muted} text-sm`}>Connect your Stripe via OAuth. Configure products in dashboard. Test mode → Live with one key swap.</p>
-              </div>
-              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
-                <div className="text-3xl mb-4">🎛️</div>
-                <h4 className="text-lg font-bold text-white mb-2">You Control Everything</h4>
-                <p className={`${theme.muted} text-sm`}>Trial periods, tax collection, pricing changes. All from your dashboard. No code, no deploys.</p>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* 3 Feature Cards */}
+      {/* Stripe Requirement + Benefits */}
       <section className="py-16 px-4">
         <div className="max-w-5xl mx-auto">
+          <h3 className="text-2xl font-bold text-white text-center mb-8">
+            All you need is a verified Stripe account
+          </h3>
           <div className="grid md:grid-cols-3 gap-6">
-            {CONFIG.features.map((feature, i) => (
-              <div key={i} className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
-                <div className="text-3xl mb-4">{feature.icon}</div>
-                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                <p className={`${theme.muted} text-sm`}>
-                  {feature.description.includes('$0') ? (
-                    <>
-                      {feature.description.replace('$0', '')}
-                      <span className={`${accent.text} font-bold`}>$0</span>.
-                    </>
-                  ) : feature.description}
-                </p>
-              </div>
-            ))}
+            <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
+              <div className="text-3xl mb-4">💸</div>
+              <h4 className="text-lg font-bold text-white mb-2">Zero Platform Fees</h4>
+              <p className={`${theme.muted} text-sm`}>We never touch your money. Payments go direct to your Stripe. You handle disputes & refunds.</p>
+            </div>
+            <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
+              <div className="text-3xl mb-4">⚡</div>
+              <h4 className="text-lg font-bold text-white mb-2">OAuth in Seconds</h4>
+              <p className={`${theme.muted} text-sm`}>Connect your Stripe via OAuth. Configure products in dashboard. Test mode → Live with one key swap.</p>
+            </div>
+            <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
+              <div className="text-3xl mb-4">🎛️</div>
+              <h4 className="text-lg font-bold text-white mb-2">You Control Everything</h4>
+              <p className={`${theme.muted} text-sm`}>Trial periods, tax collection, pricing changes. All from your dashboard. No code, no deploys.</p>
+            </div>
           </div>
         </div>
       </section>
