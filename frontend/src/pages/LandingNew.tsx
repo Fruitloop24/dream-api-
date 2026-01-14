@@ -50,7 +50,8 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <a href="/" className="flex items-center gap-2">
-              <img src="/dream-logo.png" alt="Dream API" className="h-14 w-auto" />
+              <img src="/panacea_pup_color_clean.png" alt="Dream API" className="h-10 w-auto" />
+              <span className={`text-xl font-bold ${theme.heading}`}>Dream API</span>
             </a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
               <a href="/docs" className={theme.navTextHover}>Docs</a>
@@ -69,10 +70,11 @@ export default function Landing() {
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-12 px-4">
+      <section className="pt-28 pb-12 px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-            {CONFIG.hero.headline}
+          <img src="/dream-logo.png" alt="Dream API" className="h-48 md:h-64 w-auto mx-auto mb-8" />
+          <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
+            Ship faster. Keep everything.
           </h1>
           <p className={`text-xl md:text-2xl ${theme.muted} mb-8 max-w-2xl mx-auto`}>
             {CONFIG.hero.subheadline} <span className={accent.text}>{CONFIG.hero.highlight}</span>
