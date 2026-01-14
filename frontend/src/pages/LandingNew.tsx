@@ -94,7 +94,7 @@ export default function Landing() {
       <section id="demos" className={`py-12 px-4 ${accent.bg}`}>
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-white mb-2">Try Working Demos - Full Auth &amp; Payments</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Try Working Demos - Full Auth &amp; Payments</h2>
             <p className="text-white/80">
               Test card: <code className="bg-white/20 px-2 py-1 rounded font-mono text-sm">4242 4242 4242 4242</code>
             </p>
