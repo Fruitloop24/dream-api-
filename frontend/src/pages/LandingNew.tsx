@@ -183,11 +183,11 @@ export default function Landing() {
           </h2>
           <div className="grid md:grid-cols-2 gap-8">
             {/* What You Get */}
-            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
-              <h3 className={`text-xl font-bold ${accent.text} mb-6 flex items-center gap-2`}>
-                <CheckIcon className={accent.text} />
+            <div className={`${theme.cardBg} border-2 ${accent.border} rounded-xl p-8`}>
+              <h3 className={`text-2xl font-bold ${accent.text} mb-2`}>
                 What You Get
               </h3>
+              <div className={`h-1 w-24 ${accent.bg} rounded mb-6`}></div>
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
                   <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
@@ -213,15 +213,29 @@ export default function Landing() {
                 <li className="flex items-start gap-3">
                   <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
                   <div>
-                    <p className="font-medium text-white">Customer Management</p>
-                    <p className={`text-sm ${theme.muted}`}>View users, plans, usage, subscription status</p>
+                    <p className="font-medium text-white">Unlimited Guest Checkout</p>
+                    <p className={`text-sm ${theme.muted}`}>Store mode with no per-user fees</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
                   <div>
-                    <p className="font-medium text-white">Webhook Handling</p>
-                    <p className={`text-sm ${theme.muted}`}>Stripe events processed, plan updates automatic</p>
+                    <p className="font-medium text-white">Instant Updates</p>
+                    <p className={`text-sm ${theme.muted}`}>Change prices in dashboard, app updates automatically</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">Webhook Idempotency</p>
+                    <p className={`text-sm ${theme.muted}`}>Duplicate events handled, no double charges</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">Customer Dashboard</p>
+                    <p className={`text-sm ${theme.muted}`}>View users, plans, usage, revenue metrics</p>
                   </div>
                 </li>
               </ul>
@@ -229,50 +243,78 @@ export default function Landing() {
 
             {/* What You Don't Build */}
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
-              <h3 className="text-xl font-bold text-gray-400 mb-6 flex items-center gap-2">
-                <XIcon />
+              <h3 className="text-2xl font-bold text-red-400 mb-2">
                 What You Don't Build
               </h3>
+              <div className="h-1 w-24 bg-red-500 rounded mb-6"></div>
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
-                  <XIcon />
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                   <div>
                     <p className="font-medium text-gray-400 line-through">Auth system from scratch</p>
                     <p className={`text-sm ${theme.mutedMore}`}>No JWT logic, session management, or security audits</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <XIcon />
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                   <div>
-                    <p className="font-medium text-gray-400 line-through">Stripe integration</p>
-                    <p className={`text-sm ${theme.mutedMore}`}>No webhook endpoints, signature verification, or event handling</p>
+                    <p className="font-medium text-gray-400 line-through">Stripe webhook handlers</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No signature verification or event processing</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <XIcon />
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                   <div>
                     <p className="font-medium text-gray-400 line-through">Usage database</p>
                     <p className={`text-sm ${theme.mutedMore}`}>No schema design, queries, or period resets</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <XIcon />
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                   <div>
                     <p className="font-medium text-gray-400 line-through">Plan enforcement logic</p>
-                    <p className={`text-sm ${theme.mutedMore}`}>No "check if user can do X" code scattered everywhere</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No "check if user can do X" scattered everywhere</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <XIcon />
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                   <div>
                     <p className="font-medium text-gray-400 line-through">Customer admin panel</p>
                     <p className={`text-sm ${theme.mutedMore}`}>No internal tools to view/manage subscribers</p>
                   </div>
                 </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Deployment for pricing changes</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No CI/CD just to update a price</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Idempotency handling</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No deduplication logic for retried webhooks</p>
+                  </div>
+                </li>
               </ul>
             </div>
           </div>
-          <p className={`text-center ${theme.muted} mt-8`}>
+          <p className={`text-center ${theme.muted} mt-8 text-lg`}>
             Focus on your product. We handle the infrastructure.
           </p>
         </div>
