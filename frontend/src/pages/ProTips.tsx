@@ -37,6 +37,7 @@ export default function ProTips() {
             <p className={`text-xs font-semibold uppercase tracking-wider ${theme.muted} mb-3`}>
               On this page
             </p>
+            <SidebarLink href="#built-on-titans" theme={theme}>Built on Titans</SidebarLink>
             <SidebarLink href="#why-trust-us" theme={theme}>Why Trust Us</SidebarLink>
             <SidebarLink href="#your-control" theme={theme}>You Stay in Control</SidebarLink>
             <SidebarLink href="#disconnect" theme={theme}>Disconnect Anytime</SidebarLink>
@@ -54,6 +55,74 @@ export default function ProTips() {
           <p className={`text-lg ${theme.body} mb-8`}>
             Everything you need to know about trust, control, and getting the most out of Dream API.
           </p>
+
+          {/* Built on Titans */}
+          <section id="built-on-titans" className="mb-16">
+            <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Built on Titans</h2>
+            <p className={`${theme.body} mb-6`}>
+              Don't trust us — trust the infrastructure. We're built on three industry leaders:
+            </p>
+
+            {/* Three Titans */}
+            <div className="grid md:grid-cols-3 gap-4 mb-8">
+              <div className={`p-5 rounded-xl ${theme.cardBg} text-center`}>
+                <div className="text-3xl mb-2">💳</div>
+                <h3 className={`font-bold ${theme.heading} mb-1`}>Stripe</h3>
+                <p className={`text-sm ${theme.muted}`}>Payments & Billing</p>
+              </div>
+              <div className={`p-5 rounded-xl ${theme.cardBg} text-center`}>
+                <div className="text-3xl mb-2">🔐</div>
+                <h3 className={`font-bold ${theme.heading} mb-1`}>Clerk</h3>
+                <p className={`text-sm ${theme.muted}`}>Authentication</p>
+              </div>
+              <div className={`p-5 rounded-xl ${theme.cardBg} text-center`}>
+                <div className="text-3xl mb-2">⚡</div>
+                <h3 className={`font-bold ${theme.heading} mb-1`}>Cloudflare</h3>
+                <p className={`text-sm ${theme.muted}`}>Edge Computing</p>
+              </div>
+            </div>
+
+            {/* Security Features */}
+            <div className={`p-6 rounded-xl border-2 ${accent.border}`}>
+              <h3 className={`text-lg font-semibold ${theme.heading} mb-4`}>Security by Default</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>Zero Cold Starts</strong> — Cloudflare Workers are always warm
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>No SSH Access</strong> — Serverless = smaller attack surface
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>HTTPS Everywhere</strong> — All requests encrypted by default
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>Built-in DDoS Protection</strong> — Cloudflare handles it at the edge
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>Bot Protection</strong> — Automated threat blocking
+                  </TrustPoint>
+                </div>
+                <div className="space-y-3">
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>Webhook Signatures</strong> — Every Stripe event verified
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>Idempotency</strong> — Duplicate webhooks handled, no double charges
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>JWT Enforced</strong> — Plans verified by signature, unspoofable
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>PK/SK Separation</strong> — Public key safe for frontend, secret key for backend
+                  </TrustPoint>
+                  <TrustPoint theme={theme} accent={accent}>
+                    <strong>Key Rotation</strong> — Rotate keys anytime without breaking your app
+                  </TrustPoint>
+                </div>
+              </div>
+            </div>
+          </section>
 
           {/* Why Trust Us */}
           <section id="why-trust-us" className="mb-16">
