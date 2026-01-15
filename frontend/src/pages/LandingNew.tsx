@@ -214,7 +214,7 @@ export default function Landing() {
                 ))}
               </div>
               <p className={`${theme.muted} text-sm mb-4 italic`}>
-                "Set up a full SaaS template in under 15 minutes using Cursor. I'm not technical at all - my son usually helps me with computer stuff."
+                "I'm not a coder. Used the template with Cursor and had my SaaS up in under 15 minutes. Auth, billing, everything."
               </p>
               <p className="font-medium text-white">— S. Stonecypher</p>
             </div>
