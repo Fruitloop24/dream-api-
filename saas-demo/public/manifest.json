@@ -1,0 +1,17 @@
+{
+  "name": "PixelForge",
+  "short_name": "PixelForge",
+  "description": "AI Image Generation - Create stunning visuals in seconds",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "/pixelforge-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

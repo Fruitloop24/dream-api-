@@ -4,7 +4,7 @@
  * All customization is in src/config.ts - NOT in this file.
  */
 
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useDreamAPI, dreamAPI } from '../hooks/useDreamAPI';
 import { CONFIG, getAccentClasses, getThemeClasses } from '../config';
@@ -13,7 +13,8 @@ import Icon from '../components/Icons';
 import type { Tier } from '@dream-api/sdk';
 
 export default function Landing() {
-  const { isSignedIn } = useDreamAPI();
+  const { isSignedIn, isReady } = useDreamAPI();
+  const navigate = useNavigate();
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [loadingTiers, setLoadingTiers] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -21,28 +22,63 @@ export default function Landing() {
   const accent = getAccentClasses();
   const theme = getThemeClasses();
 
+  // Redirect to choose-plan after fresh signup
+  useEffect(() => {
+    if (isReady && isSignedIn && sessionStorage.getItem('justSignedUp')) {
+      sessionStorage.removeItem('justSignedUp');
+      navigate('/choose-plan');
+    }
+  }, [isReady, isSignedIn, navigate]);
+
   useEffect(() => {
     dreamAPI.products.listTiers()
-      .then(res => {
-        // Sort by price ascending (free → pro → enterprise)
-        const sorted = (res.tiers || []).sort((a, b) => a.price - b.price);
-        setTiers(sorted);
-      })
+      .then(res => setTiers(res.tiers || []))
       .catch(console.error)
       .finally(() => setLoadingTiers(false));
   }, []);
 
-  const getSignUpUrl = () => dreamAPI.auth.getSignUpUrl({
-    redirect: window.location.origin + '/choose-plan'
-  });
+  const getSignUpUrl = () => {
+    sessionStorage.setItem('justSignedUp', 'true');
+    return dreamAPI.auth.getSignUpUrl({
+      redirect: window.location.origin + '/choose-plan'
+    });
+  };
+
+  // @ts-expect-error demo config may not exist
+  const demoConfig = CONFIG.demo as { enabled?: boolean; message?: string; linkText?: string; linkUrl?: string } | undefined;
 
   return (
     <div className={`min-h-screen ${theme.pageBg} ${theme.heading}`}>
+      {/* Demo Banner */}
+      {demoConfig?.enabled && (
+        <div className="bg-amber-500 text-black text-center py-2 px-4 text-sm">
+          {demoConfig.message}{' '}
+          <a href={demoConfig.linkUrl} className="underline font-semibold hover:opacity-70">
+            {demoConfig.linkText}
+          </a>
+        </div>
+      )}
+
+      {/* Demo Card - Fixed position */}
+      {demoConfig?.enabled && (
+        <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-white text-sm font-medium">Live Demo</span>
+          </div>
+          <p className="text-zinc-400 text-xs mb-2">Test credit card for checkout:</p>
+          <code className="block bg-zinc-800 text-amber-400 px-3 py-2 rounded text-sm font-mono">
+            4242 4242 4242 4242
+          </code>
+          <p className="text-zinc-500 text-xs mt-2">Any future date, any CVC</p>
+        </div>
+      )}
+
       {/* Navigation */}
       <Nav showAuthLinks />
 
       {/* Hero */}
-      <section className="py-20 px-6">
+      <section className="py-20 px-6 bg-gradient-to-b from-zinc-900 to-zinc-950">
         <div className="max-w-6xl mx-auto">
           <div className={`grid ${CONFIG.hero.image ? 'lg:grid-cols-2 gap-12 items-center' : ''}`}>
             {/* Hero Content */}
@@ -80,10 +116,12 @@ export default function Landing() {
             {/* Hero Image */}
             {CONFIG.hero.image && (
               <div className="relative">
+                {/* Glow effect */}
+                <div className="absolute -inset-4 bg-amber-500/20 blur-2xl rounded-3xl"></div>
                 <img
                   src={CONFIG.hero.image}
                   alt="Product"
-                  className={`rounded-xl shadow-2xl ${theme.cardBg}`}
+                  className="relative rounded-xl shadow-2xl"
                 />
               </div>
             )}
@@ -167,8 +205,9 @@ export default function Landing() {
             </div>
           ) : (
             <div className={`grid gap-6 ${tiers.length === 2 ? 'md:grid-cols-2 max-w-3xl mx-auto' : tiers.length >= 3 ? 'md:grid-cols-3' : ''}`}>
-              {tiers.map((tier, i) => {
-                const isPopular = tier.popular || i === Math.floor(tiers.length / 2);
+              {[...tiers].sort((a, b) => a.price - b.price).map((tier, i, sortedTiers) => {
+                const isPopular = tier.popular || i === Math.floor(sortedTiers.length / 2);
+                const priceInDollars = tier.price / 100;
 
                 return (
                   <div
@@ -187,7 +226,7 @@ export default function Landing() {
                       {tier.displayName || tier.name}
                     </h3>
                     <div className="mb-4">
-                      <span className={`text-4xl font-light ${theme.heading}`}>${(tier.price / 100).toFixed(2)}</span>
+                      <span className={`text-4xl font-light ${theme.heading}`}>${priceInDollars}</span>
                       <span className={theme.body}>/mo</span>
                     </div>
                     <p className={`${theme.body} text-sm mb-6`}>
@@ -203,7 +242,7 @@ export default function Landing() {
                             : theme.buttonSecondary
                         }`}
                       >
-                        {tier.price === 0 ? 'Current Plan' : 'Upgrade'}
+                        {priceInDollars === 0 ? 'Current Plan' : 'Upgrade'}
                       </Link>
                     ) : (
                       <a
@@ -214,7 +253,7 @@ export default function Landing() {
                             : theme.buttonSecondary
                         }`}
                       >
-                        {tier.price === 0 ? 'Start Free' : 'Get Started'}
+                        {priceInDollars === 0 ? 'Start Free' : 'Get Started'}
                       </a>
                     )}
 

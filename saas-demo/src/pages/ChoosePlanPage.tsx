@@ -28,9 +28,7 @@ export default function ChoosePlanPage() {
     async function loadTiers() {
       try {
         const response = await dreamAPI.products.listTiers();
-        // Sort by price ascending (free → pro → enterprise)
-        const sorted = (response.tiers || []).sort((a, b) => a.price - b.price);
-        setTiers(sorted);
+        setTiers(response.tiers || []);
       } catch (err: any) {
         console.error('Failed to load tiers:', err);
         setError(err.message || 'Failed to load pricing');
@@ -108,10 +106,11 @@ export default function ChoosePlanPage() {
 
         {/* Pricing Cards */}
         <div className={`grid gap-6 ${tiers.length === 2 ? 'md:grid-cols-2 max-w-3xl mx-auto' : tiers.length >= 3 ? 'md:grid-cols-3' : ''}`}>
-          {tiers.map((tier, index) => {
+          {[...tiers].sort((a, b) => a.price - b.price).map((tier, index, sortedTiers) => {
             const isCurrentPlan = tier.name === currentPlan;
             const isUpgrading = upgrading === tier.name;
-            const isPopular = tier.popular || index === Math.floor(tiers.length / 2);
+            const isPopular = tier.popular || index === Math.floor(sortedTiers.length / 2);
+            const priceInDollars = tier.price / 100;
 
             return (
               <div
@@ -143,7 +142,7 @@ export default function ChoosePlanPage() {
                 </h3>
 
                 <div className="mb-4">
-                  <span className={`text-3xl font-light ${theme.heading}`}>${(tier.price / 100).toFixed(2)}</span>
+                  <span className={`text-3xl font-light ${theme.heading}`}>${priceInDollars}</span>
                   <span className={`${theme.body} text-sm`}>/month</span>
                 </div>
 
@@ -159,7 +158,7 @@ export default function ChoosePlanPage() {
                       ? `${theme.buttonDisabled} cursor-default`
                       : isUpgrading
                       ? `${theme.buttonDisabled} cursor-wait`
-                      : tier.price === 0
+                      : priceInDollars === 0
                       ? theme.buttonSecondary
                       : `${accent.bg} text-white ${accent.bgHover}`
                   }`}
@@ -168,7 +167,7 @@ export default function ChoosePlanPage() {
                     ? 'Current Plan'
                     : isUpgrading
                     ? 'Processing...'
-                    : tier.price === 0
+                    : priceInDollars === 0
                     ? 'Select Free'
                     : 'Upgrade'}
                 </button>

@@ -11,29 +11,37 @@ export const CONFIG = {
   // -------------------------------------------------------------------------
   // BRAND
   // -------------------------------------------------------------------------
-  appName: 'My SaaS',
-  tagline: 'Your tagline here',
+  appName: 'PixelForge',
+  tagline: 'AI Image Generation',
 
   // Logo: place file in public/ folder, or set to null for text-only
-  logo: null as string | null, // e.g., '/logo.png'
+  logo: '/pixelforge-logo.png',
 
   // Theme: 'light' (professional, clean) or 'dark' (modern, bold)
-  theme: 'light' as 'light' | 'dark',
+  theme: 'dark' as 'light' | 'dark',
 
   // Primary accent color
   // Options: 'emerald', 'sky', 'violet', 'rose', 'amber', 'zinc'
-  accentColor: 'emerald',
+  accentColor: 'amber',
+
+  // Demo mode - shows banner linking to Dream API
+  demo: {
+    enabled: true,
+    message: 'This is a demo of a SaaS built with Dream API',
+    linkText: 'Build yours →',
+    linkUrl: 'https://dreamapi.io',
+  },
 
   // -------------------------------------------------------------------------
   // HERO SECTION
   // -------------------------------------------------------------------------
   hero: {
-    headline: 'Build something amazing',
-    subheadline: 'A brief description of what your product does and why customers will love it.',
-    cta: 'Get Started',
-    ctaSubtext: 'Free to start',
+    headline: 'Turn Ideas Into Stunning Visuals',
+    subheadline: 'Generate beautiful AI images in seconds. No design skills required. Just describe what you want and watch the magic happen.',
+    cta: 'Start Creating Free',
+    ctaSubtext: '25 free generations',
     // Hero image: place in public/, or null for no image
-    image: null as string | null, // e.g., '/hero-mockup.png'
+    image: '/hero.png',
   },
 
   // -------------------------------------------------------------------------
@@ -41,40 +49,34 @@ export const CONFIG = {
   // -------------------------------------------------------------------------
   socialProof: {
     enabled: false,
-    headline: 'Trusted by teams at',
-    // Add logo images to public/logos/ folder
+    headline: 'Trusted by creators worldwide',
     logos: [] as Array<{ name: string; src: string }>,
-    // Example:
-    // logos: [
-    //   { name: 'Acme', src: '/logos/acme.svg' },
-    //   { name: 'Globex', src: '/logos/globex.svg' },
-    // ],
   },
 
   // -------------------------------------------------------------------------
   // HOW IT WORKS (3 steps)
   // -------------------------------------------------------------------------
   howItWorks: {
-    headline: 'How It Works',
-    subheadline: 'Get started in minutes',
+    headline: 'Create in 3 Simple Steps',
+    subheadline: 'From idea to image in under a minute',
     steps: [
       {
         number: '1',
-        title: 'Sign Up',
-        description: 'Create your free account in seconds.',
-        icon: 'user',
+        title: 'Describe',
+        description: 'Type what you want to see. Be as detailed or simple as you like.',
+        icon: 'edit',
       },
       {
         number: '2',
-        title: 'Configure',
-        description: 'Set up your preferences and get started.',
-        icon: 'settings',
+        title: 'Generate',
+        description: 'Our AI transforms your words into stunning visuals instantly.',
+        icon: 'lightning',
       },
       {
         number: '3',
-        title: 'Launch',
-        description: 'Start using the platform immediately.',
-        icon: 'rocket',
+        title: 'Download',
+        description: 'Save your creations in high resolution. Use them anywhere.',
+        icon: 'download',
       },
     ],
   },
@@ -83,38 +85,38 @@ export const CONFIG = {
   // FEATURES
   // -------------------------------------------------------------------------
   features: {
-    headline: 'Everything You Need',
-    subheadline: 'Powerful features to help you succeed',
+    headline: 'Powerful AI at Your Fingertips',
+    subheadline: 'Everything you need to bring your vision to life',
     items: [
       {
-        title: 'Easy to Use',
-        description: 'Intuitive interface that anyone can master quickly.',
-        icon: 'check',
-      },
-      {
-        title: 'Secure',
-        description: 'Enterprise-grade security to protect your data.',
-        icon: 'shield',
-      },
-      {
-        title: 'Fast',
-        description: 'Lightning-fast performance you can count on.',
+        title: 'Lightning Fast',
+        description: 'Generate images in seconds, not minutes. No waiting around.',
         icon: 'lightning',
       },
       {
-        title: 'Analytics',
-        description: 'Detailed insights to track your progress.',
-        icon: 'chart',
+        title: 'High Resolution',
+        description: 'Download your creations in stunning 4K quality.',
+        icon: 'image',
       },
       {
-        title: 'Support',
-        description: 'Friendly support team ready to help.',
-        icon: 'user',
+        title: 'Multiple Styles',
+        description: 'Photorealistic, artistic, anime, and more art styles.',
+        icon: 'palette',
       },
       {
-        title: 'Integrations',
-        description: 'Connect with your favorite tools.',
-        icon: 'globe',
+        title: 'Private & Secure',
+        description: 'Your prompts and images are yours. We never share them.',
+        icon: 'shield',
+      },
+      {
+        title: 'Commercial Use',
+        description: 'Full rights to use your generated images commercially.',
+        icon: 'check',
+      },
+      {
+        title: 'No Watermarks',
+        description: 'Clean exports without any branding or watermarks.',
+        icon: 'star',
       },
     ],
   },
@@ -123,8 +125,8 @@ export const CONFIG = {
   // PRICING SECTION (tiers come from API)
   // -------------------------------------------------------------------------
   pricing: {
-    headline: 'Simple Pricing',
-    subheadline: 'Start free, upgrade when you need more',
+    headline: 'Simple, Transparent Pricing',
+    subheadline: 'Start free. Upgrade when you need more generations.',
   },
 
   // -------------------------------------------------------------------------
@@ -134,20 +136,20 @@ export const CONFIG = {
     headline: 'Frequently Asked Questions',
     items: [
       {
-        question: 'How do I get started?',
-        answer: 'Simply sign up for a free account and follow our quick setup guide. You\'ll be up and running in minutes.',
+        question: 'How many images can I generate?',
+        answer: 'Free users get 25 generations per month. Pro gets 50, and Dev gets 100. Generations reset monthly.',
       },
       {
-        question: 'Can I cancel anytime?',
-        answer: 'Yes, you can cancel your subscription at any time. No long-term contracts or hidden fees.',
+        question: 'What image styles are available?',
+        answer: 'We support photorealistic, digital art, anime, oil painting, watercolor, 3D render, and many more styles.',
       },
       {
-        question: 'Is my data secure?',
-        answer: 'Absolutely. We use industry-standard encryption and security practices to keep your data safe.',
+        question: 'Can I use the images commercially?',
+        answer: 'Yes! All generated images are yours to use however you want, including commercial projects.',
       },
       {
-        question: 'Do you offer support?',
-        answer: 'Yes, we offer support via email for all plans, with priority support for paid plans.',
+        question: 'What resolution are the images?',
+        answer: 'All plans get high-resolution 4K exports (4096x4096). Perfect for print and digital use.',
       },
     ],
   },
@@ -156,9 +158,9 @@ export const CONFIG = {
   // FINAL CTA
   // -------------------------------------------------------------------------
   finalCta: {
-    headline: 'Ready to get started?',
-    subheadline: 'Join thousands of happy customers today.',
-    cta: 'Start Free Trial',
+    headline: 'Ready to create something amazing?',
+    subheadline: 'Join thousands of creators using PixelForge.',
+    cta: 'Start Creating Free',
   },
 
   // -------------------------------------------------------------------------
@@ -166,11 +168,6 @@ export const CONFIG = {
   // -------------------------------------------------------------------------
   footer: {
     links: [] as Array<{ label: string; href: string }>,
-    // Example:
-    // links: [
-    //   { label: 'Privacy', href: '/privacy' },
-    //   { label: 'Terms', href: '/terms' },
-    // ],
   },
 };
 

@@ -19,21 +19,7 @@ import ChoosePlanPage from './pages/ChoosePlanPage'
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isReady, isSignedIn } = useDreamAPI();
 
-  // Check if we're returning from Clerk auth (ticket in URL)
-  const hasTicket = window.location.search.includes('__clerk_ticket') ||
-                    window.location.search.includes('__clerk_db_jwt');
-
-  // Still loading - show spinner
   if (!isReady) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-zinc-700 border-t-zinc-400 rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  // Has ticket but not signed in yet - wait for SDK to process ticket
-  if (hasTicket && !isSignedIn) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-zinc-700 border-t-zinc-400 rounded-full animate-spin"></div>

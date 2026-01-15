@@ -178,40 +178,18 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* ================================================================
-              YOUR PRODUCT GOES HERE
-              ================================================================
-
-              Replace this entire card with your product's main feature.
-
-              KEEP THIS PATTERN:
-              1. User does something (generates PDF, runs AI, processes file)
-              2. You call: await api.usage.track()
-              3. That's it - limits are enforced automatically
-
-              EXAMPLE - PDF Generator:
-              ----------------------------------------------------------------
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const res = await fetch('https://your-api.com/generate', { ... });
-                if (res.ok) {
-                  await api.usage.track();  // <-- THIS IS THE MAGIC LINE
-                  // Show download link, success message, etc.
-                }
-              }}>
-                <input type="file" />
-                <button>Generate PDF</button>
-              </form>
-              ----------------------------------------------------------------
-
-              The handleTrackUsage function below is just a demo.
-              Delete it and add your own product logic.
-              ================================================================ */}
+          {/* Image Generator Card */}
           <div className={`${theme.cardBg} rounded-xl p-6`}>
-            <h2 className={`text-xs ${theme.muted} font-medium uppercase tracking-wider mb-4`}>Demo Action</h2>
-            <p className={`${theme.body} text-sm mb-4`}>
-              Replace this with your product's main action. Each click tracks usage.
-            </p>
+            <h2 className={`text-xs ${theme.muted} font-medium uppercase tracking-wider mb-4`}>Generate Image</h2>
+
+            {/* Prompt Input */}
+            <textarea
+              placeholder="Describe your image... e.g. 'A magical forest at sunset with glowing mushrooms'"
+              className={`w-full px-4 py-3 rounded-lg ${theme.pageBg} ${theme.heading} border border-zinc-700 focus:border-amber-500 focus:outline-none text-sm resize-none mb-4`}
+              rows={3}
+            />
+
+            {/* Generate Button */}
             <button
               onClick={handleTrackUsage}
               disabled={loading || !isReady}
@@ -221,9 +199,33 @@ export default function Dashboard() {
                   : `${accent.bg} text-white ${accent.bgHover}`
               }`}
             >
-              {loading ? 'Processing...' : 'Track Usage'}
+              {loading ? 'Generating...' : '✨ Generate Image'}
             </button>
+
+            {/* Demo Note */}
+            <p className={`${theme.muted} text-xs mt-3 text-center`}>
+              Demo only — tracks usage, no actual AI
+            </p>
           </div>
+        </div>
+
+        {/* Generated Images Section */}
+        <div className={`mt-6 ${theme.cardBg} rounded-xl p-6`}>
+          <h2 className={`text-xs ${theme.muted} font-medium uppercase tracking-wider mb-4`}>Your Generations</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Placeholder slots */}
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className={`aspect-square rounded-lg ${theme.pageBg} border border-dashed border-zinc-700 flex items-center justify-center`}
+              >
+                <span className={`${theme.muted} text-xs`}>Empty</span>
+              </div>
+            ))}
+          </div>
+          <p className={`${theme.muted} text-xs mt-4 text-center`}>
+            Your generated images would appear here
+          </p>
         </div>
 
         {/* Upgrade CTA */}

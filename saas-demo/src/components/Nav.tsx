@@ -40,24 +40,20 @@ export default function Nav({ showAuthLinks = false, transparent = false }: NavP
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const getSignUpUrl = () => dreamAPI.auth.getSignUpUrl({
-    redirect: window.location.origin + '/choose-plan'
-  });
+  const getSignUpUrl = () => {
+    sessionStorage.setItem('justSignedUp', 'true');
+    return dreamAPI.auth.getSignUpUrl({
+      redirect: window.location.origin + '/choose-plan'
+    });
+  };
 
   const getSignInUrl = () => dreamAPI.auth.getSignInUrl({
     redirect: window.location.origin + '/dashboard'
   });
 
   const handleAccountSettings = () => {
-    // Use Clerk's built-in profile modal - much nicer UX
-    const clerk = (window as any).Clerk;
-    if (clerk?.openUserProfile) {
-      clerk.openUserProfile();
-    } else {
-      // Fallback to redirect
-      const url = dreamAPI.auth.getCustomerPortalUrl();
-      window.location.href = url;
-    }
+    const url = dreamAPI.auth.getCustomerPortalUrl();
+    window.location.href = url;
   };
 
   const handleBilling = async () => {
@@ -78,15 +74,17 @@ export default function Nav({ showAuthLinks = false, transparent = false }: NavP
     navigate('/');
   };
 
+  const demoEnabled = (CONFIG as any).demo?.enabled;
+
   return (
-    <nav className={transparent ? 'bg-transparent' : theme.navBg}>
+    <nav className={transparent ? 'bg-transparent' : demoEnabled ? 'bg-amber-500' : theme.navBg}>
       <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           {CONFIG.logo && (
             <img src={CONFIG.logo} alt="Logo" className="h-8 rounded" />
           )}
-          <span className={`text-xl font-medium ${accent.text}`}>
+          <span className={`text-xl font-medium ${demoEnabled ? 'text-black' : accent.text}`}>
             {CONFIG.appName}
           </span>
         </Link>
@@ -96,13 +94,13 @@ export default function Nav({ showAuthLinks = false, transparent = false }: NavP
           {/* Page links (landing only) */}
           {showAuthLinks && (
             <>
-              <a href="#features" className={`text-sm ${theme.link} transition-colors hidden sm:block`}>
+              <a href="#features" className={`text-sm ${demoEnabled ? 'text-black/70 hover:text-black' : theme.link} transition-colors hidden sm:block`}>
                 Features
               </a>
-              <a href="#pricing" className={`text-sm ${theme.link} transition-colors hidden sm:block`}>
+              <a href="#pricing" className={`text-sm ${demoEnabled ? 'text-black/70 hover:text-black' : theme.link} transition-colors hidden sm:block`}>
                 Pricing
               </a>
-              <a href="#faq" className={`text-sm ${theme.link} transition-colors hidden sm:block`}>
+              <a href="#faq" className={`text-sm ${demoEnabled ? 'text-black/70 hover:text-black' : theme.link} transition-colors hidden sm:block`}>
                 FAQ
               </a>
             </>
@@ -193,13 +191,13 @@ export default function Nav({ showAuthLinks = false, transparent = false }: NavP
             <>
               <a
                 href={getSignInUrl()}
-                className={`text-sm ${theme.link} transition-colors`}
+                className={`text-sm ${demoEnabled ? 'text-black/70 hover:text-black' : theme.link} transition-colors`}
               >
                 Sign In
               </a>
               <a
                 href={getSignUpUrl()}
-                className={`px-4 py-2 text-sm font-medium rounded ${accent.bg} text-white ${accent.bgHover} transition-colors`}
+                className="px-4 py-2 text-sm font-medium rounded bg-zinc-900 text-white hover:bg-zinc-800 transition-colors"
               >
                 Get Started
               </a>
