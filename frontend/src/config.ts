@@ -34,7 +34,7 @@ export const CONFIG = {
     github: 'https://github.com/Fruitloop24',
     docs: '/docs',
     // Live Demos (working auth + payments with test card 4242)
-    saasDemo: 'https://clerk-frontend.pages.dev',
+    saasDemo: 'https://pixel-forge.pages.dev',
     storeDemo: 'https://ember-wick-demo.pages.dev',
     membershipDemo: 'https://fit-flow.pages.dev',
     // Templates - React (Vite)
