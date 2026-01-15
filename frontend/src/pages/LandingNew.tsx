@@ -175,8 +175,111 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* What You Get vs What You Don't Build */}
+      <section className={`py-20 px-4 ${theme.sectionAlt}`}>
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">
+            What You Get vs What You Don't Build
+          </h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* What You Get */}
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
+              <h3 className={`text-xl font-bold ${accent.text} mb-6 flex items-center gap-2`}>
+                <CheckIcon className={accent.text} />
+                What You Get
+              </h3>
+              <ul className="space-y-4">
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">User Authentication</p>
+                    <p className={`text-sm ${theme.muted}`}>Sign up, sign in, sign out, account settings</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">Subscription Billing</p>
+                    <p className={`text-sm ${theme.muted}`}>Checkout, upgrades, cancellations, billing portal</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">Usage Tracking</p>
+                    <p className={`text-sm ${theme.muted}`}>Metered billing, automatic limit enforcement</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">Customer Management</p>
+                    <p className={`text-sm ${theme.muted}`}>View users, plans, usage, subscription status</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckIcon className={`${accent.text} flex-shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-medium text-white">Webhook Handling</p>
+                    <p className={`text-sm ${theme.muted}`}>Stripe events processed, plan updates automatic</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            {/* What You Don't Build */}
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
+              <h3 className="text-xl font-bold text-gray-400 mb-6 flex items-center gap-2">
+                <XIcon />
+                What You Don't Build
+              </h3>
+              <ul className="space-y-4">
+                <li className="flex items-start gap-3">
+                  <XIcon />
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Auth system from scratch</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No JWT logic, session management, or security audits</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <XIcon />
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Stripe integration</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No webhook endpoints, signature verification, or event handling</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <XIcon />
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Usage database</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No schema design, queries, or period resets</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <XIcon />
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Plan enforcement logic</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No "check if user can do X" code scattered everywhere</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <XIcon />
+                  <div>
+                    <p className="font-medium text-gray-400 line-through">Customer admin panel</p>
+                    <p className={`text-sm ${theme.mutedMore}`}>No internal tools to view/manage subscribers</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <p className={`text-center ${theme.muted} mt-8`}>
+            Focus on your product. We handle the infrastructure.
+          </p>
+        </div>
+      </section>
+
       {/* No Code Dashboard Section */}
-      <section id="dashboard" className={`py-20 px-4 ${theme.sectionAlt}`}>
+      <section id="dashboard" className="py-20 px-4">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">No Code. No Deploys. Just Dashboard.</h2>
