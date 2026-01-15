@@ -22,7 +22,7 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/templates" element={<Templates />} />
         <Route path="/docs" element={<Docs />} />
-        <Route path="/pro-tips" element={<ProTips />} />
+        <Route path="/why-trust-us" element={<ProTips />} />
         <Route path="/sign-in/*" element={
           <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
             <SignIn routing="path" path="/sign-in" />

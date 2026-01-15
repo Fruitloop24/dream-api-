@@ -69,8 +69,8 @@ export default function Docs() {
             <span className={`text-xl font-semibold ${theme.heading}`}>{CONFIG.appName}</span>
           </a>
           <nav className="flex items-center gap-6">
-            <a href="/docs" className={`${accent.text} font-medium`}>Docs</a>
-            <a href="/pro-tips" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Pro Tips</a>
+            <a href="/docs" className={`${accent.text} font-medium`}>Quickstart</a>
+            <a href="/why-trust-us" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Why Trust Us</a>
             <a href="/templates" className={`${theme.muted} hover:${theme.heading} transition-colors`}>
               Templates
             </a>

@@ -20,8 +20,8 @@ export default function ProTips() {
             <span className={`text-xl font-semibold ${theme.heading}`}>{CONFIG.appName}</span>
           </a>
           <nav className="flex items-center gap-6">
-            <a href="/docs" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Docs</a>
-            <a href="/pro-tips" className={`${accent.text} font-medium`}>Pro Tips</a>
+            <a href="/docs" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Quickstart</a>
+            <a href="/why-trust-us" className={`${accent.text} font-medium`}>Why Trust Us</a>
             <a href="/templates" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Templates</a>
             <a href="/sign-in" className={`px-4 py-2 rounded ${accent.bg} text-white ${accent.bgHover} transition-colors`}>
               Sign In
@@ -51,7 +51,7 @@ export default function ProTips() {
         {/* Main Content */}
         <main className="flex-1 min-w-0 py-8 px-6 lg:px-12">
           {/* Title */}
-          <h1 className={`text-4xl font-bold ${theme.heading} mb-4`}>Pro Tips</h1>
+          <h1 className={`text-4xl font-bold ${theme.heading} mb-4`}>Why Trust Us</h1>
           <p className={`text-lg ${theme.body} mb-8`}>
             Everything you need to know about trust, control, and getting the most out of Dream API.
           </p>

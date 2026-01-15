@@ -54,8 +54,8 @@ export default function Landing() {
               <span className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</span>
             </a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
-              <a href="/docs" className={theme.navTextHover}>Docs</a>
-              <a href="/pro-tips" className={theme.navTextHover}>Pro Tips</a>
+              <a href="/docs" className={theme.navTextHover}>Quickstart</a>
+              <a href="/why-trust-us" className={theme.navTextHover}>Why Trust Us</a>
               <a href="/templates" className={theme.navTextHover}>Templates</a>
               <a href="#pricing" className={theme.navTextHover}>Pricing</a>
               <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
