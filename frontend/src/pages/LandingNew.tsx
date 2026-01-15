@@ -72,9 +72,17 @@ export default function Landing() {
       {/* Hero */}
       <section className="pt-32 pb-12 px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-            {CONFIG.hero.headline}
-          </h1>
+          {/* Equation Hero */}
+          <div className="mb-8">
+            <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">
+              SaaS <span className={accent.text}>+</span> Store <span className={accent.text}>+</span> Usage
+            </h1>
+            <div className={`text-3xl md:text-4xl font-bold ${accent.text} mb-4`}>=</div>
+            <div className="flex items-center justify-center gap-3">
+              {CONFIG.logo && <img src={CONFIG.logo} alt={CONFIG.appName} className="h-12 md:h-16 w-auto rounded-xl" />}
+              <span className="text-3xl md:text-5xl font-bold">{CONFIG.appName}</span>
+            </div>
+          </div>
           <p className={`text-xl md:text-2xl ${theme.muted} mb-8 max-w-2xl mx-auto`}>
             {CONFIG.hero.subheadline} <span className={accent.text}>{CONFIG.hero.highlight}</span>
           </p>
