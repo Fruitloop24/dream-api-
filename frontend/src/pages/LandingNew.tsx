@@ -328,33 +328,36 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* No Code Dashboard Section */}
-      <section id="dashboard" className="py-20 px-4">
-        <div className="max-w-5xl mx-auto">
+      {/* Video Section - 5 Minute Setup */}
+      <section id="video" className="py-20 px-4">
+        <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">No Code. No Deploys. Just Dashboard.</h2>
-            <p className={`${theme.muted} text-lg`}>Change your products, prices, and limits. Your app updates instantly.</p>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Set Up in 5 Minutes</h2>
+            <p className={`${theme.muted} text-lg`}>Clone. Run AI commands. Ship.</p>
           </div>
-
-          {/* Dashboard Screenshot Placeholder */}
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-8 mb-8 min-h-[300px] flex items-center justify-center`}>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
             <div className={`text-center ${theme.mutedMore}`}>
-              <div className="text-4xl mb-2">🖥️</div>
-              <p>[Dashboard Screenshot]</p>
-              <p className="text-sm">Tier config, pricing, limits, customers</p>
+              <div className="text-5xl mb-4">▶️</div>
+              <p className="text-lg">[5-Minute Setup Video]</p>
+              <p className="text-sm mt-2">Clone → /setup → /pwa → Deploy</p>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            {CONFIG.dashboardFeatures.map((feature, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <CheckIcon className={accent.text} />
-                <div>
-                  <p className="font-medium">{feature.title}</p>
-                  <p className={`text-sm ${theme.mutedMore}`}>{feature.subtitle}</p>
-                </div>
-              </div>
-            ))}
+      {/* Video Section - Dashboard Demo */}
+      <section id="dashboard" className={`py-20 px-4 ${theme.sectionAlt}`}>
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">No Code. No Deploys. Just Dashboard.</h2>
+            <p className={`${theme.muted} text-lg`}>Change prices, toggle tax, update limits. Your app updates instantly.</p>
+          </div>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
+            <div className={`text-center ${theme.mutedMore}`}>
+              <div className="text-5xl mb-4">▶️</div>
+              <p className="text-lg">[Dashboard Walkthrough Video]</p>
+              <p className="text-sm mt-2">Tiers • Pricing • Tax • Limits • Customers</p>
+            </div>
           </div>
         </div>
       </section>
@@ -395,23 +398,6 @@ export default function Landing() {
             <span className="flex items-center gap-2"><CheckIcon className={accent.text} /> JWT-enforced plans</span>
             <span className="flex items-center gap-2"><CheckIcon className={accent.text} /> Webhook-signed security</span>
             <span className="flex items-center gap-2"><CheckIcon className={accent.text} /> Auto token refresh</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Video Section */}
-      <section id="video" className={`py-20 px-4 ${theme.sectionAlt}`}>
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Set Up in 5 Minutes</h2>
-            <p className={`${theme.muted} text-lg`}>Clone. Run AI commands. Ship.</p>
-          </div>
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
-            <div className={`text-center ${theme.mutedMore}`}>
-              <div className="text-5xl mb-4">▶️</div>
-              <p className="text-lg">[5-Minute Setup Video]</p>
-              <p className="text-sm mt-2">Clone → /setup → /pwa → Deploy</p>
-            </div>
           </div>
         </div>
       </section>
