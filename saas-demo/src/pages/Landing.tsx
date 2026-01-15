@@ -60,13 +60,16 @@ export default function Landing() {
 
       {/* QR Code Card - Fixed position above demo card */}
       {demoConfig?.enabled && (
-        <div className="fixed bottom-44 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl">
-          <div className="flex items-center gap-3">
-            <img src="/qr-code.png" alt="Scan to visit" className="w-16 h-16 rounded" />
-            <div>
-              <p className="text-white text-xs font-medium">Install as App</p>
-              <p className="text-zinc-400 text-xs">Scan with phone</p>
-            </div>
+        <div className="fixed bottom-44 right-4 z-50 bg-zinc-900 border border-amber-500/50 rounded-lg p-4 shadow-xl max-w-[200px]">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <span className="text-amber-400 text-xs font-semibold">PWA Ready</span>
+          </div>
+          <img src="/qr-code.png" alt="Scan to visit" className="w-full rounded mb-3" />
+          <div className="space-y-1 text-xs">
+            <p className="text-white font-medium">📱 Install on Phone</p>
+            <p className="text-zinc-400">1. Scan → 2. Tap Share</p>
+            <p className="text-zinc-400">3. "Add to Home Screen"</p>
           </div>
         </div>
       )}
