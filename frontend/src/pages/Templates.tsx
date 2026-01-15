@@ -89,7 +89,10 @@ export default function Templates() {
       <nav className={`${theme.navBg} border-b ${theme.navBorder}`}>
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <a href="/" className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</a>
+            <a href="/" className="flex items-center gap-2">
+              {CONFIG.logo && <img src={CONFIG.logo} alt={CONFIG.appName} className="h-8 w-auto rounded-lg" />}
+              <span className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</span>
+            </a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
               <a href="/docs" className={theme.navTextHover}>Docs</a>
               <a href="/templates" className={`${accent.text} font-medium`}>Templates</a>

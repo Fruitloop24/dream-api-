@@ -64,8 +64,9 @@ export default function Docs() {
       {/* Header */}
       <header className={`sticky top-0 z-50 ${theme.navBg} border-b ${theme.divider}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="/" className={`text-xl font-semibold ${theme.heading}`}>
-            {CONFIG.appName}
+          <a href="/" className="flex items-center gap-2">
+            {CONFIG.logo && <img src={CONFIG.logo} alt={CONFIG.appName} className="h-8 w-auto rounded-lg" />}
+            <span className={`text-xl font-semibold ${theme.heading}`}>{CONFIG.appName}</span>
           </a>
           <nav className="flex items-center gap-6">
             <a href="/docs" className={`${accent.text} font-medium`}>Docs</a>
