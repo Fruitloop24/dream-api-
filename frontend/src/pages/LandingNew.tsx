@@ -183,6 +183,23 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Video Section - 5 Minute Setup - THE HOOK */}
+      <section id="video" className="py-20 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Set Up in 5 Minutes</h2>
+            <p className={`${theme.muted} text-lg`}>Clone. Run AI commands. Ship.</p>
+          </div>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
+            <div className={`text-center ${theme.mutedMore}`}>
+              <div className="text-5xl mb-4">▶️</div>
+              <p className="text-lg">[5-Minute Setup Video]</p>
+              <p className="text-sm mt-2">Clone → /setup → /pwa → Deploy</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* What You Get vs What You Don't Build */}
       <section className={`py-20 px-4 ${theme.sectionAlt}`}>
         <div className="max-w-5xl mx-auto">
@@ -325,23 +342,6 @@ export default function Landing() {
           <p className={`text-center ${theme.muted} mt-8 text-lg`}>
             Focus on your product. We handle the infrastructure.
           </p>
-        </div>
-      </section>
-
-      {/* Video Section - 5 Minute Setup */}
-      <section id="video" className="py-20 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Set Up in 5 Minutes</h2>
-            <p className={`${theme.muted} text-lg`}>Clone. Run AI commands. Ship.</p>
-          </div>
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
-            <div className={`text-center ${theme.mutedMore}`}>
-              <div className="text-5xl mb-4">▶️</div>
-              <p className="text-lg">[5-Minute Setup Video]</p>
-              <p className="text-sm mt-2">Clone → /setup → /pwa → Deploy</p>
-            </div>
-          </div>
         </div>
       </section>
 
