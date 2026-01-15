@@ -7,6 +7,7 @@ import { SignedIn, SignedOut, RedirectToSignIn, SignIn, SignUp } from '@clerk/cl
 import Landing from './pages/LandingNew';
 import Templates from './pages/Templates';
 import Docs from './pages/Docs';
+import ProTips from './pages/ProTips';
 import { getTheme } from './config';
 import Dashboard from './pages/DashboardNew';
 import ApiTierConfig from './pages/ApiTierConfig';
@@ -21,6 +22,7 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/templates" element={<Templates />} />
         <Route path="/docs" element={<Docs />} />
+        <Route path="/pro-tips" element={<ProTips />} />
         <Route path="/sign-in/*" element={
           <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
             <SignIn routing="path" path="/sign-in" />
