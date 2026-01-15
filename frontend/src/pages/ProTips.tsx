@@ -220,15 +220,15 @@ export default function ProTips() {
             <div id="delete-data" className={`p-6 rounded-xl border-2 ${accent.border}`}>
               <h3 className={`text-lg font-semibold ${theme.heading} mb-3`}>Delete Your Data Instantly</h3>
               <div className="space-y-4">
-                <ProTip theme={theme} accent={accent} title="Delete a Project">
+                <ProTip theme={theme} title="Delete a Project">
                   Go to project settings → Delete Project.
                   <strong> All end-users for that project are immediately deleted.</strong> No waiting period.
                 </ProTip>
-                <ProTip theme={theme} accent={accent} title="Delete Your Account">
+                <ProTip theme={theme} title="Delete Your Account">
                   Developer Portal → Account Settings → Delete Account.
                   All projects, all end-users, all data - gone immediately.
                 </ProTip>
-                <ProTip theme={theme} accent={accent} title="Cancel Subscription">
+                <ProTip theme={theme} title="Cancel Subscription">
                   Manage Billing → Cancel. You keep access until period ends.
                   After 30 days of cancellation, data auto-deletes.
                 </ProTip>
@@ -294,7 +294,7 @@ function TrustPoint({ theme, accent, children }: { theme: any; accent: any; chil
   );
 }
 
-function ProTip({ theme, accent, title, children }: { theme: any; accent: any; title: string; children: React.ReactNode }) {
+function ProTip({ theme, title, children }: { theme: any; title: string; children: React.ReactNode }) {
   return (
     <div className={`p-4 rounded-lg ${theme.pageBg}`}>
       <p className={`font-medium ${theme.heading} mb-1`}>{title}</p>
