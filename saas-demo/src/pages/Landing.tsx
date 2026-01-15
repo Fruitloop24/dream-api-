@@ -58,6 +58,16 @@ export default function Landing() {
         </div>
       )}
 
+      {/* QR Code Card - Fixed position */}
+      {demoConfig?.enabled && (
+        <div className="fixed bottom-36 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl">
+          <img src="/qr-code.png" alt="Scan to visit" className="w-20 h-20 rounded" />
+          <p className="text-zinc-400 text-xs mt-2 text-center max-w-[80px]">
+            Scan & install as app
+          </p>
+        </div>
+      )}
+
       {/* Demo Card - Fixed position */}
       {demoConfig?.enabled && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
