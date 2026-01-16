@@ -25,7 +25,7 @@ export const CONFIG = {
 
   // Primary accent color
   // Options: 'blue', 'emerald', 'violet', 'rose', 'amber', 'sky'
-  accentColor: 'blue',
+  accentColor: 'sky',
 
   // -------------------------------------------------------------------------
   // LINKS

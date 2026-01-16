@@ -71,50 +71,56 @@ export default function Landing() {
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-12 px-4">
+      <section className="pt-32 pb-12 px-4 hero-bg">
         <div className="max-w-4xl mx-auto text-center">
           {/* Equation Hero */}
           <div className="mb-8">
-            <h1 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">
+            <h1 className="text-4xl md:text-6xl font-black mb-4 leading-tight animate-fade-in-up">
               SaaS <span className={accent.text}>+</span> Store <span className={accent.text}>+</span> Usage
             </h1>
-            <div className={`text-3xl md:text-4xl font-bold ${accent.text} mb-4`}>=</div>
-            <div className="flex items-center justify-center gap-3">
+            <div className={`text-3xl md:text-4xl font-bold ${accent.text} mb-4 animate-fade-in-up delay-100`}>=</div>
+            <div className="flex items-center justify-center gap-3 animate-fade-in-up delay-200">
               {CONFIG.logo && <img src={CONFIG.logo} alt={CONFIG.appName} className="h-12 md:h-16 w-auto rounded-xl" />}
-              <span className="text-3xl md:text-5xl font-bold">{CONFIG.appName}</span>
+              <span className="text-3xl md:text-5xl font-black">{CONFIG.appName}</span>
             </div>
           </div>
-          <p className={`text-xl md:text-2xl ${theme.muted} mb-8 max-w-2xl mx-auto`}>
-            {CONFIG.hero.subheadline} <span className={accent.text}>{CONFIG.hero.highlight}</span>
+          <p className={`text-xl md:text-2xl ${theme.muted} mb-8 max-w-2xl mx-auto animate-fade-in-up delay-300`}>
+            {CONFIG.hero.subheadline} <span className={`${accent.text} font-semibold`}>{CONFIG.hero.highlight}</span>
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-            <a href="/sign-up" className={`px-8 py-4 ${primaryBtn} text-lg`}>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6 animate-fade-in-up delay-400">
+            <a href="/sign-up" className={`px-8 py-4 ${primaryBtn} text-lg btn-glow`}>
               {CONFIG.hero.ctaPrimary}
             </a>
-            <a href="#demos" className={`px-8 py-4 ${secondaryBtn} text-lg`}>
+            <a href="#demos" className={`px-8 py-4 ${secondaryBtn} text-lg hover:scale-105 transition-transform`}>
               Try Live Demos
             </a>
           </div>
-          <p className={`text-sm ${theme.mutedMore} mb-8`}>{CONFIG.hero.subtext}</p>
+          <p className={`text-sm ${theme.mutedMore} mb-8 animate-fade-in delay-500`}>{CONFIG.hero.subtext}</p>
 
           {/* Built with badge */}
-          <div className="flex items-center justify-center gap-2">
-            <span className={`text-xs ${theme.mutedMore}`}>Built with</span>
-            <div className="flex items-center gap-3">
-              <svg className="h-4" viewBox="0 0 60 25" fill="#635BFF">
-                <path d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.37 4.05-.95v3.32a8.33 8.33 0 0 1-4.56 1.1c-4.01 0-6.83-2.5-6.83-7.48 0-4.19 2.39-7.52 6.3-7.52 3.92 0 5.96 3.28 5.96 7.5 0 .4-.02 1.04-.06 1.48zm-6.3-5.63c-1.03 0-1.93.76-2.13 2.42h4.15c-.02-1.27-.75-2.42-2.02-2.42zM40.95 20.3c-1.44 0-2.32-.6-2.9-1.04l-.02 4.63-4.12.87V5.57h3.76l.08 1.02a4.7 4.7 0 0 1 3.23-1.29c2.9 0 5.62 2.6 5.62 7.4 0 5.23-2.7 7.6-5.65 7.6zM40 9.14c-.95 0-1.54.34-1.97.81l.02 6.12c.4.44.98.78 1.95.78 1.52 0 2.54-1.65 2.54-3.87 0-2.15-1.04-3.84-2.54-3.84zM28.24 5.57h4.13v14.44h-4.13V5.57zm0-5.13L32.37 0v3.77l-4.13.88V.44zm-4.32 9.35v9.79H19.8V5.57h3.7l.12 1.22c1-1.77 3.07-1.41 3.62-1.22v3.79c-.52-.17-2.29-.45-3.32.43zm-8.55 4.72c0 2.43 2.6 1.68 3.12 1.46v3.36c-.55.3-1.54.54-2.89.54-3.15 0-4.3-1.93-4.3-4.75V.44l4.07-.88v5.82h3.09v3.54h-3.1v5.59h.01zm-8.82-1.98c0-4.63-6.27-3.82-6.27-5.77 0-.79.62-1.1 1.63-1.1.98 0 2.23.34 3.51 1.02V3.35c-1.28-.55-2.54-.82-3.94-.82-3.2 0-5.32 1.73-5.32 4.61 0 4.35 6.18 3.63 6.18 5.63 0 .92-.8 1.22-1.87 1.22-1.18 0-2.7-.49-3.94-1.31v4.03c1.24.65 2.57 1 3.97 1 3.28 0 5.55-1.62 5.55-4.6 0-.1-.02-.2-.02-.3l.52.72z"/>
-              </svg>
-              <svg className="h-4" viewBox="0 0 77 24" fill="none">
-                <path d="M35.73 5.835h3.148v12.33H35.73V5.835zm7.015 0h-3.04l5.054 6.396-5.23 5.934h3.302l3.718-4.355 3.718 4.355h3.302l-5.23-5.934 5.054-6.396h-3.04l-3.804 4.878-3.804-4.878z" fill="#6C47FF"/>
-                <path d="M62.693 14.148c-.438 1.052-1.45 1.74-2.69 1.74-1.758 0-3.063-1.382-3.063-3.307 0-1.924 1.305-3.306 3.063-3.306 1.24 0 2.252.687 2.69 1.739l2.768-1.306c-.876-1.98-2.878-3.306-5.458-3.306-3.5 0-6.162 2.62-6.162 5.873 0 3.252 2.662 5.872 6.162 5.872 2.58 0 4.582-1.326 5.458-3.306l-2.768-1.693z" fill="#6C47FF"/>
-                <path d="M13.463 18.165V5.835h-3.148v4.692c-.73-.98-1.92-1.555-3.354-1.555C3.607 8.972.945 11.66.945 14.98c0 3.32 2.662 5.94 6.016 5.94 1.434 0 2.624-.575 3.354-1.556v1.201h3.148v-.4zm-6.162-1.135c-1.758 0-3.063-1.313-3.063-3.238 0-1.924 1.305-3.237 3.063-3.237 1.759 0 3.064 1.313 3.064 3.237 0 1.925-1.305 3.238-3.064 3.238z" fill="#6C47FF"/>
-                <path d="M22.63 8.972c-3.5 0-6.162 2.62-6.162 5.872 0 3.253 2.662 5.873 6.162 5.873 2.58 0 4.737-1.395 5.613-3.374l-2.768-1.625c-.438 1.052-1.45 1.672-2.69 1.672-1.32 0-2.4-.756-2.848-1.924h9.037c.077-.413.116-.825.116-1.237 0-3.115-2.546-5.257-6.46-5.257zm-2.925 4.624c.37-1.1 1.373-1.856 2.77-1.856 1.397 0 2.4.756 2.77 1.856h-5.54z" fill="#6C47FF"/>
-                <path d="M76.055 5.835h-3.148v4.692c-.73-.98-1.92-1.555-3.354-1.555-3.354 0-6.016 2.688-6.016 6.008 0 3.32 2.662 5.94 6.016 5.94 1.434 0 2.624-.575 3.354-1.556v1.201h3.148V5.835zm-6.162 11.195c-1.758 0-3.063-1.313-3.063-3.238 0-1.924 1.305-3.237 3.063-3.237 1.759 0 3.064 1.313 3.064 3.237 0 1.925-1.305 3.238-3.064 3.238z" fill="#6C47FF"/>
-              </svg>
-              <svg className="h-4" viewBox="0 0 130 43" fill="none">
-                <path d="M26.9 30.6l.8-2.6c.6-1.8.4-3.5-.6-4.7-1-1.1-2.5-1.8-4.3-1.8H6.5c-.2 0-.4-.1-.5-.2-.1-.2-.1-.4 0-.6.7-2.2 2.8-3.8 5.2-3.8h.5c.3 0 .6-.2.7-.5 1.7-5.1 6.5-8.5 11.9-8.5 5.8 0 10.8 3.9 12.3 9.3.1.3.4.5.7.5 3.7.3 6.7 3.1 7.2 6.8 0 .3.3.6.6.6h2.3c2.1 0 4 1.3 4.8 3.2.1.2.1.5 0 .7-.1.2-.3.3-.6.3l-24.1.1c-.3 0-.5-.3-.6-.5l-.1-.3z" fill="#F6821F"/>
-                <path d="M31.6 30.7c.2.2.1.5-.1.6l-.3.1h-5.4c-.2 0-.5-.1-.6-.3-.7-1.9.2-4 2.1-4.7.5-.2 1-.3 1.5-.3 1.1 0 2.1.5 2.8 1.4.1.2.2.4.1.6l-.1 2.6z" fill="#FAAD3F"/>
-              </svg>
+          <div className="flex items-center justify-center gap-4 animate-fade-in delay-600">
+            <span className={`text-sm ${theme.mutedMore}`}>Built with</span>
+            <div className="flex items-center gap-8">
+              {/* Stripe */}
+              <div className="flex flex-col items-center gap-1">
+                <svg className="h-7" viewBox="0 0 468 222.5" fill="#635BFF">
+                  <path d="M414 113.4c0-25.6-12.4-45.8-36.1-45.8-23.8 0-38.2 20.2-38.2 45.6 0 30.1 17 45.3 41.4 45.3 11.9 0 20.9-2.7 27.7-6.5v-20c-6.8 3.4-14.6 5.5-24.5 5.5-9.7 0-18.3-3.4-19.4-15.2h48.9c0-1.3.2-6.5.2-8.9zm-49.4-9.5c0-11.3 6.9-16 13.2-16 6.1 0 12.6 4.7 12.6 16h-25.8zM301.1 67.6c-9.8 0-16.1 4.6-19.6 7.8l-1.3-6.2h-22v116.6l25-5.3.1-28.3c3.6 2.6 8.9 6.3 17.7 6.3 17.9 0 34.2-14.4 34.2-46.1-.1-29-16.6-44.8-34.1-44.8zm-6 68.9c-5.9 0-9.4-2.1-11.8-4.7l-.1-37.1c2.6-2.9 6.2-4.9 11.9-4.9 9.1 0 15.4 10.2 15.4 23.3 0 13.4-6.2 23.4-15.4 23.4zM223.8 61.7l25.1-5.4V36l-25.1 5.3zM223.8 69.3h25.1v87.5h-25.1zM196.9 76.7l-1.6-7.4h-21.6v87.5h25V97.5c5.9-7.7 15.9-6.3 19-5.2v-23c-3.2-1.2-14.9-3.4-20.8 7.4zM146.9 47.6l-24.4 5.2-.1 80.1c0 14.8 11.1 25.7 25.9 25.7 8.2 0 14.2-1.5 17.5-3.3V135c-3.2 1.3-19 5.9-19-8.9V90.6h19V69.3h-19l.1-21.7zM79.3 94.7c0-3.9 3.2-5.4 8.5-5.4 7.6 0 17.2 2.3 24.8 6.4V72.2c-8.3-3.3-16.5-4.6-24.8-4.6C67.5 67.6 54 78.2 54 95.9c0 27.6 38 23.2 38 35.1 0 4.6-4 6.1-9.6 6.1-8.3 0-18.9-3.4-27.3-8v23.8c9.3 4 18.7 5.7 27.3 5.7 20.8 0 35.1-10.3 35.1-28.2-.1-29.8-38.2-24.5-38.2-35.7z"/>
+                </svg>
+                <span className={`text-xs ${theme.mutedMore}`}>Stripe</span>
+              </div>
+              {/* Clerk */}
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl font-bold text-[#6C47FF]">clerk</span>
+                <span className={`text-xs ${theme.mutedMore}`}>Clerk</span>
+              </div>
+              {/* Cloudflare */}
+              <div className="flex flex-col items-center gap-1">
+                <svg className="h-7" viewBox="0 0 130 43" fill="none">
+                  <path d="M26.9 30.6l.8-2.6c.6-1.8.4-3.5-.6-4.7-1-1.1-2.5-1.8-4.3-1.8H6.5c-.2 0-.4-.1-.5-.2-.1-.2-.1-.4 0-.6.7-2.2 2.8-3.8 5.2-3.8h.5c.3 0 .6-.2.7-.5 1.7-5.1 6.5-8.5 11.9-8.5 5.8 0 10.8 3.9 12.3 9.3.1.3.4.5.7.5 3.7.3 6.7 3.1 7.2 6.8 0 .3.3.6.6.6h2.3c2.1 0 4 1.3 4.8 3.2.1.2.1.5 0 .7-.1.2-.3.3-.6.3l-24.1.1c-.3 0-.5-.3-.6-.5l-.1-.3z" fill="#F6821F"/>
+                  <path d="M31.6 30.7c.2.2.1.5-.1.6l-.3.1h-5.4c-.2 0-.5-.1-.6-.3-.7-1.9.2-4 2.1-4.7.5-.2 1-.3 1.5-.3 1.1 0 2.1.5 2.8 1.4.1.2.2.4.1.6l-.1 2.6z" fill="#FAAD3F"/>
+                </svg>
+                <span className={`text-xs ${theme.mutedMore}`}>Cloudflare</span>
+              </div>
             </div>
           </div>
         </div>
@@ -125,36 +131,56 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Try Working Demos - Full Auth &amp; Payments</h2>
-            <p className="text-white/80">
-              Test card: <code className="bg-white/20 px-2 py-1 rounded font-mono text-sm">4242 4242 4242 4242</code>
-            </p>
+            <div className="inline-flex items-center gap-3 bg-white/10 border border-white/20 rounded-lg px-4 py-2">
+              <span className="text-white/60 text-sm">Test card:</span>
+              <code className="font-mono text-white">4242 4242 4242 4242</code>
+              <span className="text-white/40">|</span>
+              <code className="font-mono text-white/80">12/34</code>
+              <span className="text-white/40">|</span>
+              <code className="font-mono text-white/80">123</code>
+            </div>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {/* SaaS Demo */}
             <a href={CONFIG.links.saasDemo} target="_blank" rel="noopener noreferrer"
-               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 hover:border-white/30 transition block`}>
-              <div className="text-3xl mb-4">📊</div>
+               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 card-lift block group`}>
+              <div className="w-14 h-14 rounded-xl bg-violet-500/20 flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-violet-500/30 transition-all">
+                <svg className="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
               <h3 className="text-xl font-bold text-white mb-2">SaaS Demo</h3>
               <p className={`${theme.muted} text-sm`}>Usage tracking, subscription tiers, automatic limits.</p>
             </a>
             {/* Store Demo */}
             <a href={CONFIG.links.storeDemo} target="_blank" rel="noopener noreferrer"
-               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 hover:border-white/30 transition block`}>
-              <div className="text-3xl mb-4">🛒</div>
+               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 card-lift block group`}>
+              <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-amber-500/30 transition-all">
+                <svg className="w-7 h-7 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
               <h3 className="text-xl font-bold text-white mb-2">Store Demo</h3>
               <p className={`${theme.muted} text-sm`}>Products, cart, guest checkout. No per-user fees.</p>
             </a>
             {/* Membership Demo */}
             <a href={CONFIG.links.membershipDemo} target="_blank" rel="noopener noreferrer"
-               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 hover:border-white/30 transition block`}>
-              <div className="text-3xl mb-4">🔐</div>
+               className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 card-lift block group`}>
+              <div className="w-14 h-14 rounded-xl bg-sky-500/20 flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-sky-500/30 transition-all">
+                <svg className="w-7 h-7 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
               <h3 className="text-xl font-bold text-white mb-2">Membership Demo</h3>
               <p className={`${theme.muted} text-sm`}>Content gating, paywalls, auto-checkout.</p>
             </a>
           </div>
-          <p className="text-center text-white/60 text-sm mt-6">
-            5 minutes to launch your own. Clone template → add key → deploy.
-          </p>
+          <a href="/templates" className="flex items-center justify-center gap-2 mt-8 text-white hover:text-white/80 transition group">
+            <span className="text-lg font-medium">Build yours now with our free AI-configurable templates</span>
+            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+          </a>
         </div>
       </section>
 
@@ -166,17 +192,29 @@ export default function Landing() {
           </h3>
           <div className="grid md:grid-cols-3 gap-6">
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
-              <div className="text-3xl mb-4">💸</div>
+              <div className="w-12 h-12 rounded-xl bg-sky-500/20 flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
               <h4 className="text-lg font-bold text-white mb-2">Zero Platform Fees</h4>
               <p className={`${theme.muted} text-sm`}>We never touch your money. Payments go direct to your Stripe. You handle disputes & refunds.</p>
             </div>
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
-              <div className="text-3xl mb-4">⚡</div>
+              <div className="w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
               <h4 className="text-lg font-bold text-white mb-2">OAuth in Seconds</h4>
               <p className={`${theme.muted} text-sm`}>Connect your Stripe via OAuth. Configure products in dashboard. Test mode → Live with one key swap.</p>
             </div>
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
-              <div className="text-3xl mb-4">🎛️</div>
+              <div className="w-12 h-12 rounded-xl bg-rose-500/20 flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+              </div>
               <h4 className="text-lg font-bold text-white mb-2">You Control Everything</h4>
               <p className={`${theme.muted} text-sm`}>Trial periods, tax collection, pricing changes. All from your dashboard. No code, no deploys.</p>
             </div>
@@ -191,11 +229,16 @@ export default function Landing() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Set Up in 5 Minutes</h2>
             <p className={`${theme.muted} text-lg`}>Clone. Run AI commands. Ship.</p>
           </div>
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
-            <div className={`text-center ${theme.mutedMore}`}>
-              <div className="text-5xl mb-4">▶️</div>
-              <p className="text-lg">[5-Minute Setup Video]</p>
-              <p className="text-sm mt-2">Clone → /setup → /pwa → Deploy</p>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-2xl aspect-video flex items-center justify-center video-placeholder relative overflow-hidden group cursor-pointer hover:border-sky-500/50 transition-colors`}>
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent"></div>
+            <div className={`text-center ${theme.mutedMore} relative z-10`}>
+              <div className="w-20 h-20 rounded-full bg-sky-500/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-sky-500/30 transition-colors">
+                <svg className="w-8 h-8 text-sky-400 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+              <p className="text-lg font-semibold text-white/80">5-Minute Setup Video</p>
+              <p className="text-sm mt-2 text-sky-400/80">Clone → /setup → /pwa → Deploy</p>
             </div>
           </div>
         </div>
@@ -206,48 +249,60 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="grid md:grid-cols-3 gap-6">
             {/* Testimonial 1 - Non-tech user */}
-            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 relative`}>
+              <div className="absolute -top-3 left-6">
+                <span className="text-4xl text-sky-500/30">"</span>
+              </div>
               <div className="flex gap-1 mb-4">
                 {[...Array(5)].map((_, i) => (
-                  <svg key={i} className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg key={i} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
                 ))}
               </div>
-              <p className={`${theme.muted} text-sm mb-4 italic`}>
-                "I'm not a coder. Used the template with Cursor and had my SaaS up in under 15 minutes. Auth, billing, everything."
+              <p className={`${theme.body} text-sm mb-4 leading-relaxed`}>
+                I'm not a coder. Used the template with <span className="text-sky-400 font-medium">Cursor</span> and had my SaaS up in under 15 minutes. Auth, billing, everything.
               </p>
-              <p className="font-medium text-white">— S. Stonecypher</p>
+              <p className="font-semibold text-white">S. Stonecypher</p>
+              <p className={`text-xs ${theme.mutedMore}`}>Southland Wood Company</p>
             </div>
 
             {/* Testimonial 2 - Developer */}
-            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 relative`}>
+              <div className="absolute -top-3 left-6">
+                <span className="text-4xl text-sky-500/30">"</span>
+              </div>
               <div className="flex gap-1 mb-4">
                 {[...Array(5)].map((_, i) => (
-                  <svg key={i} className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg key={i} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
                 ))}
               </div>
-              <p className={`${theme.muted} text-sm mb-4 italic`}>
-                "Used the AI prompt from the docs and had auth + billing on my API in no time. They really mean one key."
+              <p className={`${theme.body} text-sm mb-4 leading-relaxed`}>
+                Used the AI prompt from the docs and had auth + billing on my API in no time. They really mean <span className="text-sky-400 font-medium">one key</span>.
               </p>
-              <p className="font-medium text-white">— J. Boone</p>
+              <p className="font-semibold text-white">J. Boone</p>
+              <p className={`text-xs ${theme.mutedMore}`}>Boone Farms</p>
             </div>
 
             {/* Testimonial 3 - Store owner */}
-            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6 relative`}>
+              <div className="absolute -top-3 left-6">
+                <span className="text-4xl text-sky-500/30">"</span>
+              </div>
               <div className="flex gap-1 mb-4">
                 {[...Array(5)].map((_, i) => (
-                  <svg key={i} className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg key={i} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
                 ))}
               </div>
-              <p className={`${theme.muted} text-sm mb-4 italic`}>
-                "Got my store set up in under 10 minutes. Just used photos from my phone for products. PWA and everything."
+              <p className={`${theme.body} text-sm mb-4 leading-relaxed`}>
+                Got my store set up in under 10 minutes. Just used photos from my phone for products. <span className="text-sky-400 font-medium">PWA and everything</span>.
               </p>
-              <p className="font-medium text-white">— C. Crabb</p>
+              <p className="font-semibold text-white">C. Crabb</p>
+              <p className={`text-xs ${theme.mutedMore}`}>Ocmulgee Retrievers</p>
             </div>
           </div>
         </div>
@@ -405,11 +460,16 @@ export default function Landing() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4">No Code. No Deploys. Just Dashboard.</h2>
             <p className={`${theme.muted} text-lg`}>Change prices, toggle tax, update limits. Your app updates instantly.</p>
           </div>
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl aspect-video flex items-center justify-center`}>
-            <div className={`text-center ${theme.mutedMore}`}>
-              <div className="text-5xl mb-4">▶️</div>
-              <p className="text-lg">[Dashboard Walkthrough Video]</p>
-              <p className="text-sm mt-2">Tiers • Pricing • Tax • Limits • Customers</p>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-2xl aspect-video flex items-center justify-center video-placeholder relative overflow-hidden group cursor-pointer hover:border-sky-500/50 transition-colors`}>
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent"></div>
+            <div className={`text-center ${theme.mutedMore} relative z-10`}>
+              <div className="w-20 h-20 rounded-full bg-sky-500/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-sky-500/30 transition-colors">
+                <svg className="w-8 h-8 text-sky-400 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+              <p className="text-lg font-semibold text-white/80">Dashboard Walkthrough</p>
+              <p className="text-sm mt-2 text-sky-400/80">Tiers • Pricing • Tax • Limits • Customers</p>
             </div>
           </div>
         </div>
@@ -423,12 +483,12 @@ export default function Landing() {
             <p className={`${theme.muted} text-lg`}>Published on npm. Safe for frontend.</p>
           </div>
 
-          <div className={`${theme.codeBg} border ${theme.cardBorder} rounded-xl overflow-hidden`}>
-            <div className={`${theme.cardBgAlt} px-4 py-2 border-b ${theme.cardBorder} flex items-center gap-2`}>
-              <div className="w-3 h-3 rounded-full bg-gray-600"></div>
-              <div className="w-3 h-3 rounded-full bg-gray-600"></div>
-              <div className="w-3 h-3 rounded-full bg-gray-600"></div>
-              <span className={`text-xs ${theme.mutedMore} ml-2`}>terminal</span>
+          <div className={`${theme.codeBg} border ${theme.cardBorder} rounded-xl overflow-hidden code-glow`}>
+            <div className={`${theme.cardBgAlt} px-4 py-3 border-b ${theme.cardBorder} flex items-center gap-2`}>
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span className={`text-xs ${theme.mutedMore} ml-3 font-mono`}>~/my-saas</span>
             </div>
             <pre className="p-6 text-sm overflow-x-auto">
               <code>
@@ -487,7 +547,11 @@ export default function Landing() {
             {/* SaaS Template */}
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
               <div className="flex items-center gap-3 mb-4">
-                <div className="text-2xl">📊</div>
+                <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
                 <h3 className="text-xl font-bold">SaaS</h3>
               </div>
               <p className={`${theme.muted} text-sm mb-4`}>Usage tracking, subscription tiers, automatic limits. Perfect for AI tools, APIs.</p>
@@ -505,7 +569,11 @@ export default function Landing() {
             {/* Store Template */}
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
               <div className="flex items-center gap-3 mb-4">
-                <div className="text-2xl">🛒</div>
+                <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
                 <h3 className="text-xl font-bold">Store</h3>
               </div>
               <p className={`${theme.muted} text-sm mb-4`}>Products, cart, guest checkout. No per-user fees. Perfect for merch, courses.</p>
@@ -523,7 +591,11 @@ export default function Landing() {
             {/* Membership Template */}
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-6`}>
               <div className="flex items-center gap-3 mb-4">
-                <div className="text-2xl">🔐</div>
+                <div className="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
                 <h3 className="text-xl font-bold">Membership</h3>
               </div>
               <p className={`${theme.muted} text-sm mb-4`}>Content gating, paywalls, auto-checkout. Perfect for courses, communities.</p>
@@ -544,14 +616,87 @@ export default function Landing() {
       {/* Tech Stack */}
       <section className="py-16 px-4">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {CONFIG.techHighlights.map((item, i) => (
-              <div key={i}>
-                <div className="text-4xl mb-3">{item.icon}</div>
-                <p className="font-bold text-lg">{item.title}</p>
-                <p className={`text-sm ${theme.muted}`}>{item.subtitle}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {/* Edge Compute */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-sky-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
               </div>
-            ))}
+              <p className="font-bold text-lg">Edge Compute</p>
+              <p className={`text-sm ${theme.muted}`}>&lt;50ms worldwide</p>
+            </div>
+            {/* Serverless */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-violet-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">Serverless</p>
+              <p className={`text-sm ${theme.muted}`}>Auto-scaling</p>
+            </div>
+            {/* No DB to Manage */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">No DB to Manage</p>
+              <p className={`text-sm ${theme.muted}`}>We handle it</p>
+            </div>
+            {/* DDoS Protection */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-rose-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">DDoS Protection</p>
+              <p className={`text-sm ${theme.muted}`}>Built-in</p>
+            </div>
+            {/* Webhook Security */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">Webhook Security</p>
+              <p className={`text-sm ${theme.muted}`}>Signed payloads</p>
+            </div>
+            {/* TypeScript SDK */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-blue-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">TypeScript SDK</p>
+              <p className={`text-sm ${theme.muted}`}>npm install</p>
+            </div>
+            {/* Rate Limiting */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-orange-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">Rate Limiting</p>
+              <p className={`text-sm ${theme.muted}`}>Per-user controls</p>
+            </div>
+            {/* Global CDN */}
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-xl bg-cyan-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="font-bold text-lg">Global CDN</p>
+              <p className={`text-sm ${theme.muted}`}>99.9% uptime</p>
+            </div>
           </div>
         </div>
       </section>
@@ -591,7 +736,7 @@ export default function Landing() {
               </p>
             </div>
 
-            <a href="/sign-up" className={`block w-full py-4 ${primaryBtn} text-center text-lg`}>
+            <a href="/sign-up" className={`block w-full py-4 ${primaryBtn} text-center text-lg btn-glow`}>
               Start Free Trial
             </a>
             <p className={`text-center text-sm ${theme.mutedMore} mt-4`}>
@@ -610,8 +755,8 @@ export default function Landing() {
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Just need a Stripe account.</h2>
           <p className={`${theme.muted} text-lg mb-8`}>We're infrastructure, not a middleman.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="/sign-up" className={`px-8 py-4 ${primaryBtn} text-lg`}>Start Free Trial</a>
-            <a href={CONFIG.links.docs} className={`px-8 py-4 ${secondaryBtn} text-lg`}>View Documentation</a>
+            <a href="/sign-up" className={`px-8 py-4 ${primaryBtn} text-lg btn-glow`}>Start Free Trial</a>
+            <a href={CONFIG.links.docs} className={`px-8 py-4 ${secondaryBtn} text-lg hover:scale-105 transition-transform`}>View Documentation</a>
           </div>
         </div>
       </section>
@@ -623,20 +768,14 @@ export default function Landing() {
           <div className="flex justify-center items-center gap-16 md:gap-24">
             {/* Stripe */}
             <a href="https://stripe.com" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-3 hover:opacity-80 transition">
-              <svg className="h-12" viewBox="0 0 60 25" fill="#635BFF">
-                <path d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.37 4.05-.95v3.32a8.33 8.33 0 0 1-4.56 1.1c-4.01 0-6.83-2.5-6.83-7.48 0-4.19 2.39-7.52 6.3-7.52 3.92 0 5.96 3.28 5.96 7.5 0 .4-.02 1.04-.06 1.48zm-6.3-5.63c-1.03 0-1.93.76-2.13 2.42h4.15c-.02-1.27-.75-2.42-2.02-2.42zM40.95 20.3c-1.44 0-2.32-.6-2.9-1.04l-.02 4.63-4.12.87V5.57h3.76l.08 1.02a4.7 4.7 0 0 1 3.23-1.29c2.9 0 5.62 2.6 5.62 7.4 0 5.23-2.7 7.6-5.65 7.6zM40 9.14c-.95 0-1.54.34-1.97.81l.02 6.12c.4.44.98.78 1.95.78 1.52 0 2.54-1.65 2.54-3.87 0-2.15-1.04-3.84-2.54-3.84zM28.24 5.57h4.13v14.44h-4.13V5.57zm0-5.13L32.37 0v3.77l-4.13.88V.44zm-4.32 9.35v9.79H19.8V5.57h3.7l.12 1.22c1-1.77 3.07-1.41 3.62-1.22v3.79c-.52-.17-2.29-.45-3.32.43zm-8.55 4.72c0 2.43 2.6 1.68 3.12 1.46v3.36c-.55.3-1.54.54-2.89.54-3.15 0-4.3-1.93-4.3-4.75V.44l4.07-.88v5.82h3.09v3.54h-3.1v5.59h.01zm-8.82-1.98c0-4.63-6.27-3.82-6.27-5.77 0-.79.62-1.1 1.63-1.1.98 0 2.23.34 3.51 1.02V3.35c-1.28-.55-2.54-.82-3.94-.82-3.2 0-5.32 1.73-5.32 4.61 0 4.35 6.18 3.63 6.18 5.63 0 .92-.8 1.22-1.87 1.22-1.18 0-2.7-.49-3.94-1.31v4.03c1.24.65 2.57 1 3.97 1 3.28 0 5.55-1.62 5.55-4.6 0-.1-.02-.2-.02-.3l.52.72z"/>
+              <svg className="h-12" viewBox="0 0 468 222.5" fill="#635BFF">
+                <path d="M414 113.4c0-25.6-12.4-45.8-36.1-45.8-23.8 0-38.2 20.2-38.2 45.6 0 30.1 17 45.3 41.4 45.3 11.9 0 20.9-2.7 27.7-6.5v-20c-6.8 3.4-14.6 5.5-24.5 5.5-9.7 0-18.3-3.4-19.4-15.2h48.9c0-1.3.2-6.5.2-8.9zm-49.4-9.5c0-11.3 6.9-16 13.2-16 6.1 0 12.6 4.7 12.6 16h-25.8zM301.1 67.6c-9.8 0-16.1 4.6-19.6 7.8l-1.3-6.2h-22v116.6l25-5.3.1-28.3c3.6 2.6 8.9 6.3 17.7 6.3 17.9 0 34.2-14.4 34.2-46.1-.1-29-16.6-44.8-34.1-44.8zm-6 68.9c-5.9 0-9.4-2.1-11.8-4.7l-.1-37.1c2.6-2.9 6.2-4.9 11.9-4.9 9.1 0 15.4 10.2 15.4 23.3 0 13.4-6.2 23.4-15.4 23.4zM223.8 61.7l25.1-5.4V36l-25.1 5.3zM223.8 69.3h25.1v87.5h-25.1zM196.9 76.7l-1.6-7.4h-21.6v87.5h25V97.5c5.9-7.7 15.9-6.3 19-5.2v-23c-3.2-1.2-14.9-3.4-20.8 7.4zM146.9 47.6l-24.4 5.2-.1 80.1c0 14.8 11.1 25.7 25.9 25.7 8.2 0 14.2-1.5 17.5-3.3V135c-3.2 1.3-19 5.9-19-8.9V90.6h19V69.3h-19l.1-21.7zM79.3 94.7c0-3.9 3.2-5.4 8.5-5.4 7.6 0 17.2 2.3 24.8 6.4V72.2c-8.3-3.3-16.5-4.6-24.8-4.6C67.5 67.6 54 78.2 54 95.9c0 27.6 38 23.2 38 35.1 0 4.6-4 6.1-9.6 6.1-8.3 0-18.9-3.4-27.3-8v23.8c9.3 4 18.7 5.7 27.3 5.7 20.8 0 35.1-10.3 35.1-28.2-.1-29.8-38.2-24.5-38.2-35.7z"/>
               </svg>
               <span className={`text-sm font-medium ${theme.muted}`}>Stripe</span>
             </a>
             {/* Clerk */}
             <a href="https://clerk.com" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-3 hover:opacity-80 transition">
-              <svg className="h-12" viewBox="0 0 77 24" fill="none">
-                <path d="M35.73 5.835h3.148v12.33H35.73V5.835zm7.015 0h-3.04l5.054 6.396-5.23 5.934h3.302l3.718-4.355 3.718 4.355h3.302l-5.23-5.934 5.054-6.396h-3.04l-3.804 4.878-3.804-4.878z" fill="#6C47FF"/>
-                <path d="M62.693 14.148c-.438 1.052-1.45 1.74-2.69 1.74-1.758 0-3.063-1.382-3.063-3.307 0-1.924 1.305-3.306 3.063-3.306 1.24 0 2.252.687 2.69 1.739l2.768-1.306c-.876-1.98-2.878-3.306-5.458-3.306-3.5 0-6.162 2.62-6.162 5.873 0 3.252 2.662 5.872 6.162 5.872 2.58 0 4.582-1.326 5.458-3.306l-2.768-1.693z" fill="#6C47FF"/>
-                <path d="M13.463 18.165V5.835h-3.148v4.692c-.73-.98-1.92-1.555-3.354-1.555C3.607 8.972.945 11.66.945 14.98c0 3.32 2.662 5.94 6.016 5.94 1.434 0 2.624-.575 3.354-1.556v1.201h3.148v-.4zm-6.162-1.135c-1.758 0-3.063-1.313-3.063-3.238 0-1.924 1.305-3.237 3.063-3.237 1.759 0 3.064 1.313 3.064 3.237 0 1.925-1.305 3.238-3.064 3.238z" fill="#6C47FF"/>
-                <path d="M22.63 8.972c-3.5 0-6.162 2.62-6.162 5.872 0 3.253 2.662 5.873 6.162 5.873 2.58 0 4.737-1.395 5.613-3.374l-2.768-1.625c-.438 1.052-1.45 1.672-2.69 1.672-1.32 0-2.4-.756-2.848-1.924h9.037c.077-.413.116-.825.116-1.237 0-3.115-2.546-5.257-6.46-5.257zm-2.925 4.624c.37-1.1 1.373-1.856 2.77-1.856 1.397 0 2.4.756 2.77 1.856h-5.54z" fill="#6C47FF"/>
-                <path d="M76.055 5.835h-3.148v4.692c-.73-.98-1.92-1.555-3.354-1.555-3.354 0-6.016 2.688-6.016 6.008 0 3.32 2.662 5.94 6.016 5.94 1.434 0 2.624-.575 3.354-1.556v1.201h3.148V5.835zm-6.162 11.195c-1.758 0-3.063-1.313-3.063-3.238 0-1.924 1.305-3.237 3.063-3.237 1.759 0 3.064 1.313 3.064 3.237 0 1.925-1.305 3.238-3.064 3.238z" fill="#6C47FF"/>
-              </svg>
+              <span className="text-3xl font-bold text-[#6C47FF]">clerk</span>
               <span className={`text-sm font-medium ${theme.muted}`}>Clerk</span>
             </a>
             {/* Cloudflare */}

@@ -5,6 +5,93 @@
     <link rel="icon" type="image/png" href="/panacea_pup_color_clean.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dream API - Auth + Billing + Usage Tracking</title>
+    <!-- Distinctive fonts: Satoshi for headings, Plus Jakarta Sans for body -->
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,900&f[]=plus-jakarta-sans@400,500,600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --font-display: 'Satoshi', system-ui, sans-serif;
+        --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+      }
+      body {
+        font-family: var(--font-body);
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-family: var(--font-display);
+      }
+      /* Staggered fade-in animations */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 20px rgba(14, 165, 233, 0.4); }
+        50% { box-shadow: 0 0 40px rgba(14, 165, 233, 0.6); }
+      }
+      .animate-fade-in-up {
+        animation: fadeInUp 0.6s ease-out forwards;
+        opacity: 0;
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+        opacity: 0;
+      }
+      .delay-100 { animation-delay: 0.1s; }
+      .delay-200 { animation-delay: 0.2s; }
+      .delay-300 { animation-delay: 0.3s; }
+      .delay-400 { animation-delay: 0.4s; }
+      .delay-500 { animation-delay: 0.5s; }
+      .delay-600 { animation-delay: 0.6s; }
+      /* Button glow effect */
+      .btn-glow {
+        transition: all 0.3s ease;
+      }
+      .btn-glow:hover {
+        box-shadow: 0 0 30px rgba(14, 165, 233, 0.5);
+        transform: translateY(-2px);
+      }
+      /* Card lift effect */
+      .card-lift {
+        transition: all 0.3s ease;
+      }
+      .card-lift:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      }
+      /* Subtle gradient noise texture */
+      .hero-bg {
+        background:
+          radial-gradient(ellipse at 20% 20%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 80%, rgba(14, 165, 233, 0.1) 0%, transparent 50%);
+      }
+      /* Code block glow */
+      .code-glow {
+        box-shadow: 0 0 60px rgba(14, 165, 233, 0.15);
+      }
+      /* Video placeholder shimmer */
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .video-placeholder {
+        background: linear-gradient(90deg,
+          rgba(255,255,255,0) 0%,
+          rgba(255,255,255,0.03) 50%,
+          rgba(255,255,255,0) 100%);
+        background-size: 200% 100%;
+        animation: shimmer 3s infinite;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
