@@ -104,6 +104,12 @@ Key tables:
 | `docs/LIMITATIONS.md` | Known constraints |
 | `CLAUDE.md` | Full technical reference |
 
+## Git Branches
+
+- **Main repo (dream-api)**: `master`
+- **Templates**: `master` (some older may use `main`)
+- **Demos**: Part of main repo, deploy via `wrangler pages deploy`
+
 ## Common Tasks
 
 ### Deploy a worker

@@ -34,8 +34,8 @@ export default function Landing() {
 
   return (
     <div className={`min-h-screen ${theme.pageBg} ${theme.heading}`}>
-      {/* QR Code Card - Fixed position above demo card */}
-      <div className="fixed bottom-44 right-4 z-50 bg-zinc-900 border border-violet-500/50 rounded-lg p-4 shadow-xl max-w-[200px]">
+      {/* QR Code Card - Fixed position above demo card (hidden on mobile) */}
+      <div className="hidden md:block fixed bottom-44 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-[200px]">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-2 h-2 bg-violet-500 rounded-full"></div>
           <span className="text-violet-400 text-xs font-semibold">PWA Ready</span>
@@ -48,8 +48,8 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Demo Card - Fixed position */}
-      <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
+      {/* Demo Card - Fixed position (hidden on mobile) */}
+      <div className="hidden md:block fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
           <span className="text-white text-sm font-medium">Live Demo</span>

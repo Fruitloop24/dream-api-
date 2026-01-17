@@ -370,9 +370,9 @@ function App() {
 
   return (
     <BrowserRouter>
-      {/* QR Code Card - Fixed position above demo card */}
+      {/* QR Code Card - Fixed position above demo card (hidden on mobile) */}
       {CONFIG.demoMode && (
-        <div className="fixed bottom-44 right-4 z-50 bg-zinc-900 border border-amber-500/50 rounded-lg p-4 shadow-xl max-w-[200px]">
+        <div className="hidden md:block fixed bottom-44 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-[200px]">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
             <span className="text-amber-400 text-xs font-semibold">PWA Ready</span>
@@ -386,9 +386,9 @@ function App() {
         </div>
       )}
 
-      {/* Demo Card - Fixed position */}
+      {/* Demo Card - Fixed position (hidden on mobile) */}
       {CONFIG.demoMode && (
-        <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
+        <div className="hidden md:block fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <span className="text-white text-sm font-medium">Live Demo</span>
