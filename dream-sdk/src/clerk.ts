@@ -19,6 +19,7 @@ interface ClerkInstance {
     primaryEmailAddress?: { emailAddress: string };
     emailAddresses?: Array<{ emailAddress: string }>;
     publicMetadata?: Record<string, unknown>;
+    reload?: () => Promise<void>;
   };
   session?: {
     getToken: (options?: { template?: string }) => Promise<string>;
@@ -216,13 +217,19 @@ export class ClerkManager {
   }
 
   /**
-   * Refresh token (call before API requests)
+   * Refresh token and user data from Clerk server
+   * Call after plan changes (checkout success) to get updated metadata
    */
   async refreshToken(): Promise<string | null> {
     const clerk = getClerk();
     if (!clerk?.session) return null;
 
     try {
+      // Reload user data from Clerk server (gets updated publicMetadata after webhook)
+      if (clerk.user?.reload) {
+        await clerk.user.reload();
+      }
+
       this.token = await clerk.session.getToken({ template: JWT_TEMPLATE });
       this.onTokenChange?.(this.token);
       return this.token;

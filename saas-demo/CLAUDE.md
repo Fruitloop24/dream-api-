@@ -125,11 +125,32 @@ The dashboard has a placeholder card marked `YOUR PRODUCT GOES HERE`.
 3. On success, call `await api.usage.track()`
 4. Limits are automatically enforced based on their plan
 
+## CRITICAL: Sign-Up Redirect Pattern
+
+**Sign-up MUST redirect to `/choose-plan`, NOT `/dashboard`.**
+
+```typescript
+// CORRECT - SDK has time to consume the auth ticket
+dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })
+
+// WRONG - Can cause auth issues
+dreamAPI.auth.getSignUpUrl({ redirect: '/dashboard' })
+```
+
+**Why this matters:**
+1. After sign-up, user returns with `__clerk_ticket` in URL
+2. SDK consumes ticket during `auth.init()` on the choose-plan page
+3. User is now signed in and can select their plan
+4. Checkout redirects to Stripe, then to dashboard
+
+**Sign-in can redirect to `/dashboard`** - only sign-up needs `/choose-plan`.
+
 ## What NOT To Modify
 
 1. **`src/hooks/useDreamAPI.tsx`** - Auth is handled, don't touch
 2. **Auth flow** - Don't build custom sign-up/sign-in forms
 3. **Pricing display** - Comes from API, don't hardcode
+4. **Sign-up redirect** - Must go to `/choose-plan` (see above)
 
 ## SDK Reference
 
@@ -149,7 +170,7 @@ await api.billing.createCheckout({ tier: 'pro' })
 await api.billing.openPortal({ returnUrl: '/dashboard' })
 
 // Auth URLs
-dreamAPI.auth.getSignUpUrl({ redirect: '/dashboard' })
+dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })  // MUST be /choose-plan
 dreamAPI.auth.getSignInUrl({ redirect: '/dashboard' })
 dreamAPI.auth.getCustomerPortalUrl()  // Account settings
 

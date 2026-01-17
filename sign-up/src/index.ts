@@ -258,6 +258,12 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
       while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
       await window.Clerk.load();
 
+      // Wait for user to be available (OAuth might need extra time after load)
+      for (let i = 0; i < 30; i++) {
+        if (window.Clerk.user) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
       console.log('[SignUp] Clerk loaded, user:', window.Clerk.user?.id || 'none');
 
       // If user is signed in → they just completed signup, process and redirect

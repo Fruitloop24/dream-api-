@@ -183,13 +183,16 @@ Just run `/pwa` when you're ready!"
 ## Quick Reference
 
 Already wired up (don't rebuild these):
-- `dreamAPI.auth.getSignUpUrl()` - New user signup
-- `dreamAPI.auth.getSignInUrl()` - Returning users
+- `dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })` - New user signup (MUST redirect to /choose-plan!)
+- `dreamAPI.auth.getSignInUrl({ redirect: '/dashboard' })` - Returning users
 - `dreamAPI.auth.getCustomerPortalUrl()` - Account settings (Clerk)
 - `api.billing.openPortal()` - Billing management (Stripe)
 - `api.usage.track()` - Increment usage counter
 - `api.usage.check()` - Get current usage
 - `api.billing.createCheckout({ tier })` - Upgrade flow
+
+**CRITICAL: Sign-up redirect pattern**
+Sign-up MUST redirect to `/choose-plan`, NOT `/dashboard`. The SDK needs to consume the auth ticket on the choose-plan page. Sign-in can go to `/dashboard`.
 
 ---
 

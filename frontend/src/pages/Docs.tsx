@@ -23,19 +23,41 @@ npm install @dream-api/sdk
 import { DreamAPI } from '@dream-api/sdk';
 const api = new DreamAPI({ publishableKey: 'pk_xxx' });
 
-## SaaS Methods (5 core)
-api.auth.init()                                    // Call once on load, client-side only
-api.auth.getSignUpUrl({ redirect: '/dashboard' })  // Returns URL string for new users
-api.auth.getSignInUrl({ redirect: '/dashboard' })  // Returns URL string for returning users
-api.usage.track()                                  // Returns { success, usage: { usageCount, limit, remaining } }
-api.usage.check()                                  // Read usage without incrementing
-api.billing.createCheckout({ tier, successUrl, cancelUrl })  // Returns { url }
-api.billing.openPortal()                           // Returns { url } for billing management
-api.products.listTiers()                           // Returns { tiers } for pricing page
+## CRITICAL: Sign-Up vs Sign-In (READ THIS!)
+// Sign-Up MUST use getSignUpUrl() - routes through our worker to set user metadata
+<a href={api.auth.getSignUpUrl({ redirect: '/dashboard' })}>Sign Up</a>
 
-## Store Methods (2 core)
-api.products.list()                                // Returns { products } with price, imageUrl, soldOut
-api.products.cartCheckout({ items, successUrl, cancelUrl })  // Returns { url }, items = [{ priceId, quantity }]
+// Sign-In can use getSignInUrl() directly
+<a href={api.auth.getSignInUrl({ redirect: '/dashboard' })}>Sign In</a>
+
+// WHY: New users need metadata (publishableKey, plan) set by our worker.
+// If you bypass this, users won't have a plan and API calls fail.
+
+## CRITICAL: After Checkout - Reload Page
+// Stripe webhook takes 1-3s to update user's plan. On success, reload:
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('success') === 'true') {
+    setTimeout(() => { window.location.href = '/dashboard'; }, 2000);
+  }
+}, []);
+
+## SaaS Methods
+api.auth.init()                                    // Call once on load, client-side only
+api.auth.getSignUpUrl({ redirect: '/dashboard' })  // URL for NEW users (sets metadata)
+api.auth.getSignInUrl({ redirect: '/dashboard' })  // URL for RETURNING users
+api.auth.isSignedIn()                              // boolean
+api.auth.getUser()                                 // { id, email, plan } or null
+api.auth.signOut()                                 // Signs out user
+api.usage.track()                                  // { success, usage: { usageCount, limit, remaining } }
+api.usage.check()                                  // Read usage without incrementing
+api.billing.createCheckout({ tier, successUrl, cancelUrl })  // { url }
+api.billing.openPortal()                           // { url } for billing management
+api.products.listTiers()                           // { tiers } for pricing page
+
+## Store Methods
+api.products.list()                                // { products } with price, imageUrl, soldOut
+api.products.cartCheckout({ items, successUrl, cancelUrl })  // { url }, items = [{ priceId, quantity }]
 
 ## Environment Variables
 VITE_DREAM_PUBLISHABLE_KEY=pk_xxx          (Vite/React)
@@ -43,14 +65,29 @@ NEXT_PUBLIC_DREAM_PUBLISHABLE_KEY=pk_xxx   (Next.js)
 
 ## Key Rules
 - Publishable key is safe for frontend (like Stripe)
-- auth.init() is client-side only - call in useEffect/onMounted
-- features is an array, not a string - use .map() not .split()
-- Prices, tiers, products are controlled in Dream API dashboard
-- price is in cents - divide by 100 for display
+- auth.init() is CLIENT-SIDE ONLY - call in useEffect/onMounted
+- For Next.js: use 'use client' directive on auth components
+- features is an ARRAY - use .map() not .split()
+- price is in CENTS - divide by 100 for display: \${(price / 100).toFixed(2)}
+- Dashboard controls everything - prices, limits, features update automatically
 
-## User Object
-const user = api.auth.getUser();  // { id, email, plan, publishableKey } or null
-api.auth.isSignedIn()             // boolean
+## React Pattern
+const [isReady, setIsReady] = useState(false);
+useEffect(() => { api.auth.init().then(() => setIsReady(true)); }, []);
+if (!isReady) return <Loading />;
+
+## Next.js Pattern
+'use client';
+// Same as React, but MUST have 'use client' directive
+
+## Starter Templates (GitHub)
+Clone these for a head start. Each has CLAUDE.md for AI setup:
+- SaaS (React): github.com/Fruitloop24/dream-saas-basic
+- SaaS (Next.js): github.com/Fruitloop24/dream-saas-next
+- Store (React): github.com/Fruitloop24/dream-store-basic
+- Store (Next.js): github.com/Fruitloop24/dream-store-next
+- Membership (React): github.com/Fruitloop24/dream-membership-basic
+- Membership (Next.js): github.com/Fruitloop24/dream-membership-next
 
 Help me build my app using this SDK.`;
 
@@ -175,13 +212,25 @@ export default function Docs() {
           {/* Gotchas - shared (only show for saas/store tabs) */}
           {(activeTab === 'saas' || activeTab === 'store') && (
             <section id="gotchas" className={`mt-16 pt-8 border-t ${theme.divider}`}>
-              <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Quick Tips</h2>
+              <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Critical Tips</h2>
               <div className="space-y-4">
+                <Gotcha theme={theme} title="⚠️ Sign-Up vs Sign-In are DIFFERENT">
+                  Sign-Up MUST use getSignUpUrl() - it sets user metadata through our worker. Sign-In can use getSignInUrl() directly. If you bypass getSignUpUrl(), users won't have a plan.
+                </Gotcha>
+                <Gotcha theme={theme} title="⚠️ After Checkout - Reload the Page">
+                  Stripe webhook takes 1-3s to update the user's plan. On ?success=true, wait 2 seconds then reload the page to get fresh data.
+                </Gotcha>
                 <Gotcha theme={theme} title="auth.init() is client-side only">
-                  Call in useEffect or onMounted. SSR-safe but does nothing server-side.
+                  Call in useEffect or onMounted. For Next.js, use 'use client' directive on any component that uses auth.
+                </Gotcha>
+                <Gotcha theme={theme} title="Features is an array, not a string">
+                  Use tier.features.map() not tier.features.split(). It's already an array from the API.
+                </Gotcha>
+                <Gotcha theme={theme} title="Prices are in cents">
+                  Divide by 100 for display: ${'{(price / 100).toFixed(2)}'}
                 </Gotcha>
                 <Gotcha theme={theme} title="Dashboard controls everything">
-                  Prices, limits, features - change in dashboard, app updates automatically.
+                  Prices, limits, features - change in dashboard, app updates automatically. Don't hardcode.
                 </Gotcha>
               </div>
             </section>
