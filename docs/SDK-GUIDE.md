@@ -42,6 +42,22 @@ JWTs are verified server-side on every request. No sessions to manage.
 
 Always develop with test keys. Promote to live when ready. Just swap the publishable key.
 
+### 5. Clerk Test Mode (Skip Email Verification)
+
+Use these test credentials during development to skip email/SMS verification:
+
+| Type | Value | Notes |
+|------|-------|-------|
+| Test Email | `yourname+clerk_test@gmail.com` | Any email with `+clerk_test` suffix |
+| Verification Code | `424242` | Works for all test emails |
+| Test Phone | `+15555550100` to `+15555550199` | Any number in this range |
+
+**Example:**
+1. Sign up with `dev+clerk_test@example.com`
+2. Enter any password
+3. When asked for verification code, enter `424242`
+4. Done - no real email sent
+
 ---
 
 ## Installation
@@ -620,21 +636,120 @@ useEffect(() => {
 
 ---
 
+## Critical Notes (READ THIS FIRST)
+
+### 1. Sign-Up vs Sign-In - They Are Different!
+
+**Sign-Up** MUST go through `getSignUpUrl()` - this routes through our worker that sets user metadata (publishableKey, plan). Without this, the user won't have a plan and nothing works.
+
+**Sign-In** can use `getSignInUrl()` directly - just goes to Clerk.
+
+```typescript
+// NEW USER - Must use sign-up worker
+<a href={api.auth.getSignUpUrl({ redirect: '/dashboard' })}>Sign Up</a>
+
+// RETURNING USER - Direct to Clerk
+<a href={api.auth.getSignInUrl({ redirect: '/dashboard' })}>Sign In</a>
+```
+
+**Why this matters:** If you send a new user directly to Clerk sign-up (bypassing our worker), they'll create an account but have no `plan` in their JWT. Every API call will fail.
+
+### 2. After Checkout - Plan Doesn't Update Immediately
+
+After Stripe checkout completes:
+1. Stripe sends webhook to our backend
+2. Backend updates Clerk user metadata (plan: 'pro')
+3. User returns to your app with `?success=true`
+
+**The webhook takes 1-3 seconds to process.** Your user's JWT won't have the new plan immediately.
+
+**Solution: Reload the page after checkout success**
+
+```typescript
+// In your dashboard/success handler
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('success') === 'true') {
+    // Show success message
+    setMessage('Upgrade successful!');
+
+    // Wait for webhook, then reload to get fresh data
+    setTimeout(() => {
+      window.location.href = '/dashboard';
+    }, 2000);
+  }
+}, []);
+```
+
+This is the simplest, most reliable approach. The reload re-initializes the SDK with fresh Clerk data.
+
+### 3. Next.js SSR - Client-Side Only
+
+`api.auth.init()` loads Clerk via CDN and must run in the browser. It does nothing on the server.
+
+**Always use 'use client' for auth components:**
+
+```typescript
+'use client';
+
+import { useEffect, useState } from 'react';
+import { DreamAPI } from '@dream-api/sdk';
+
+const api = new DreamAPI({
+  publishableKey: process.env.NEXT_PUBLIC_DREAM_PUBLISHABLE_KEY!
+});
+
+export function AuthProvider({ children }) {
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    api.auth.init().then(() => setIsReady(true));
+  }, []);
+
+  if (!isReady) return <Loading />;
+  return children;
+}
+```
+
+### 4. Features is an Array, Not a String
+
+```typescript
+// WRONG - will crash
+tier.features.split(',').map(f => <li>{f}</li>)
+
+// CORRECT - it's already an array
+tier.features.map(f => <li key={f}>{f}</li>)
+```
+
+### 5. Prices Are in Cents
+
+```typescript
+// WRONG - shows $1999 instead of $19.99
+<span>${tier.price}</span>
+
+// CORRECT
+<span>${(tier.price / 100).toFixed(2)}</span>
+```
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | "User token required" | JWT not set | Call `api.auth.init()` or `api.setUserToken()` |
 | Empty products/tiers | Wrong project type | SaaS has tiers, Store has products |
-| Price shows $0.29 | Dividing by 100 | Prices are already in cents |
+| Price shows $1999 | Not dividing by 100 | Prices are in cents - divide by 100 |
 | `features.split()` fails | Features is array | Don't call split, iterate directly |
 | Checkout returns undefined | Using wrong property | Use `result.url`, not `result.checkoutUrl` |
 | Sign-in doesn't persist | Didn't use sign-up worker | New users must go through `getSignUpUrl()` |
+| Plan doesn't update after checkout | Webhook timing | Reload page after 2s delay on success |
 | `client.signIn: false` | Clerk not fully initialized | Increase wait time in SDK |
 | `Ticket present: NO` | Worker didn't add token | Check /oauth/complete response |
 | `Ticket error: expired` | Token TTL is 5 minutes | User took too long, retry |
 | `Ticket error: already used` | Token is single-use | Don't refresh page with ticket |
 | OAuth redirects to landing | Ticket not consumed | SDK handles this - check `__clerk_ticket` in URL |
+| Next.js hydration errors | SSR mismatch | Use 'use client' directive, init in useEffect |
 
 ---
 

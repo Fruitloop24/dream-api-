@@ -50,6 +50,30 @@
    - If user refreshes before ticket consumed, they must sign in again
    - See `docs/SIGN-UP-FLOW.md` for details
 
+6. **Multi-App Email Conflict**
+   - Users can only be registered to one Dream API app per email
+   - If same email used across multiple apps, Clerk says "email exists"
+   - Real-world impact: Very low (users typically use ONE app)
+   - For demos: Use different emails for each demo app
+
+### Testing with Clerk Test Mode
+
+Use these test credentials to skip email/SMS verification:
+
+| Type | Value | Notes |
+|------|-------|-------|
+| Test Email | `yourname+clerk_test@gmail.com` | Any email with `+clerk_test` suffix |
+| Verification Code | `424242` | Works for all test emails |
+| Test Phone | `+15555550100` to `+15555550199` | Any number in this range |
+
+**Example sign-up flow:**
+1. Enter email: `john+clerk_test@example.com`
+2. Enter password, click Continue
+3. Enter verification code: `424242`
+4. Done - no real email sent
+
+**Demo tip:** When testing multiple Dream API demos, use different test emails for each (e.g., `you+clerk_test_saas@gmail.com`, `you+clerk_test_membership@gmail.com`).
+
 ### Security Considerations
 
 1. **Sign-up redirect parameter** - FIXED
