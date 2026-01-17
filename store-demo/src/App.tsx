@@ -370,6 +370,37 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* QR Code Card - Fixed position above demo card */}
+      {CONFIG.demoMode && (
+        <div className="fixed bottom-44 right-4 z-50 bg-zinc-900 border border-amber-500/50 rounded-lg p-4 shadow-xl max-w-[200px]">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <span className="text-amber-400 text-xs font-semibold">PWA Ready</span>
+          </div>
+          <img src="/qr-install.png" alt="Scan to visit" className="w-full rounded mb-3" />
+          <div className="space-y-1 text-xs">
+            <p className="text-white font-medium">Install on Phone</p>
+            <p className="text-zinc-400">1. Scan → 2. Tap Share</p>
+            <p className="text-zinc-400">3. "Add to Home Screen"</p>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Card - Fixed position */}
+      {CONFIG.demoMode && (
+        <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-4 shadow-xl max-w-xs">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-white text-sm font-medium">Live Demo</span>
+          </div>
+          <p className="text-zinc-400 text-xs mb-2">Test credit card for checkout:</p>
+          <code className="block bg-zinc-800 text-amber-400 px-3 py-2 rounded text-sm font-mono">
+            4242 4242 4242 4242
+          </code>
+          <p className="text-zinc-500 text-xs mt-2">Any future date, any CVC</p>
+        </div>
+      )}
+
       {/* Product Detail Modal - Clean & Elegant */}
       {selectedProduct && (
         <>
