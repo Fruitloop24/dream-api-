@@ -111,6 +111,9 @@ export default function Docs() {
             <a href="/templates" className={`${theme.muted} hover:${theme.heading} transition-colors`}>
               Templates
             </a>
+            <a href="https://github.com/Fruitloop24/plug-saas" target="_blank" rel="noopener noreferrer" className={`${theme.muted} hover:${theme.heading} transition-colors`}>
+              Open Source
+            </a>
             <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={`${theme.muted} hover:${theme.heading} transition-colors`}>
               GitHub
             </a>

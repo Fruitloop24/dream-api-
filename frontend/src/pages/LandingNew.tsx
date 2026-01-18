@@ -57,6 +57,7 @@ export default function Landing() {
               <a href="/docs" className={theme.navTextHover}>Quickstart</a>
               <a href="/why-trust-us" className={theme.navTextHover}>Why Trust Us</a>
               <a href="/templates" className={theme.navTextHover}>Templates</a>
+              <a href="https://github.com/Fruitloop24/plug-saas" target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>Open Source</a>
               <a href="#pricing" className={theme.navTextHover}>Pricing</a>
               <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
             </div>
