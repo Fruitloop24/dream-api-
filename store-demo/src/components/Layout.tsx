@@ -139,7 +139,7 @@ export default function Layout({ children, cartCount, cartTotal, onCartClick }: 
               &copy; {new Date().getFullYear()} {storeName}
             </p>
             <a
-              href="https://dream-api.com"
+              href="https://dream-frontend-dyn.pages.dev/"
               target="_blank"
               rel="noopener noreferrer"
               className={`${theme.muted} text-xs opacity-60 hover:opacity-100 transition-opacity`}

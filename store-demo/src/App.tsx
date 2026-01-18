@@ -171,7 +171,9 @@ function App() {
               <p className="text-amber-800 text-sm">
                 <span className="font-medium">🧪 Live Demo</span> — Try checkout with card <code className="bg-amber-100 px-2 py-0.5 rounded text-xs font-mono">4242 4242 4242 4242</code>
                 <span className="mx-2 text-amber-300">|</span>
-                <a href="https://dream-api.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-600">Powered by Dream API</a>
+                <a href="https://dream-frontend-dyn.pages.dev/" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-600">Powered by Dream API</a>
+                <span className="mx-2 text-amber-300">|</span>
+                <a href="https://github.com/Fruitloop24/plug-saas" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-600">Open Source/DIY</a>
               </p>
             </div>
           )}
