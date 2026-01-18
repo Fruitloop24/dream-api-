@@ -45,7 +45,7 @@ export const CONFIG = {
     subheadline: 'Get unlimited access to 500+ workout videos, personalized meal plans, progress tracking, and a supportive community of fitness enthusiasts.',
     cta: 'Start Your Free Trial',
     ctaSubtext: '5-day free trial. Cancel anytime.',
-    image: '/assets/fitflow-hero.png',
+    image: '/assets/Achieving goals with FitFlow.png',
   },
 
   // -------------------------------------------------------------------------
