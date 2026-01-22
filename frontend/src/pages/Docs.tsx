@@ -89,6 +89,11 @@ Clone these for a head start. Each has CLAUDE.md for AI setup:
 - Membership (React): github.com/Fruitloop24/dream-membership-basic
 - Membership (Next.js): github.com/Fruitloop24/dream-membership-next
 
+## AI Commands Location
+Templates include pre-built slash commands in .claude/commands/ folder:
+- .claude/commands/setup.md - Interactive setup wizard
+- .claude/commands/pwa.md - Add PWA support (React templates only)
+
 Help me build my app using this SDK.`;
 
 export default function Docs() {
@@ -234,6 +239,9 @@ export default function Docs() {
                 </Gotcha>
                 <Gotcha theme={theme} title="Dashboard controls everything">
                   Prices, limits, features - change in dashboard, app updates automatically. Don't hardcode.
+                </Gotcha>
+                <Gotcha theme={theme} title="AI commands are in .claude/commands/">
+                  Templates include /setup and /pwa commands in the .claude/commands/ folder. This is the standard location for AI editor slash commands (Claude Code, Cursor, Windsurf).
                 </Gotcha>
               </div>
             </section>
@@ -565,7 +573,7 @@ function AiContent({ theme, accent }: { theme: any; accent: any }) {
       <section className={`p-6 rounded-lg border-2 border-dashed ${theme.divider}`}>
         <h3 className={`text-lg font-semibold ${theme.heading} mb-2`}>Start Faster with Templates</h3>
         <p className={`${theme.muted} mb-4`}>
-          Templates come with CLAUDE.md files - drop into any AI editor and run /setup.
+          Templates come with AI commands in <code className={accent.text}>.claude/commands/</code> folder. Open in any AI editor and run <code className={accent.text}>/setup</code>.
         </p>
         <a
           href="/templates"

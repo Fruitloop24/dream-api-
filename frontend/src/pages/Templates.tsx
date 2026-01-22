@@ -129,6 +129,9 @@ export default function Templates() {
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold mb-2">AI-Powered Customization</h2>
             <p className={theme.muted}>Works with Claude Code, Cursor, Windsurf, and other AI editors</p>
+            <p className={`${theme.mutedMore} text-sm mt-2`}>
+              Commands live in <code className={accent.text}>.claude/commands/</code> — the standard location for AI editor slash commands
+            </p>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
@@ -262,10 +265,11 @@ export default function Templates() {
                 <span className={theme.mutedMore}># 2. Install dependencies</span>{'\n'}
                 <span className={accent.text}>npm install</span>{'\n\n'}
                 <span className={theme.mutedMore}># 3. Run AI setup (Claude Code, Cursor, Windsurf)</span>{'\n'}
+                <span className={theme.mutedMore}>#    Commands are in .claude/commands/</span>{'\n'}
                 <span className="text-amber-400">/setup</span>{'\n\n'}
                 <span className={theme.mutedMore}># 4. Start dev server</span>{'\n'}
                 <span className={accent.text}>npm run dev</span>{'\n\n'}
-                <span className={theme.mutedMore}># 5. (Optional) Add PWA support</span>{'\n'}
+                <span className={theme.mutedMore}># 5. (Optional) Add PWA support (React templates only)</span>{'\n'}
                 <span className="text-amber-400">/pwa</span>
               </code>
             </pre>
