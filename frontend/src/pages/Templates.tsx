@@ -261,11 +261,12 @@ export default function Templates() {
             <pre className="text-sm">
               <code>
                 <span className={theme.mutedMore}># 1. Clone any template</span>{'\n'}
-                <span className={accent.text}>git clone</span> https://github.com/Fruitloop24/dream-saas-basic{'\n\n'}
+                <span className={accent.text}>git clone</span> https://github.com/Fruitloop24/dream-saas-basic{'\n'}
+                <span className={accent.text}>cd</span> dream-saas-basic{'\n\n'}
                 <span className={theme.mutedMore}># 2. Install dependencies</span>{'\n'}
                 <span className={accent.text}>npm install</span>{'\n\n'}
-                <span className={theme.mutedMore}># 3. Run AI setup (Claude Code, Cursor, Windsurf)</span>{'\n'}
-                <span className={theme.mutedMore}>#    Commands are in .claude/commands/</span>{'\n'}
+                <span className={theme.mutedMore}># 3. Open in AI editor and run setup</span>{'\n'}
+                <span className={theme.mutedMore}>#    (Claude Code, Cursor, Windsurf, etc.)</span>{'\n'}
                 <span className="text-amber-400">/setup</span>{'\n\n'}
                 <span className={theme.mutedMore}># 4. Start dev server</span>{'\n'}
                 <span className={accent.text}>npm run dev</span>{'\n\n'}

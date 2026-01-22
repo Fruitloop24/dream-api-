@@ -81,13 +81,20 @@ if (!isReady) return <Loading />;
 // Same as React, but MUST have 'use client' directive
 
 ## Starter Templates (GitHub)
-Clone these for a head start. Each has CLAUDE.md for AI setup:
+Clone, cd into folder, open in AI editor, run /setup:
 - SaaS (React): github.com/Fruitloop24/dream-saas-basic
 - SaaS (Next.js): github.com/Fruitloop24/dream-saas-next
 - Store (React): github.com/Fruitloop24/dream-store-basic
 - Store (Next.js): github.com/Fruitloop24/dream-store-next
 - Membership (React): github.com/Fruitloop24/dream-membership-basic
 - Membership (Next.js): github.com/Fruitloop24/dream-membership-next
+
+## Quick Start with Templates
+git clone https://github.com/Fruitloop24/dream-saas-basic
+cd dream-saas-basic
+npm install
+# Open folder in AI editor (Claude Code, Cursor, Windsurf)
+# Run: /setup
 
 ## AI Commands Location
 Templates include pre-built slash commands in .claude/commands/ folder:
