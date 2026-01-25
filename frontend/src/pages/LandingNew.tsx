@@ -230,17 +230,16 @@ export default function Landing() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Set Up in 5 Minutes</h2>
             <p className={`${theme.muted} text-lg`}>Clone. Run AI commands. Ship.</p>
           </div>
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-2xl aspect-video flex items-center justify-center video-placeholder relative overflow-hidden group cursor-pointer hover:border-sky-500/50 transition-colors`}>
-            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent"></div>
-            <div className={`text-center ${theme.mutedMore} relative z-10`}>
-              <div className="w-20 h-20 rounded-full bg-sky-500/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-sky-500/30 transition-colors">
-                <svg className="w-8 h-8 text-sky-400 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </div>
-              <p className="text-lg font-semibold text-white/80">5-Minute Setup Video</p>
-              <p className="text-sm mt-2 text-sky-400/80">Clone → /setup → /pwa → Deploy</p>
-            </div>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-2xl overflow-hidden`}>
+            <video
+              className="w-full aspect-video"
+              controls
+              preload="metadata"
+              poster=""
+            >
+              <source src="/clone.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
         </div>
       </section>
@@ -454,25 +453,29 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Video Section - Dashboard Demo */}
+      {/* Video Section - Store Dashboard Demo */}
       <section id="dashboard" className={`py-20 px-4 ${theme.sectionAlt}`}>
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">No Code. No Deploys. Just Dashboard.</h2>
             <p className={`${theme.muted} text-lg`}>Change prices, toggle tax, update limits. Your app updates instantly.</p>
           </div>
-          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-2xl aspect-video flex items-center justify-center video-placeholder relative overflow-hidden group cursor-pointer hover:border-sky-500/50 transition-colors`}>
-            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent"></div>
-            <div className={`text-center ${theme.mutedMore} relative z-10`}>
-              <div className="w-20 h-20 rounded-full bg-sky-500/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-sky-500/30 transition-colors">
-                <svg className="w-8 h-8 text-sky-400 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </div>
-              <p className="text-lg font-semibold text-white/80">Dashboard Walkthrough</p>
-              <p className="text-sm mt-2 text-sky-400/80">Tiers • Pricing • Tax • Limits • Customers</p>
-            </div>
+          <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-2xl overflow-hidden`}>
+            <video
+              className="w-full aspect-video"
+              controls
+              preload="metadata"
+              poster=""
+            >
+              <source src="/store-dash.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
+          <p className={`text-center mt-6 ${theme.muted}`}>
+            <a href="/dashboard.mp4" target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
+              Same with SaaS →
+            </a>
+          </p>
         </div>
       </section>
 
