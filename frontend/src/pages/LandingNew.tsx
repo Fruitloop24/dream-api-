@@ -235,7 +235,7 @@ export default function Landing() {
               className="w-full aspect-video"
               controls
               preload="metadata"
-              poster=""
+              poster="/clone-poster.jpg"
             >
               <source src="/clone.mp4" type="video/mp4" />
               Your browser does not support the video tag.
@@ -465,15 +465,15 @@ export default function Landing() {
               className="w-full aspect-video"
               controls
               preload="metadata"
-              poster=""
+              poster="/store-dash-poster.jpg"
             >
               <source src="/store-dash.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           </div>
           <p className={`text-center mt-6 ${theme.muted}`}>
-            <a href="/dashboard.mp4" target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-              Same with SaaS →
+            <a href="/dashboard.mp4" className={`${accent.text} hover:underline`}>
+              See the SaaS dashboard too →
             </a>
           </p>
         </div>

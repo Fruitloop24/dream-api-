@@ -163,7 +163,7 @@ export const CONFIG = {
   // FOOTER
   // -------------------------------------------------------------------------
   footer: {
-    copyright: '© 2025 dream-api. All rights reserved.',
+    copyright: '© 2026 dream-api. All rights reserved.',
     builtWith: ['Stripe', 'Clerk', 'Cloudflare'],
   },
 };
