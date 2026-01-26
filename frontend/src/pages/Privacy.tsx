@@ -48,7 +48,7 @@ export default function Privacy() {
             </li>
             <li className="flex items-start gap-3">
               <span className={accent.text}>✓</span>
-              <span><strong>No vendor lock-in.</strong> We're open source. Self-host anytime. Take your code and go.</span>
+              <span><strong>Built on open source.</strong> Our foundation (plug-saas) is MIT-licensed. CSV export anytime. Your data stays portable.</span>
             </li>
             <li className="flex items-start gap-3">
               <span className={accent.text}>✓</span>
@@ -102,29 +102,56 @@ export default function Privacy() {
               <li>Webhook event logs</li>
             </ul>
             <p className={theme.muted}>
-              Export format is JSON. We believe your data should be portable. If you decide to leave,
-              you should be able to take everything with you.
+              Export format is CSV. Your data should be portable. If you decide to leave,
+              you take everything with you.
             </p>
           </div>
         </section>
 
-        {/* No Vendor Lock-in */}
+        {/* Immediate Deletion */}
         <section className="mb-12">
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>No Vendor Lock-in</h2>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Immediate Deletion</h2>
           <div className={`${theme.body} space-y-4`}>
             <p>
-              I'm a developer. I know the fear of building on a platform that might disappear,
-              change pricing, or hold your data hostage. That's why Dream API is designed with escape hatches:
+              Want your data gone <em>right now</em>? You have full control:
+            </p>
+            <div className={`${theme.cardBgAlt} border-2 ${accent.border} rounded-lg p-6`}>
+              <h3 className={`text-lg font-bold ${theme.heading} mb-3`}>Delete Project = Instant Wipe</h3>
+              <p className={theme.muted}>
+                Go to your project settings and click "Delete Project." That's it. All end-user data,
+                usage records, configuration - everything associated with that project is
+                <strong className={theme.heading}> permanently and immediately deleted</strong>.
+                No waiting period. No "we'll get to it." Gone.
+              </p>
+              <p className={`${theme.muted} mt-3 text-sm`}>
+                Export your data first if you need it - this action is irreversible.
+              </p>
+            </div>
+            <p className={theme.muted}>
+              We don't keep backups of your data "just in case." We don't sell it. We don't analyze it
+              for trends. When you delete, it's deleted. That's how it should work.
+            </p>
+          </div>
+        </section>
+
+        {/* Your Data, Your Control */}
+        <section className="mb-12">
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Your Data, Your Control</h2>
+          <div className={`${theme.body} space-y-4`}>
+            <p>
+              I'm a developer building for developers. I know the frustration of platforms that hold your data hostage
+              or make it hard to leave. Dream API is designed with you in control:
             </p>
 
             <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-lg p-6 my-6`}>
-              <h3 className={`text-lg font-bold ${accent.text} mb-3`}>Open Source Backend</h3>
+              <h3 className={`text-lg font-bold ${accent.text} mb-3`}>Open Source Foundation</h3>
               <p className={theme.muted}>
-                The entire backend is open source at{' '}
+                Dream API is built on{' '}
                 <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-                  github.com/Fruitloop24/plug-saas
+                  plug-saas
                 </a>
-                . You can self-host the workers on your own Cloudflare account. Same code, your infrastructure.
+                , our MIT-licensed open source project. It's a single-site SaaS backend you can run yourself.
+                Dream API adds multi-tenant architecture, D1 database, dashboard, and more - but the foundation is open.
               </p>
             </div>
 
@@ -217,12 +244,13 @@ export default function Privacy() {
           </div>
         </section>
 
-        {/* Open Source Commitment */}
+        {/* Open Source Foundation */}
         <section className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Open Source Commitment</h2>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Built on Open Source</h2>
           <p className={`${theme.body} mb-4`}>
-            I believe in open source. The backend that powers Dream API is fully available for you to inspect,
-            fork, and self-host. This isn't "open core" with features hidden behind paid tiers - it's the real thing.
+            Dream API is built on plug-saas, our MIT-licensed foundation. It's a single-site SaaS backend
+            you can inspect, learn from, or run yourself. Dream API adds the multi-tenant architecture,
+            dashboard, and store functionality - but the core patterns are open for everyone.
           </p>
           <a
             href={CONFIG.links.plugSaas}
@@ -233,7 +261,7 @@ export default function Privacy() {
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
             </svg>
-            View on GitHub
+            View plug-saas on GitHub
           </a>
         </section>
       </div>

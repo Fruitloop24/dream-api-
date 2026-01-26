@@ -43,12 +43,16 @@ export default function SLA() {
             into a single, simple SDK that handles auth, billing, and usage tracking.
           </p>
           <p className={`${theme.body} mb-4`}>
-            We're a small team. Scrappy. But we're committed to making this the best damn glue in the business.
-            Our entire backend is <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>open source</a>.
-            We're not hiding anything. We're not going anywhere.
+            We're not reinventing the wheel - we're making it spin faster. Our job is to return 200s on four API calls.
+            That's it. The complex stuff (payments, auth, edge compute) is handled by billion-dollar infrastructure
+            we orchestrate on your behalf.
+          </p>
+          <p className={`${theme.body} mb-4`}>
+            We built Dream API on <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>plug-saas</a>,
+            our open source foundation. We're committed to transparency and we're here for the long haul.
           </p>
           <p className={`${theme.muted} text-sm`}>
-            If you have questions, concerns, or just want to chat - reach out directly to{' '}
+            Questions? Reach out directly to{' '}
             <a href={`mailto:${CONFIG.company.email.founder}`} className={`${accent.text} hover:underline`}>{CONFIG.company.email.founder}</a>.
             I read every email.
           </p>
@@ -127,7 +131,7 @@ export default function SLA() {
               <span className={`${accent.text} text-xl`}>2.</span>
               <div>
                 <p className={`font-semibold ${theme.heading}`}>Respond within 24 hours</p>
-                <p className={theme.muted}>Email, Telegram, whatever. If you're stuck, we'll help. We're a small team so we can't promise instant responses, but we won't leave you hanging.</p>
+                <p className={theme.muted}>Email, Telegram, whatever. If you're stuck, we'll help. We won't leave you hanging.</p>
               </div>
             </div>
             <div className={`flex items-start gap-4`}>
@@ -140,8 +144,8 @@ export default function SLA() {
             <div className={`flex items-start gap-4`}>
               <span className={`${accent.text} text-xl`}>4.</span>
               <div>
-                <p className={`font-semibold ${theme.heading}`}>Keep the exit door open</p>
-                <p className={theme.muted}>Full data export. Open source backend. Your Stripe products stay yours. If you outgrow us or want to self-host, go for it. No hard feelings.</p>
+                <p className={`font-semibold ${theme.heading}`}>Your data stays yours</p>
+                <p className={theme.muted}>CSV export anytime. Your Stripe products stay in your Stripe. Delete a project and it's gone immediately - we don't hoard your data.</p>
               </div>
             </div>
           </div>
@@ -158,27 +162,65 @@ export default function SLA() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-red-400">✗</span>
-                <span><strong>Instant support</strong> - We're small. We'll get back to you, but it might take a few hours.</span>
+                <span><strong>Instant support</strong> - We'll get back to you within 24 hours, not 24 seconds.</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-red-400">✗</span>
-                <span><strong>Enterprise SLAs</strong> - If you need 99.999% uptime guarantees with financial penalties, you need a bigger company. We're not there yet.</span>
+                <span><strong>Enterprise SLAs</strong> - If you need 99.999% uptime guarantees with financial penalties, that's not our focus. We're built for indie devs and small teams shipping fast.</span>
               </li>
             </ul>
           </div>
         </section>
 
-        {/* Open Source */}
+        {/* Built for How You Work Today */}
         <section className="mb-12">
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Open Source = Insurance</h2>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Built for How You Work Today</h2>
           <div className={`${theme.body} space-y-4`}>
             <p>
-              The entire Dream API backend is open source. Not "source available" - actually open source.
-              MIT licensed. Fork it. Self-host it. Run it on your own Cloudflare account.
+              I'm a developer building tools for developers. I use AI coding assistants every day -
+              Claude Code, Cursor, Windsurf. Dream API is built for that workflow:
             </p>
+            <ul className={`space-y-2 ${theme.muted}`}>
+              <li className="flex items-start gap-3">
+                <span className={accent.text}>•</span>
+                <span><strong className={theme.heading}>CLAUDE.md in every project</strong> - Context files that tell AI assistants exactly how the codebase works</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className={accent.text}>•</span>
+                <span><strong className={theme.heading}>/setup and /pwa commands</strong> - AI-executable slash commands in templates. Run them, answer questions, ship.</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className={accent.text}>•</span>
+                <span><strong className={theme.heading}>Copy-paste AI prompts in docs</strong> - Tested prompts that actually work with today's AI tools</span>
+              </li>
+            </ul>
             <p className={theme.muted}>
-              This is intentional. If we disappear tomorrow (we won't, but hypothetically), you're not stuck.
-              Clone the repo, deploy to your own account, update your API keys. Done.
+              The goal: prototype fast, test fast, go live, make money. No PhD in auth systems required.
+            </p>
+          </div>
+        </section>
+
+        {/* Open Source Foundation */}
+        <section className="mb-12">
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Built on Open Source</h2>
+          <div className={`${theme.body} space-y-4`}>
+            <p>
+              Dream API is built on <strong className={theme.heading}>plug-saas</strong>, our MIT-licensed open source project.
+              It's the foundation we started from - well documented, battle-tested, and free to use.
+            </p>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4 my-4`}>
+              <p className={`text-sm ${theme.muted} mb-2`}>
+                <strong className={theme.heading}>plug-saas (OSS):</strong> Single-site SaaS backend using KV storage.
+                Great for learning, prototypes, or running your own instance. No dashboard, no stores - just the core auth + billing flow.
+              </p>
+              <p className={`text-sm ${theme.muted}`}>
+                <strong className={theme.heading}>Dream API (this service):</strong> Multi-tenant platform with D1 database,
+                full dashboard, store mode, templates, and support. Built for production at scale.
+              </p>
+            </div>
+            <p className={theme.muted}>
+              Check out plug-saas if you want to learn how it works under the hood or run your own single-site instance.
+              The documentation explains everything, including its limitations and how to upgrade when you're ready.
             </p>
             <div className="flex gap-4 mt-6">
               <a
@@ -190,7 +232,7 @@ export default function SLA() {
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
                 </svg>
-                View Backend Source
+                View plug-saas on GitHub
               </a>
             </div>
           </div>

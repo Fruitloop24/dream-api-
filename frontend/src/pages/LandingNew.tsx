@@ -836,7 +836,7 @@ export default function Landing() {
                 <li><a href="/terms" className={theme.navTextHover}>Terms of Service</a></li>
                 <li>
                   <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>
-                    Self-Host (Open Source)
+                    plug-saas (OSS Foundation)
                   </a>
                 </li>
                 <li><a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a></li>
@@ -848,7 +848,7 @@ export default function Landing() {
           <div className={`pt-8 border-t ${theme.footerBorder} flex flex-col md:flex-row justify-between items-center gap-4`}>
             <p className={`${theme.mutedMore} text-sm`}>{CONFIG.footer.copyright}</p>
             <p className={`${theme.mutedMore} text-xs`}>
-              No vendor lock-in. Export your data anytime. Your Stripe, your customers.
+              CSV export anytime. Your Stripe, your customers, your data.
             </p>
           </div>
         </div>
