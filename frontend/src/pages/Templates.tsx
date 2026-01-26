@@ -94,12 +94,10 @@ export default function Templates() {
               <span className={`text-xl font-bold ${theme.heading}`}>{CONFIG.appName}</span>
             </a>
             <div className={`hidden md:flex items-center gap-6 text-sm ${theme.navText}`}>
-              <a href="/docs" className={theme.navTextHover}>Quickstart</a>
+              <a href="/who-am-i" className={theme.navTextHover}>Who Am I</a>
               <a href="/why-trust-us" className={theme.navTextHover}>Why Trust Us</a>
+              <a href="/docs" className={theme.navTextHover}>Quickstart</a>
               <a href="/templates" className={`${accent.text} font-medium`}>Templates</a>
-              <a href="https://github.com/Fruitloop24/plug-saas" target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>Open Source</a>
-              <a href="/#pricing" className={theme.navTextHover}>Pricing</a>
-              <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
             </div>
             <div className="flex items-center gap-3">
               <a href="/sign-in" className={`text-sm ${theme.navText} ${theme.navTextHover}`}>Sign In</a>

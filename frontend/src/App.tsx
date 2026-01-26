@@ -12,6 +12,7 @@ import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import SLA from './pages/SLA';
 import About from './pages/About';
+import WhoAmI from './pages/WhoAmI';
 import { getTheme } from './config';
 import Dashboard from './pages/DashboardNew';
 import ApiTierConfig from './pages/ApiTierConfig';
@@ -31,6 +32,7 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/sla" element={<SLA />} />
         <Route path="/about" element={<About />} />
+        <Route path="/who-am-i" element={<WhoAmI />} />
         <Route path="/sign-in/*" element={
           <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
             <SignIn routing="path" path="/sign-in" />

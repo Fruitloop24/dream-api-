@@ -31,7 +31,7 @@ export const CONFIG = {
   // LINKS
   // -------------------------------------------------------------------------
   links: {
-    github: 'https://github.com/Fruitloop24',
+    github: 'https://github.com/Fruitloop24/plug-saas',
     docs: '/docs',
     // Live Demos (working auth + payments with test card 4242)
     saasDemo: 'https://clerk-frontend.pages.dev',

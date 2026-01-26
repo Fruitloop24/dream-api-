@@ -20,10 +20,10 @@ export default function ProTips() {
             <span className={`text-xl font-semibold ${theme.heading}`}>{CONFIG.appName}</span>
           </a>
           <nav className="flex items-center gap-6">
-            <a href="/docs" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Quickstart</a>
+            <a href="/who-am-i" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Who Am I</a>
             <a href="/why-trust-us" className={`${accent.text} font-medium`}>Why Trust Us</a>
+            <a href="/docs" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Quickstart</a>
             <a href="/templates" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Templates</a>
-            <a href="https://github.com/Fruitloop24/plug-saas" target="_blank" rel="noopener noreferrer" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Open Source</a>
             <a href="/sign-in" className={`px-4 py-2 rounded ${accent.bg} text-white ${accent.bgHover} transition-colors`}>
               Sign In
             </a>

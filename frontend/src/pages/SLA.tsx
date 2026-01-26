@@ -19,8 +19,9 @@ export default function SLA() {
             <span className={`text-xl font-semibold ${theme.heading}`}>{CONFIG.appName}</span>
           </a>
           <nav className="flex items-center gap-6">
-            <a href="/docs" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Quickstart</a>
+            <a href="/who-am-i" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Who Am I</a>
             <a href="/why-trust-us" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Why Trust Us</a>
+            <a href="/docs" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Quickstart</a>
             <a href="/templates" className={`${theme.muted} hover:${theme.heading} transition-colors`}>Templates</a>
             <a href="/sign-in" className={`px-4 py-2 rounded ${accent.bg} text-white ${accent.bgHover} transition-colors`}>
               Sign In
@@ -101,9 +102,8 @@ export default function SLA() {
             {/* Stripe */}
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-6`}>
               <div className="flex items-center gap-3 mb-4">
-                <svg className="h-8" viewBox="0 0 468 222.5" fill="#635BFF">
-                  <path d="M414 113.4c0-25.6-12.4-45.8-36.1-45.8-23.8 0-38.2 20.2-38.2 45.6 0 30.1 17 45.3 41.4 45.3 11.9 0 20.9-2.7 27.7-6.5v-20c-6.8 3.4-14.6 5.5-24.5 5.5-9.7 0-18.3-3.4-19.4-15.2h48.9c0-1.3.2-6.5.2-8.9zm-49.4-9.5c0-11.3 6.9-16 13.2-16 6.1 0 12.6 4.7 12.6 16h-25.8z"/>
-                </svg>
+                <span className="text-2xl font-bold text-[#635BFF]">stripe</span>
+                <h3 className={`text-lg font-bold ${theme.heading}`}>Stripe</h3>
               </div>
               <p className={`${theme.muted} text-sm mb-3`}>
                 Payments, subscriptions, Connect. Your money flows through Stripe, not us.
