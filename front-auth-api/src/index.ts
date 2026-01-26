@@ -82,6 +82,7 @@ function getCorsHeaders(origin: string, env: Env): Record<string, string> {
     env.FRONTEND_URL,
     'http://localhost:5173',
     'http://localhost:5174',
+    'https://dream.panacea-tech.net',
   ];
   const isHashUrl = /^https:\/\/[a-z0-9]+\.dream-frontend-dyn\.pages\.dev$/.test(origin);
   const isMainPages = origin === 'https://dream-frontend-dyn.pages.dev';
