@@ -221,9 +221,9 @@ export default function WhoAmI() {
                 </a>
               </p>
               <p>
-                <strong className={theme.heading}>Telegram:</strong>{' '}
-                <a href={CONFIG.company.telegram} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
-                  Quick questions welcome
+                <strong className={theme.heading}>LinkedIn:</strong>{' '}
+                <a href={CONFIG.company.linkedin} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>
+                  Connect with me
                 </a>
               </p>
               <p className="text-sm mt-4">

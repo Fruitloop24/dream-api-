@@ -812,7 +812,9 @@ export default function Landing() {
                 <p>
                   <a href={`mailto:${CONFIG.company.email.sales}`} className={theme.navTextHover}>{CONFIG.company.email.sales}</a>
                 </p>
-                <p>Telegram for quick questions</p>
+                <p>
+                  <a href={CONFIG.company.linkedin} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>LinkedIn</a>
+                </p>
               </div>
             </div>
 

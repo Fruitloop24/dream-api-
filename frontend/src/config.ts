@@ -167,8 +167,7 @@ export const CONFIG = {
     product: 'Dream API',
     productDomain: 'dream.panacea-tech.net',
     address: 'PO Box 4811, Eastman, GA 31023',
-    phone: '', // TODO: Add business number
-    telegram: 'https://t.me/panaceatech', // TODO: Update with actual Telegram
+    linkedin: 'https://www.linkedin.com/in/k-c-sheffield',
     email: {
       sales: 'sales@panacea-tech.net',
       support: 'support@panacea-tech.net',

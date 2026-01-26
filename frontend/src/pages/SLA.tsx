@@ -131,7 +131,7 @@ export default function SLA() {
               <span className={`${accent.text} text-xl`}>2.</span>
               <div>
                 <p className={`font-semibold ${theme.heading}`}>Respond within 24 hours</p>
-                <p className={theme.muted}>Email, Telegram, whatever. If you're stuck, we'll help. We won't leave you hanging.</p>
+                <p className={theme.muted}>Email us anytime. If you're stuck, we'll help. We won't leave you hanging.</p>
               </div>
             </div>
             <div className={`flex items-start gap-4`}>
@@ -247,11 +247,16 @@ export default function SLA() {
           </p>
           <div className={`space-y-2 ${theme.muted}`}>
             <p>
-              <strong>Email:</strong>{' '}
+              <strong>Support:</strong>{' '}
+              <a href={`mailto:${CONFIG.company.email.support}`} className={`${accent.text} hover:underline`}>{CONFIG.company.email.support}</a>
+            </p>
+            <p>
+              <strong>Founder:</strong>{' '}
               <a href={`mailto:${CONFIG.company.email.founder}`} className={`${accent.text} hover:underline`}>{CONFIG.company.email.founder}</a>
             </p>
             <p>
-              <strong>Telegram:</strong> Best for quick questions
+              <strong>LinkedIn:</strong>{' '}
+              <a href={CONFIG.company.linkedin} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>Connect with KC</a>
             </p>
             <p className="text-sm mt-4">
               {CONFIG.company.name} · {CONFIG.company.address}
