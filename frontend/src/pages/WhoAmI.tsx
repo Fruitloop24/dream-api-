@@ -34,9 +34,9 @@ export default function WhoAmI() {
         {/* Hero Section with Photo */}
         <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-8 mb-12`}>
           <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
-            {/* Photo Placeholder - Replace with actual photo */}
+            {/* Photo Placeholder */}
             <div className={`w-48 h-48 rounded-xl ${theme.cardBg} flex items-center justify-center flex-shrink-0 overflow-hidden`}>
-              {/* TODO: Replace with actual photo of KC and Blue */}
+              {/* TODO: Replace with actual photo */}
               <div className="text-center">
                 <span className={`text-6xl`}>👨‍💻</span>
                 <p className={`text-xs ${theme.mutedMore} mt-2`}>Photo coming soon</p>
@@ -46,43 +46,47 @@ export default function WhoAmI() {
               <h1 className={`text-3xl font-bold ${theme.heading} mb-2`}>Hey, I'm KC</h1>
               <p className={`${accent.text} mb-4`}>Founder, Panacea Tech</p>
               <p className={`${theme.body} text-lg`}>
-                I'm a developer from Georgia who got tired of the same problem every indie dev faces:
-                spending $25-75/month on infrastructure before you can even test an idea.
+                I built Dream API to make it easy to deploy auth, billing, and usage tracking.
+                One SDK, one dashboard, and you're live. No infrastructure headaches.
               </p>
             </div>
           </div>
         </div>
 
-        {/* The Journey */}
+        {/* About Me */}
         <section className="mb-12">
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>The Long Road Here</h2>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>About Me</h2>
           <div className={`${theme.body} space-y-4`}>
             <p>
-              I've worn a lot of hats. Started as a <strong className={theme.heading}>timber man</strong> -
-              real work, good money, hard on the body. Then I opened a <strong className={theme.heading}>car lot</strong>,
-              learned sales, learned people. Sold the land and went into <strong className={theme.heading}>teaching</strong>.
+              I spent <strong className={theme.heading}>15 years in education and education administration</strong>,
+              earning a <strong className={theme.heading}>Master's degree in Education</strong> along the way.
+              I loved the work, but I always had a passion for technology and building things.
             </p>
             <p>
-              Worked my way up to <strong className={theme.heading}>education administration</strong>.
-              Thought that was the path. Then life happened - family emergency meant I needed to move
-              closer to home. Plans change.
+              To chase that dream, I completed <strong className={theme.heading}>five CompTIA certifications</strong> and
+              founded <strong className={theme.heading}>Panacea Tech, LLC</strong>. Dream API is our first
+              software product - built to solve a problem I kept running into myself.
             </p>
+          </div>
+        </section>
+
+        {/* Why I Built Dream API */}
+        <section className="mb-12">
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Why I Built Dream API</h2>
+          <div className={`${theme.body} space-y-4`}>
             <p>
-              That's when I started <strong className={theme.heading}>Panacea Tech</strong>. Finally had the
-              time to build things I'd been thinking about for years. Started working on my own SaaS ideas,
-              and immediately hit the wall every indie dev knows:
+              When I started building my own software ideas, I hit the same wall every indie dev knows:
             </p>
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-6 my-6`}>
               <p className={`${theme.muted} italic`}>
-                "Before I could even test if anyone wanted my product, I needed to set up auth, billing,
-                usage tracking, a database, webhooks... $50-75/month in infrastructure costs just to
-                prototype. That's backwards."
+                "Before I could test if anyone wanted my product, I needed auth, billing,
+                usage tracking, a database, webhooks... $50-75/month in infrastructure costs
+                just to prototype. That's backwards."
               </p>
             </div>
             <p>
               So I built <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={`${accent.text} hover:underline`}>plug-saas</a> -
               an open source template to solve it for myself. KV storage, simple auth + billing, one Cloudflare account.
-              Free tier friendly.
             </p>
             <p>
               Then I thought: what if I made this even easier? What if you didn't need to deploy anything?
@@ -91,118 +95,125 @@ export default function WhoAmI() {
           </div>
         </section>
 
-        {/* What Dream API Solves */}
+        {/* What Dream API Gives You */}
         <section className="mb-12">
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>What Dream API Actually Solves</h2>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>What Dream API Gives You</h2>
           <div className={`${theme.body} space-y-4`}>
             <p>
-              If you've ever tried to add auth and billing to a project, you know the pain:
+              Everything you need to ship, all in one place:
             </p>
             <div className="grid md:grid-cols-2 gap-4 my-6">
               <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4`}>
-                <p className={`font-semibold ${theme.heading} mb-2`}>Auth Headaches</p>
-                <ul className={`text-sm ${theme.muted} space-y-1`}>
-                  <li>• JWT verification on every request</li>
-                  <li>• Session management</li>
-                  <li>• Token refresh logic</li>
-                  <li>• Security audits</li>
-                </ul>
+                <p className={`font-semibold ${theme.heading} mb-2`}>Unlimited Projects</p>
+                <p className={`text-sm ${theme.muted}`}>
+                  Create as many projects as you need. SaaS apps, stores, membership sites - no limits.
+                </p>
               </div>
               <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4`}>
-                <p className={`font-semibold ${theme.heading} mb-2`}>Billing Nightmares</p>
-                <ul className={`text-sm ${theme.muted} space-y-1`}>
-                  <li>• Webhook signature verification</li>
-                  <li>• Idempotency handling</li>
-                  <li>• Subscription state sync</li>
-                  <li>• Usage metering & limits</li>
-                </ul>
+                <p className={`font-semibold ${theme.heading} mb-2`}>Test → Live Promotion</p>
+                <p className={`text-sm ${theme.muted}`}>
+                  Build in test mode with test Stripe keys. One click to go live when you're ready.
+                </p>
+              </div>
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4`}>
+                <p className={`font-semibold ${theme.heading} mb-2`}>One Dashboard</p>
+                <p className={`text-sm ${theme.muted}`}>
+                  All your metrics in one place. Users, revenue, usage, subscriptions - see everything.
+                </p>
+              </div>
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4`}>
+                <p className={`font-semibold ${theme.heading} mb-2`}>Your Stripe, Your Money</p>
+                <p className={`text-sm ${theme.muted}`}>
+                  Payments go directly to your Stripe account. We never touch your revenue.
+                </p>
+              </div>
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4`}>
+                <p className={`font-semibold ${theme.heading} mb-2`}>Free Templates</p>
+                <p className={`text-sm ${theme.muted}`}>
+                  SaaS, Store, and Membership templates. Clone, customize, deploy.
+                </p>
+              </div>
+              <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-4`}>
+                <p className={`font-semibold ${theme.heading} mb-2`}>No Code Changes to Scale</p>
+                <p className={`text-sm ${theme.muted}`}>
+                  Add tiers, change prices, update limits - all from the dashboard. No redeploy.
+                </p>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* The Mission */}
+        <section className={`${theme.cardBgAlt} border-2 ${accent.border} rounded-xl p-8 mb-12`}>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>The Mission</h2>
+          <div className={`${theme.body} space-y-4`}>
+            <p className="text-lg">
+              <strong className={accent.text}>Make great ideas easy to ship.</strong>
+            </p>
             <p>
-              Dream API handles all of this. Your job is to return 200s on four API calls.
-              The billion-dollar infrastructure (Stripe, Clerk, Cloudflare) does the heavy lifting.
-              We just orchestrate it with one SDK and one publishable key.
+              You focus on building something people want. We handle the boring infrastructure -
+              auth, billing, usage tracking, webhooks, subscription management. The stuff that takes
+              weeks to build right and seconds to get wrong.
+            </p>
+            <p>
+              Dream API is my bet that there's a better way to help indie devs and small teams ship faster.
+              Lower the barrier. Remove the infrastructure tax. Let people test their ideas without
+              spending months on plumbing.
             </p>
           </div>
         </section>
 
-        {/* Why Cloudflare */}
+        {/* Built for AI Development */}
         <section className="mb-12">
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Why We Built on Cloudflare</h2>
+          <h2 className={`text-2xl font-bold ${theme.heading} mb-6`}>Built for AI-Native Development</h2>
           <div className={`${theme.body} space-y-4`}>
             <p>
-              I looked at AWS, Vercel, Railway - all good platforms. But Cloudflare Workers hit different
-              for this use case:
+              We build with AI tools (Claude Code, Cursor, Windsurf) and we built Dream API to work the same way:
             </p>
-            <div className={`${theme.cardBgAlt} border-2 ${accent.border} rounded-xl p-6 my-6`}>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className={`font-semibold ${theme.heading}`}>Zero Cold Starts</p>
-                    <p className={`text-sm ${theme.muted}`}>Workers are always warm. No 500ms Lambda spinups.</p>
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${theme.heading}`}>True Edge Computing</p>
-                    <p className={`text-sm ${theme.muted}`}>&lt;50ms latency worldwide. Your API is fast everywhere.</p>
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${theme.heading}`}>No SSH, Low Attack Surface</p>
-                    <p className={`text-sm ${theme.muted}`}>Serverless = no servers to compromise. Smaller target.</p>
-                  </div>
+            <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-lg p-6 my-6`}>
+              <div className="space-y-4">
+                <div>
+                  <p className={`font-semibold ${theme.heading}`}>CLAUDE.md in Every Repo</p>
+                  <p className={`text-sm ${theme.muted}`}>
+                    Complete context for AI assistants. Architecture, patterns, conventions - everything
+                    an AI needs to help you ship faster.
+                  </p>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className={`font-semibold ${theme.heading}`}>DDoS Protection Built-In</p>
-                    <p className={`text-sm ${theme.muted}`}>Enterprise-grade protection. One toggle in the dashboard.</p>
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${theme.heading}`}>IP Blocking at Infrastructure</p>
-                    <p className={`text-sm ${theme.muted}`}>Block bad actors at the edge, before they hit your code.</p>
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${theme.heading}`}>Everything Signed & Verified</p>
-                    <p className={`text-sm ${theme.muted}`}>Webhook signatures, JWT verification, secrets management.</p>
-                  </div>
+                <div>
+                  <p className={`font-semibold ${theme.heading}`}>/setup Command</p>
+                  <p className={`text-sm ${theme.muted}`}>
+                    Tell the AI to run /setup and describe your app. It reads the CLAUDE.md, understands
+                    the config system, and customizes everything for you.
+                  </p>
+                </div>
+                <div>
+                  <p className={`font-semibold ${theme.heading}`}>AI-Friendly Architecture</p>
+                  <p className={`text-sm ${theme.muted}`}>
+                    Single config files, clear patterns, well-documented code. Built so AI can help you
+                    customize without breaking things.
+                  </p>
                 </div>
               </div>
             </div>
             <p>
-              We also follow <strong className={theme.heading}>Stripe's proven key model</strong>:
-              publishable keys for frontend (safe to expose), secret keys for backend (never expose).
-              If it's good enough for Stripe, it's good enough for us.
-            </p>
-          </div>
-        </section>
-
-        {/* This Matters To Me */}
-        <section className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8 mb-12`}>
-          <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>This Project Means a Lot to Me</h2>
-          <div className={`${theme.body} space-y-4`}>
-            <p>
-              I'm not a VC-backed startup trying to hit growth metrics. I'm a developer who built
-              something I needed, and I think other developers need it too.
-            </p>
-            <p>
-              Dream API is my bet that there's a better way to help indie devs ship. Lower the barrier.
-              Remove the infrastructure tax. Let people test their ideas without spending $50/month
-              before they have a single customer.
-            </p>
-            <p className={`${accent.text} font-medium`}>
-              I would genuinely love your feedback - good, bad, or brutal. Tell me what's broken.
-              Tell me what's missing. Tell me if this is useful or if I'm solving the wrong problem.
+              This is how software gets built now. We're not fighting it - we're embracing it.
             </p>
           </div>
         </section>
 
         {/* Contact */}
-        <section className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-8`}>
+        <section className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl p-8`}>
           <h2 className={`text-2xl font-bold ${theme.heading} mb-4`}>Let's Talk</h2>
           <div className={`${theme.body} space-y-4`}>
             <p>
               I read every email. I respond to every message. If you have questions, feedback,
               or just want to chat about what you're building - reach out.
             </p>
-            <div className={`space-y-2 ${theme.muted}`}>
+            <p className={`${accent.text} font-medium`}>
+              I genuinely want your feedback - good, bad, or brutal. Tell me what's broken.
+              Tell me what's missing. Tell me if this is useful.
+            </p>
+            <div className={`space-y-2 ${theme.muted} mt-6`}>
               <p>
                 <strong className={theme.heading}>Email:</strong>{' '}
                 <a href={`mailto:${CONFIG.company.email.founder}`} className={`${accent.text} hover:underline`}>
