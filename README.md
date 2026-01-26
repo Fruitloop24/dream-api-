@@ -2,6 +2,10 @@
 
 **API-as-a-Service for SaaS and E-commerce.** Auth, billing, usage tracking via API keys.
 
+> **Live at:** [dream.panacea-tech.net](https://dream.panacea-tech.net) (coming soon)
+> **By:** Panacea Tech, LLC · PO Box 4811, Eastman, GA 31023
+> **Contact:** kc@panacea-tech.net
+
 ## What It Is
 
 Dream API is the backend. You build your frontend, we handle:
@@ -196,15 +200,18 @@ dream-api/
 
 ## Current State
 
-**Working:**
+**Production Ready:**
 - SaaS flow: signup → usage → limits → checkout → subscription
 - Store flow: products → cart → checkout → inventory updates
 - Membership flow: signup → auto-checkout → content gating
 - Dashboard: projects, tiers, products, customers, metrics
 - Templates: SaaS, Store, and Membership (React + Next.js) with `/setup` commands; React/Vite templates also include `/pwa`.
-- SDK: Published on npm, handles auth/refresh automatically
+- SDK: Published on npm (`@dream-api/sdk`), handles auth/refresh automatically
 - Sign-up worker: Clerk hosted signup → metadata → D1 sync → cross-domain ticket
 - Subscription enforcement: API blocked when dev subscription expires (7-day grace)
+- Landing page with demo videos, live demos, pricing
+- Legal pages: Privacy, Terms, SLA
+- Open source backend: [plug-saas](https://github.com/Fruitloop24/plug-saas)
 
 **Planned:**
 - Vue/Nuxt variants of templates

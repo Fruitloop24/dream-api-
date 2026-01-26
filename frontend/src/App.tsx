@@ -8,6 +8,10 @@ import Landing from './pages/LandingNew';
 import Templates from './pages/Templates';
 import Docs from './pages/Docs';
 import ProTips from './pages/ProTips';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import SLA from './pages/SLA';
+import About from './pages/About';
 import { getTheme } from './config';
 import Dashboard from './pages/DashboardNew';
 import ApiTierConfig from './pages/ApiTierConfig';
@@ -23,6 +27,10 @@ function App() {
         <Route path="/templates" element={<Templates />} />
         <Route path="/docs" element={<Docs />} />
         <Route path="/why-trust-us" element={<ProTips />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/sla" element={<SLA />} />
+        <Route path="/about" element={<About />} />
         <Route path="/sign-in/*" element={
           <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
             <SignIn routing="path" path="/sign-in" />

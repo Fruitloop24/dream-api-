@@ -4,6 +4,27 @@ API-as-a-Service Platform. Developers get API keys, we handle auth/billing/usage
 
 **Business Model:** API is the product. Templates are free onboarding tools.
 
+## TODO - Pre-Launch
+
+- [ ] Add business phone or Telegram link to `frontend/src/config.ts`
+- [ ] Fill in About page story (`frontend/src/pages/About.tsx`)
+- [ ] Switch Clerk to production keys (seeing dev mode warning)
+- [ ] Set up custom domain: `dream.panacea-tech.net`
+- [ ] Push all changes and verify deploy
+- [ ] Product Hunt launch prep
+
+## Recently Completed
+
+- [x] Video compression (21MB → 5MB, 12MB → 2.7MB)
+- [x] Poster images for instant video preview
+- [x] Privacy policy page (`/privacy`)
+- [x] Terms of service page (`/terms`)
+- [x] SLA page (`/sla`) - honest "we're glue" messaging
+- [x] About page placeholder (`/about`)
+- [x] Footer with company info, legal links, OSS links
+- [x] Template SDK versions updated to `latest`
+- [x] Favicon fixed (2MB → 2.7KB)
+
 ## Pricing
 
 | Plan | Price | Includes |

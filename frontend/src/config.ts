@@ -160,10 +160,23 @@ export const CONFIG = {
   ],
 
   // -------------------------------------------------------------------------
-  // FOOTER
+  // FOOTER / COMPANY INFO
   // -------------------------------------------------------------------------
+  company: {
+    name: 'Panacea Tech, LLC',
+    product: 'Dream API',
+    productDomain: 'dream.panacea-tech.net',
+    address: 'PO Box 4811, Eastman, GA 31023',
+    phone: '', // TODO: Add business number
+    telegram: 'https://t.me/panaceatech', // TODO: Update with actual Telegram
+    email: {
+      sales: 'sales@panacea-tech.net',
+      support: 'support@panacea-tech.net',
+      founder: 'kc@panacea-tech.net',
+    },
+  },
   footer: {
-    copyright: '© 2026 dream-api. All rights reserved.',
+    copyright: '© 2026 Panacea Tech, LLC. All rights reserved.',
     builtWith: ['Stripe', 'Clerk', 'Cloudflare'],
   },
 };

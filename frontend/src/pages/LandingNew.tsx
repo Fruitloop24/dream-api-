@@ -795,16 +795,61 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className={`py-8 px-4 border-t ${theme.footerBorder} ${theme.footerBg}`}>
-        <div className="max-w-4xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className={`${theme.mutedMore} text-sm`}>{CONFIG.footer.copyright}</p>
-            <div className={`flex gap-6 text-sm ${theme.mutedMore}`}>
-              <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
-              <a href={CONFIG.links.docs} className={theme.navTextHover}>Documentation</a>
-              <a href="#" className={theme.navTextHover}>Terms</a>
-              <a href="#" className={theme.navTextHover}>Privacy</a>
+      <footer className={`py-12 px-4 border-t ${theme.footerBorder} ${theme.footerBg}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+            {/* Company Info */}
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-2 mb-4">
+                {CONFIG.logo && <img src={CONFIG.logo} alt={CONFIG.appName} className="h-8 w-auto rounded-lg" />}
+                <span className={`text-lg font-bold ${theme.heading}`}>{CONFIG.appName}</span>
+              </div>
+              <p className={`${theme.muted} text-sm mb-4`}>
+                A product of {CONFIG.company.name}
+              </p>
+              <div className={`${theme.mutedMore} text-sm space-y-1`}>
+                <p>{CONFIG.company.address}</p>
+                <p>
+                  <a href={`mailto:${CONFIG.company.email.sales}`} className={theme.navTextHover}>{CONFIG.company.email.sales}</a>
+                </p>
+                <p>Telegram for quick questions</p>
+              </div>
             </div>
+
+            {/* Product Links */}
+            <div>
+              <h4 className={`font-semibold ${theme.heading} mb-4`}>Product</h4>
+              <ul className={`space-y-2 text-sm ${theme.mutedMore}`}>
+                <li><a href={CONFIG.links.docs} className={theme.navTextHover}>Documentation</a></li>
+                <li><a href="/templates" className={theme.navTextHover}>Templates</a></li>
+                <li><a href="#pricing" className={theme.navTextHover}>Pricing</a></li>
+                <li><a href="/sla" className={theme.navTextHover}>Service Level</a></li>
+                <li><a href="/about" className={theme.navTextHover}>About</a></li>
+              </ul>
+            </div>
+
+            {/* Legal + Open Source */}
+            <div>
+              <h4 className={`font-semibold ${theme.heading} mb-4`}>Legal & Open Source</h4>
+              <ul className={`space-y-2 text-sm ${theme.mutedMore}`}>
+                <li><a href="/privacy" className={theme.navTextHover}>Privacy Policy</a></li>
+                <li><a href="/terms" className={theme.navTextHover}>Terms of Service</a></li>
+                <li>
+                  <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>
+                    Self-Host (Open Source)
+                  </a>
+                </li>
+                <li><a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a></li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className={`pt-8 border-t ${theme.footerBorder} flex flex-col md:flex-row justify-between items-center gap-4`}>
+            <p className={`${theme.mutedMore} text-sm`}>{CONFIG.footer.copyright}</p>
+            <p className={`${theme.mutedMore} text-xs`}>
+              No vendor lock-in. Export your data anytime. Your Stripe, your customers.
+            </p>
           </div>
         </div>
       </footer>
