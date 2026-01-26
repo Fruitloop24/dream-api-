@@ -34,13 +34,13 @@ export default function WhoAmI() {
         {/* Hero Section with Photo */}
         <div className={`${theme.cardBgAlt} border ${theme.cardBorder} rounded-xl p-8 mb-12`}>
           <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
-            {/* Photo Placeholder */}
-            <div className={`w-48 h-48 rounded-xl ${theme.cardBg} flex items-center justify-center flex-shrink-0 overflow-hidden`}>
-              {/* TODO: Replace with actual photo */}
-              <div className="text-center">
-                <span className={`text-6xl`}>👨‍💻</span>
-                <p className={`text-xs ${theme.mutedMore} mt-2`}>Photo coming soon</p>
-              </div>
+            {/* Profile Photo */}
+            <div className={`w-48 h-64 rounded-xl ${theme.cardBg} flex-shrink-0 overflow-hidden`}>
+              <img
+                src="/kc-profile.jpg"
+                alt="KC - Founder of Panacea Tech"
+                className="w-full h-full object-cover object-top"
+              />
             </div>
             <div>
               <h1 className={`text-3xl font-bold ${theme.heading} mb-2`}>Hey, I'm KC</h1>
