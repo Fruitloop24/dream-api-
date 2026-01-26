@@ -9,7 +9,7 @@ import { DreamAPIConfig, DreamAPIError, DreamAPIException } from './types';
 
 const DEFAULT_BASE_URL = 'https://api-multi.k-c-sheffield012376.workers.dev';
 const DEFAULT_SIGNUP_URL = 'https://sign-up.k-c-sheffield012376.workers.dev';
-const DEFAULT_CLERK_URL = 'https://composed-blowfish-76.accounts.dev';
+const DEFAULT_CLERK_URL = 'https://users.panacea-tech.net';
 
 export class DreamClient {
   private secretKey: string | undefined;
