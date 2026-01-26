@@ -53,7 +53,8 @@ export function getCorsHeaders(request?: Request, env?: { ALLOWED_ORIGINS?: stri
   const isAllowedOrigin =
     allowedOrigins.includes(origin) ||
     /^https:\/\/[a-z0-9-]+\.dream-frontend-dyn\.pages\.dev$/.test(origin) ||
-    origin === 'https://dream-frontend-dyn.pages.dev';
+    origin === 'https://dream-frontend-dyn.pages.dev' ||
+    origin === 'https://dream.panacea-tech.net';
 
   // Echo back allowed origin, or use first default as safe fallback
   const finalOrigin = isAllowedOrigin ? origin : allowedOrigins[0];
