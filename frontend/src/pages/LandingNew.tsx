@@ -60,7 +60,6 @@ export default function Landing() {
               <a href="/templates" className={theme.navTextHover}>Templates</a>
               <a href={CONFIG.links.plugSaas} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>Open Source</a>
               <a href="#pricing" className={theme.navTextHover}>Pricing</a>
-              <a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a>
             </div>
             <div className="flex items-center gap-3">
               <a href="/sign-in" className={`text-sm ${theme.navText} ${theme.navTextHover}`}>Sign In</a>
@@ -840,7 +839,6 @@ export default function Landing() {
                     plug-saas (OSS Foundation)
                   </a>
                 </li>
-                <li><a href={CONFIG.links.github} target="_blank" rel="noopener noreferrer" className={theme.navTextHover}>GitHub</a></li>
               </ul>
             </div>
           </div>
