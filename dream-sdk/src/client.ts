@@ -3,13 +3,31 @@
  *
  * Handles all HTTP communication with the Dream API.
  * Automatically injects authentication headers.
+ *
+ * Auto-detects localhost vs production for sign-up URLs.
  */
 
 import { DreamAPIConfig, DreamAPIError, DreamAPIException } from './types';
 
 const DEFAULT_BASE_URL = 'https://api-multi.k-c-sheffield012376.workers.dev';
-const DEFAULT_SIGNUP_URL = 'https://sign-up.k-c-sheffield012376.workers.dev';
-const DEFAULT_CLERK_URL = 'https://users.panacea-tech.net';
+
+// Sign-up URLs: workers.dev for localhost (test), custom domain for production (live)
+const SIGNUP_URL_DEV = 'https://sign-up.k-c-sheffield012376.workers.dev';
+const SIGNUP_URL_LIVE = 'https://signup.users.panacea-tech.net';
+
+// Clerk URLs: dev instance for localhost, live for production
+const CLERK_URL_DEV = 'https://composed-blowfish-76.clerk.accounts.dev';
+const CLERK_URL_LIVE = 'https://users.panacea-tech.net';
+
+// Detect if running on localhost
+function isLocalhost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+const DEFAULT_SIGNUP_URL = isLocalhost() ? SIGNUP_URL_DEV : SIGNUP_URL_LIVE;
+const DEFAULT_CLERK_URL = isLocalhost() ? CLERK_URL_DEV : CLERK_URL_LIVE;
 
 export class DreamClient {
   private secretKey: string | undefined;

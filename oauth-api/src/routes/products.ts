@@ -68,13 +68,32 @@ async function hashSecretKey(secretKey: string): Promise<string> {
 }
 
 /**
+ * Helper: Get the appropriate Stripe secret key based on mode
+ *
+ * Uses PLATFORM keys (not OAuth access token) so we control test/live mode.
+ * The Stripe-Account header identifies which connected account to act on.
+ */
+function getStripeSecretKey(env: Env, mode: 'test' | 'live'): string {
+  if (mode === 'test') {
+    if (!env.STRIPE_SECRET_KEY_TEST) {
+      throw new Error('STRIPE_SECRET_KEY_TEST not configured - cannot create test products');
+    }
+    return env.STRIPE_SECRET_KEY_TEST;
+  }
+  // Live mode - use STRIPE_SECRET_KEY_LIVE or fall back to STRIPE_CLIENT_SECRET
+  return env.STRIPE_SECRET_KEY_LIVE || env.STRIPE_CLIENT_SECRET;
+}
+
+/**
  * Helper: Create a Stripe product on the connected account
  *
- * Uses the developer's Stripe access token to create products
- * on THEIR account, not ours. This is Stripe Connect in action.
+ * Uses PLATFORM's secret key + Stripe-Account header (recommended by Stripe).
+ * Mode (test/live) is determined by which platform key we use.
  */
 async function createStripeProduct(
-  accessToken: string,
+  env: Env,
+  stripeUserId: string,
+  mode: 'test' | 'live',
   tier: {
     displayName: string;
     name: string;
@@ -103,10 +122,13 @@ async function createStripeProduct(
     params.append('images[]', tier.imageUrl);
   }
 
+  const secretKey = getStripeSecretKey(env, mode);
+
   const response = await fetch('https://api.stripe.com/v1/products', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      'Authorization': `Bearer ${secretKey}`,
+      'Stripe-Account': stripeUserId,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: params,
@@ -127,9 +149,13 @@ async function createStripeProduct(
  * Prices can be:
  *   - Recurring (subscription): monthly billing
  *   - One-time (one_off): single purchase
+ *
+ * Uses PLATFORM's secret key + Stripe-Account header.
  */
 async function createStripePrice(
-  accessToken: string,
+  env: Env,
+  stripeUserId: string,
+  mode: 'test' | 'live',
   productId: string,
   tier: {
     name: string;
@@ -153,10 +179,13 @@ async function createStripePrice(
     params.set('recurring[interval]', 'month');
   }
 
+  const secretKey = getStripeSecretKey(env, mode);
+
   const response = await fetch('https://api.stripe.com/v1/prices', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      'Authorization': `Bearer ${secretKey}`,
+      'Stripe-Account': stripeUserId,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: params,
@@ -179,11 +208,12 @@ async function createStripePrice(
  * Even if you never use the portal, this config must exist. Without it,
  * checkout sessions may fail with cryptic "missing API key" errors.
  *
- * This is a one-time setup per Stripe connected account.
+ * This is a one-time setup per Stripe connected account per mode.
  */
 async function configureStripePortal(
-  stripeClientSecret: string,
-  stripeUserId: string
+  env: Env,
+  stripeUserId: string,
+  mode: 'test' | 'live'
 ): Promise<void> {
   const portalParams = new URLSearchParams({
     'business_profile[headline]': 'Manage your subscription',
@@ -196,10 +226,12 @@ async function configureStripePortal(
   portalParams.append('features[customer_update][allowed_updates][]', 'email');
   portalParams.append('features[customer_update][allowed_updates][]', 'address');
 
+  const secretKey = getStripeSecretKey(env, mode);
+
   const response = await fetch('https://api.stripe.com/v1/billing_portal/configurations', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${stripeClientSecret}`,
+      'Authorization': `Bearer ${secretKey}`,
       'Stripe-Account': stripeUserId,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
@@ -212,7 +244,7 @@ async function configureStripePortal(
     // Log but don't fail - portal might already exist
     console.error(`[Portal] Failed to configure: ${result.error?.message}`);
   } else {
-    console.log(`[Portal] Configured successfully (ID: ${result.id})`);
+    console.log(`[Portal] Configured ${mode.toUpperCase()} portal (ID: ${result.id})`);
   }
 }
 
@@ -272,7 +304,8 @@ export async function handleCreateProducts(
   };
 
   const { tiers, projectName } = body;
-  const mode: 'live' | 'test' = body.mode === 'test' ? 'test' : 'live';
+  // Default to TEST mode - projects must be tested before going live
+  const mode: 'live' | 'test' = body.mode === 'live' ? 'live' : 'test';
   // Determine project type - membership and saas use subscriptions, store uses one_off
   const projectType: ProjectType = body.projectType === 'store' ? 'store' :
                                    body.projectType === 'membership' ? 'membership' : 'saas';
@@ -330,15 +363,20 @@ export async function handleCreateProducts(
   try {
     for (const tier of tiers) {
       // Create product on developer's Stripe account
+      // Uses platform key + Stripe-Account header (mode determines test/live)
       const { productId } = await createStripeProduct(
-        stripeData.accessToken,
+        env,
+        stripeData.stripeUserId,
+        mode,
         tier,
         platformId
       );
 
       // Create price for this product
       const { priceId } = await createStripePrice(
-        stripeData.accessToken,
+        env,
+        stripeData.stripeUserId,
+        mode,
         productId,
         tier,
         platformId
@@ -350,7 +388,7 @@ export async function handleCreateProducts(
         productId,
       });
 
-      console.log(`[Products] Created ${tier.name}: product=${productId}, price=${priceId}`);
+      console.log(`[Products] Created ${mode.toUpperCase()} ${tier.name}: product=${productId}, price=${priceId}`);
     }
 
     // =========================================================================
@@ -452,7 +490,7 @@ export async function handleCreateProducts(
     // Required for checkout to work properly
     // =========================================================================
 
-    await configureStripePortal(env.STRIPE_CLIENT_SECRET, stripeData.stripeUserId);
+    await configureStripePortal(env, stripeData.stripeUserId, mode);
 
     // =========================================================================
     // UPDATE CLERK USER METADATA

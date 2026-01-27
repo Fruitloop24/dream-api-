@@ -10,13 +10,37 @@
  * 4. Set metadata, create sign-in token
  * 5. Redirect to dev app with __clerk_ticket
  * 6. Dev app SDK consumes ticket → done
+ *
+ * AUTO-DETECTS: workers.dev = test mode, custom domain = live mode
  */
 
 export interface Env {
+	// Live keys (custom domain: signup.users.panacea-tech.net)
 	CLERK_PUBLISHABLE_KEY: string;
 	CLERK_SECRET_KEY: string;
+	// Test keys (workers.dev domain) - optional, falls back to live
+	CLERK_PUBLISHABLE_KEY_TEST?: string;
+	CLERK_SECRET_KEY_TEST?: string;
 	DB: D1Database;
 	KV: KVNamespace;
+}
+
+// Helper to get the right Clerk keys based on domain
+function getClerkKeys(request: Request, env: Env): { publishableKey: string; secretKey: string } {
+	const hostname = new URL(request.url).hostname;
+	const isWorkersDev = hostname.endsWith('.workers.dev');
+
+	if (isWorkersDev && env.CLERK_PUBLISHABLE_KEY_TEST && env.CLERK_SECRET_KEY_TEST) {
+		return {
+			publishableKey: env.CLERK_PUBLISHABLE_KEY_TEST,
+			secretKey: env.CLERK_SECRET_KEY_TEST,
+		};
+	}
+
+	return {
+		publishableKey: env.CLERK_PUBLISHABLE_KEY,
+		secretKey: env.CLERK_SECRET_KEY,
+	};
 }
 
 const corsHeaders = {
@@ -39,6 +63,9 @@ export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 		const path = url.pathname;
+
+		// Auto-detect test vs live mode based on domain
+		const clerkKeys = getClerkKeys(request, env);
 
 		if (request.method === 'OPTIONS') {
 			return new Response(null, { headers: corsHeaders });
@@ -86,7 +113,7 @@ export default {
 			// Set cookie to persist pk/redirect through Clerk redirects
 			const cookieData = btoa(JSON.stringify({ pk, redirect }));
 
-			return new Response(getSignupPageHTML(pk, redirect, env.CLERK_PUBLISHABLE_KEY), {
+			return new Response(getSignupPageHTML(pk, redirect, clerkKeys.publishableKey), {
 				headers: {
 					'Content-Type': 'text/html',
 					'Set-Cookie': `signup_data=${cookieData}; Path=/; Max-Age=600; SameSite=Lax; Secure`,
@@ -105,7 +132,7 @@ export default {
 
 				// Get user from Clerk
 				const checkResponse = await fetch(`https://api.clerk.com/v1/users/${body.userId}`, {
-					headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+					headers: { 'Authorization': `Bearer ${clerkKeys.secretKey}` },
 				});
 
 				if (!checkResponse.ok) {
@@ -125,7 +152,7 @@ export default {
 					await fetch(`https://api.clerk.com/v1/users/${body.userId}`, {
 						method: 'PATCH',
 						headers: {
-							'Authorization': `Bearer ${env.CLERK_SECRET_KEY}`,
+							'Authorization': `Bearer ${clerkKeys.secretKey}`,
 							'Content-Type': 'application/json',
 						},
 						body: JSON.stringify({
@@ -147,7 +174,7 @@ export default {
 				const tokenResponse = await fetch('https://api.clerk.com/v1/sign_in_tokens', {
 					method: 'POST',
 					headers: {
-						'Authorization': `Bearer ${env.CLERK_SECRET_KEY}`,
+						'Authorization': `Bearer ${clerkKeys.secretKey}`,
 						'Content-Type': 'application/json',
 					},
 					body: JSON.stringify({

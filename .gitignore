@@ -87,6 +87,8 @@ dream-membership-basic/
 dream-saas-next/
 dream-store-next/
 dream-membership-next/
+# Test folders
+test-membership/
 
 # Playwright MCP
 .playwright-mcp/

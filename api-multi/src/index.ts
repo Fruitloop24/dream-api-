@@ -43,10 +43,14 @@ import { validateEnv } from './utils';
  * SECURITY: No header fallback - JWT is the ONLY way to identify end-users.
  * The plan comes from JWT's publicMetadata, set by our system during subscription.
  * This prevents users from spoofing their plan via headers.
+ *
+ * TEST MODE: When publishableKey starts with pk_test_, uses TEST Clerk keys.
+ * This allows localhost development without production Clerk keys.
  */
 async function verifyEndUserToken(
 	request: Request,
-	env: Env
+	env: Env,
+	publishableKey?: string | null
 ): Promise<{ userId: string; plan: PlanTier; publishableKeyFromToken?: string | null; email?: string | null }> {
 	const token =
 		request.headers.get('X-Clerk-Token') ||
@@ -57,10 +61,18 @@ async function verifyEndUserToken(
 		throw new Error('Missing end-user token (send X-Clerk-Token with a valid JWT)');
 	}
 
+	// Detect test mode from publishable key prefix
+	// pk_test_xxx → use TEST Clerk keys (for localhost development)
+	// pk_live_xxx → use LIVE Clerk keys (for production)
+	const isTestMode = publishableKey?.startsWith('pk_test_');
+	const secretKey = isTestMode && env.CLERK_SECRET_KEY_TEST
+		? env.CLERK_SECRET_KEY_TEST
+		: env.CLERK_SECRET_KEY;
+
 	// Verify Clerk JWT
 	// Allow 5 minutes clock skew to handle timezone/clock sync issues
 	const result = await verifyToken(token, {
-		secretKey: env.CLERK_SECRET_KEY,
+		secretKey,
 		clockSkewInMs: 5 * 60 * 1000, // 5 minutes
 	});
 
@@ -233,10 +245,13 @@ export default {
 
 			const { platformId, publishableKey, mode } = pkAuth;
 
-			// Create Clerk client for JWT verification
+			// Detect test mode from publishable key prefix
+			const isTestMode = publishableKey.startsWith('pk_test_');
+
+			// Create Clerk client for JWT verification (use test keys for localhost dev)
 			const clerkClient = createClerkClient({
-				secretKey: env.CLERK_SECRET_KEY,
-				publishableKey: env.CLERK_PUBLISHABLE_KEY,
+				secretKey: isTestMode && env.CLERK_SECRET_KEY_TEST ? env.CLERK_SECRET_KEY_TEST : env.CLERK_SECRET_KEY,
+				publishableKey: isTestMode && env.CLERK_PUBLISHABLE_KEY_TEST ? env.CLERK_PUBLISHABLE_KEY_TEST : env.CLERK_PUBLISHABLE_KEY,
 			});
 
 			// ================================================================
@@ -277,7 +292,8 @@ export default {
 				let userEmail: string | null = null;
 
 				try {
-					const verified = await verifyEndUserToken(request, env);
+					// Pass publishableKey to detect test vs live mode for JWT verification
+					const verified = await verifyEndUserToken(request, env, publishableKey);
 					userId = verified.userId;
 					plan = verified.plan;
 					publishableKeyFromToken = verified.publishableKeyFromToken;
@@ -512,7 +528,8 @@ export default {
 				let userEmail: string | null = null;
 
 				try {
-					const verified = await verifyEndUserToken(request, env);
+					// Pass publishableKey to detect test vs live mode for JWT verification
+					const verified = await verifyEndUserToken(request, env, publishableKey);
 					userId = verified.userId;
 					plan = verified.plan;
 					publishableKeyFromToken = verified.publishableKeyFromToken;

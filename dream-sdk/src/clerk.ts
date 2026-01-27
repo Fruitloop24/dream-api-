@@ -3,10 +3,28 @@
  *
  * Handles loading Clerk internally so devs never touch it.
  * Uses the shared end-user-api Clerk app.
+ *
+ * Auto-detects localhost vs production and uses appropriate keys.
  */
 
-// End-user-api Clerk publishable key (shared across all devs)
-const CLERK_PUBLISHABLE_KEY = 'pk_live_Y2xlcmsudXNlcnMucGFuYWNlYS10ZWNoLm5ldCQ';
+// Detect if running on localhost (for development)
+function isLocalhost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+// End-user-api Clerk keys (shared across all devs)
+// Dev: composed-blowfish-76.clerk.accounts.dev (works on localhost)
+// Live: users.panacea-tech.net (works on real domains)
+const CLERK_DEV_KEY = 'pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
+const CLERK_LIVE_KEY = 'pk_live_Y2xlcmsudXNlcnMucGFuYWNlYS10ZWNoLm5ldCQ';
+
+// Auto-select key based on environment
+function getClerkKey(): string {
+  return isLocalhost() ? CLERK_DEV_KEY : CLERK_LIVE_KEY;
+}
+
 // Pin to specific version to avoid breaking changes from Clerk updates
 const CLERK_CDN_URL = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.118.0/dist/clerk.browser.js';
 const JWT_TEMPLATE = 'end-user-api';
@@ -78,7 +96,7 @@ export class ClerkManager {
       script.src = CLERK_CDN_URL;
       script.async = true;
       script.crossOrigin = 'anonymous';
-      script.setAttribute('data-clerk-publishable-key', CLERK_PUBLISHABLE_KEY);
+      script.setAttribute('data-clerk-publishable-key', getClerkKey());
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('Failed to load Clerk SDK'));
       document.head.appendChild(script);

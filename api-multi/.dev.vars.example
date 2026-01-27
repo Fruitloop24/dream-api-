@@ -1,12 +1,28 @@
 # ===================================
-# CLERK AUTHENTICATION
+# CLERK AUTHENTICATION (end-user-api app)
 # ===================================
-# Get these from: https://dashboard.clerk.com/
-# NOTE: Use test keys (sk_test_..., pk_test_...) for development
-#       Switch to live keys (sk_live_..., pk_live_...) for production
+# Get these from: https://dashboard.clerk.com/ → end-user-api app
+#
+# PRODUCTION KEYS (required):
+# - Used when devs deploy their apps to real domains
+# - Custom domain: users.panacea-tech.net
+#
+# TEST KEYS (optional but recommended):
+# - Used when devs run templates on localhost
+# - Workers.dev domain auto-detects test mode
+# - Without test keys, localhost development won't work!
+#
+# How it works:
+# - pk_test_xxx requests → verify JWT with TEST Clerk keys
+# - pk_live_xxx requests → verify JWT with LIVE Clerk keys
 
-CLERK_SECRET_KEY=sk_test_YOUR_CLERK_SECRET_KEY_HERE
-CLERK_PUBLISHABLE_KEY=pk_test_YOUR_CLERK_PUBLISHABLE_KEY_HERE
+# LIVE keys (production - custom domain)
+CLERK_SECRET_KEY=sk_live_YOUR_CLERK_SECRET_KEY_HERE
+CLERK_PUBLISHABLE_KEY=pk_live_YOUR_CLERK_PUBLISHABLE_KEY_HERE
+
+# TEST keys (localhost development - optional)
+CLERK_SECRET_KEY_TEST=sk_test_YOUR_CLERK_TEST_SECRET_KEY_HERE
+CLERK_PUBLISHABLE_KEY_TEST=pk_test_YOUR_CLERK_TEST_PUBLISHABLE_KEY_HERE
 
 # JWT Template name (create in Clerk Dashboard → JWT Templates)
 CLERK_JWT_TEMPLATE=pan-api

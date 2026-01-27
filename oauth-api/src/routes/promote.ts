@@ -37,6 +37,17 @@ import { TierInput, upsertTiers } from '../lib/tiers';
 import { getCorsHeaders } from './oauth';
 
 /**
+ * Helper: Get LIVE Stripe secret key
+ * Promote always uses live mode
+ */
+function getLiveStripeSecretKey(env: Env): string {
+  if (!env.STRIPE_SECRET_KEY_LIVE && !env.STRIPE_CLIENT_SECRET) {
+    throw new Error('STRIPE_SECRET_KEY_LIVE not configured - cannot promote to live');
+  }
+  return env.STRIPE_SECRET_KEY_LIVE || env.STRIPE_CLIENT_SECRET;
+}
+
+/**
  * Helper: Generate live API keys
  */
 function generateLiveKeyPair(): { publishableKey: string; secretKey: string } {
@@ -262,10 +273,13 @@ export async function handlePromoteToLive(
         productParams.append('images[]', imageUrl);
       }
 
+      const liveSecretKey = getLiveStripeSecretKey(env);
+
       const productRes = await fetch('https://api.stripe.com/v1/products', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Authorization': `Bearer ${liveSecretKey}`,
+          'Stripe-Account': stripeData.stripeUserId,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: productParams,
@@ -295,7 +309,8 @@ export async function handlePromoteToLive(
       const priceRes = await fetch('https://api.stripe.com/v1/prices', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Authorization': `Bearer ${liveSecretKey}`,
+          'Stripe-Account': stripeData.stripeUserId,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: priceParams,
@@ -314,7 +329,7 @@ export async function handlePromoteToLive(
         productId: product.id,
       });
 
-      console.log(`[Promote] Created live ${tier.name}: product=${product.id}, price=${price.id}`);
+      console.log(`[Promote] Created LIVE ${tier.name}: product=${product.id}, price=${price.id}`);
     }
 
     // =========================================================================

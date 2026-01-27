@@ -27,6 +27,20 @@ import { ensureTierSchema } from '../lib/schema';
 import { getCorsHeaders } from './oauth';
 
 /**
+ * Helper: Get the appropriate Stripe secret key based on mode
+ * Uses PLATFORM keys (not OAuth access token) so we control test/live mode.
+ */
+function getStripeSecretKey(env: Env, mode: 'test' | 'live'): string {
+  if (mode === 'test') {
+    if (!env.STRIPE_SECRET_KEY_TEST) {
+      throw new Error('STRIPE_SECRET_KEY_TEST not configured - cannot modify test products');
+    }
+    return env.STRIPE_SECRET_KEY_TEST;
+  }
+  return env.STRIPE_SECRET_KEY_LIVE || env.STRIPE_CLIENT_SECRET;
+}
+
+/**
  * Helper: Get platformId from D1 or KV
  * Tries D1 first (source of truth), falls back to KV cache
  */
@@ -264,10 +278,12 @@ export async function handleUpdateTier(
         priceParams.set('recurring[interval]', 'month');
       }
 
+      const secretKey = getStripeSecretKey(env, mode as 'test' | 'live');
+
       const priceRes = await fetch('https://api.stripe.com/v1/prices', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Authorization': `Bearer ${secretKey}`,
           'Stripe-Account': stripeData.stripeUserId,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -285,14 +301,14 @@ export async function handleUpdateTier(
       const newPrice = await priceRes.json() as { id: string };
       newPriceId = newPrice.id;
 
-      console.log(`[Tiers] Created new Stripe price ${newPriceId} for tier ${tierName} (old: ${currentTier.priceId})`);
+      console.log(`[Tiers] Created new ${mode.toUpperCase()} Stripe price ${newPriceId} for tier ${tierName} (old: ${currentTier.priceId})`);
 
       // Deactivate old price (best practice)
       try {
         await fetch(`https://api.stripe.com/v1/prices/${currentTier.priceId}`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${stripeData.accessToken}`,
+            'Authorization': `Bearer ${secretKey}`,
             'Stripe-Account': stripeData.stripeUserId,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
@@ -499,6 +515,8 @@ export async function handleAddTier(
   // CREATE STRIPE PRODUCT
   // =========================================================================
 
+  const secretKey = getStripeSecretKey(env, mode as 'test' | 'live');
+
   const productParams = new URLSearchParams({
     name: tier.displayName,
     'metadata[platformId]': platformId,
@@ -515,7 +533,7 @@ export async function handleAddTier(
   const productRes = await fetch('https://api.stripe.com/v1/products', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${stripeData.accessToken}`,
+      'Authorization': `Bearer ${secretKey}`,
       'Stripe-Account': stripeData.stripeUserId,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
@@ -549,7 +567,7 @@ export async function handleAddTier(
   const priceRes = await fetch('https://api.stripe.com/v1/prices', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${stripeData.accessToken}`,
+      'Authorization': `Bearer ${secretKey}`,
       'Stripe-Account': stripeData.stripeUserId,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
@@ -565,6 +583,8 @@ export async function handleAddTier(
   }
 
   const price = await priceRes.json() as { id: string };
+
+  console.log(`[Tiers] Created ${mode.toUpperCase()} tier ${tier.name}: product=${product.id}, price=${price.id}`);
 
   // =========================================================================
   // INSERT INTO D1
@@ -706,16 +726,17 @@ export async function handleDeleteTier(
   const stripeData = await getStripeCredentials(platformId, env);
   if (stripeData && tier.productId) {
     try {
+      const secretKey = getStripeSecretKey(env, mode as 'test' | 'live');
       await fetch(`https://api.stripe.com/v1/products/${tier.productId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${stripeData.accessToken}`,
+          'Authorization': `Bearer ${secretKey}`,
           'Stripe-Account': stripeData.stripeUserId,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({ active: 'false' }),
       });
-      console.log(`[Tiers] Archived Stripe product ${tier.productId}`);
+      console.log(`[Tiers] Archived ${mode.toUpperCase()} Stripe product ${tier.productId}`);
     } catch (err) {
       console.warn(`[Tiers] Failed to archive Stripe product: ${err}`);
       // Continue with D1 deletion even if Stripe fails

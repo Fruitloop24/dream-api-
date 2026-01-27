@@ -16,9 +16,14 @@
  */
 export interface Env {
 	// Clerk (end-user-api - shared app for ALL devs' customers)
-	CLERK_SECRET_KEY: string;           // Clerk secret key (sk_test_...)
-	CLERK_PUBLISHABLE_KEY: string;      // Clerk publishable key (pk_test_...)
+	// LIVE keys for production (custom domain: users.panacea-tech.net)
+	CLERK_SECRET_KEY: string;           // Clerk secret key (sk_live_...)
+	CLERK_PUBLISHABLE_KEY: string;      // Clerk publishable key (pk_live_...)
 	CLERK_JWT_TEMPLATE: string;         // JWT template name ("end-user-api")
+	// TEST keys for localhost development (workers.dev domain)
+	// These allow devs to test locally without production Clerk keys
+	CLERK_SECRET_KEY_TEST?: string;     // Optional: Clerk test secret key (sk_test_...)
+	CLERK_PUBLISHABLE_KEY_TEST?: string; // Optional: Clerk test publishable key (pk_test_...)
 
 	// KV namespace bindings (set in wrangler.toml)
 	TOKENS_KV: KVNamespace;             // Tier configs + API key lookups

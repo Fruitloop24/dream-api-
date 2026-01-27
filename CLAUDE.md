@@ -4,25 +4,74 @@ API-as-a-Service Platform. Developers get API keys, we handle auth/billing/usage
 
 **Business Model:** API is the product. Templates are free onboarding tools.
 
+## Test/Live Mode Architecture
+
+Projects **always start in TEST mode**, then get promoted to LIVE when ready.
+
+### Stripe Connect Authentication
+
+We use **platform key + `Stripe-Account` header** (not OAuth access token):
+
+| Mode | Platform Key | Products Created In |
+|------|--------------|---------------------|
+| Test | `STRIPE_SECRET_KEY_TEST` | Connected account's TEST Stripe |
+| Live | `STRIPE_SECRET_KEY_LIVE` | Connected account's LIVE Stripe |
+
+**Why?** OAuth access tokens are locked to the mode when OAuth happened. Platform keys let us create test/live products with a single OAuth flow.
+
+### Dev Flow
+
+```
+1. Connect Stripe (one OAuth) → we store stripeUserId (acct_xxx)
+2. Create project → defaults to TEST → creates TEST Stripe products
+3. Test on localhost with pk_test_/sk_test_ keys
+4. Click "Promote to Live" → creates LIVE Stripe products + pk_live_/sk_live_ keys
+5. Deploy to production with LIVE keys
+```
+
+### Required Secrets (oauth-api)
+
+```bash
+# Platform keys for creating products on connected accounts
+STRIPE_SECRET_KEY_TEST   # sk_test_xxx - for creating test products
+STRIPE_SECRET_KEY_LIVE   # sk_live_xxx - for creating live products
+```
+
+### Localhost Testing (SDK v0.1.26+)
+
+The SDK auto-detects localhost and uses TEST Clerk keys.
+
+**Flow:**
+- `localhost:*` → SDK uses TEST Clerk keys → sign-up.workers.dev → api-multi verifies with TEST keys
+- Production domain → SDK uses LIVE Clerk keys → signup.users.panacea-tech.net → api-multi verifies with LIVE keys
+
+**Required secrets:**
+- `sign-up` worker: `CLERK_SECRET_KEY_TEST`, `CLERK_PUBLISHABLE_KEY_TEST`
+- `api-multi`: `CLERK_SECRET_KEY_TEST`, `CLERK_PUBLISHABLE_KEY_TEST`
+
+See `DEPLOY.md` for full setup.
+
 ## TODO - Pre-Launch
 
+- [ ] Full smoke test (delete project, reconnect Stripe, create TEST project, promote to LIVE)
+- [ ] Replace demo keys in templates with fresh test keys
 - [ ] Add business phone or Telegram link to `frontend/src/config.ts`
 - [ ] Fill in About page story (`frontend/src/pages/About.tsx`)
-- [ ] Switch Clerk to production keys (seeing dev mode warning)
-- [ ] Set up custom domain: `dream.panacea-tech.net`
-- [ ] Push all changes and verify deploy
 - [ ] Product Hunt launch prep
 
 ## Recently Completed
 
+- [x] **Stripe Connect: platform key + Stripe-Account header** (single OAuth for test/live)
+- [x] **Products default to TEST mode** (promote to LIVE when ready)
+- [x] Localhost auto-detection for TEST/LIVE Clerk keys
+- [x] api-multi supports TEST Clerk key verification
+- [x] sign-up worker auto-detects workers.dev vs custom domain
+- [x] Switch Clerk to production keys
+- [x] Set up custom domain: `dream.panacea-tech.net`
 - [x] Video compression (21MB → 5MB, 12MB → 2.7MB)
 - [x] Poster images for instant video preview
-- [x] Privacy policy page (`/privacy`)
-- [x] Terms of service page (`/terms`)
-- [x] SLA page (`/sla`) - honest "we're glue" messaging
-- [x] About page placeholder (`/about`)
+- [x] Privacy policy, Terms, SLA, About pages
 - [x] Footer with company info, legal links, OSS links
-- [x] Template SDK versions updated to `latest`
 - [x] Favicon fixed (2MB → 2.7KB)
 
 ## Pricing
@@ -94,13 +143,13 @@ await api.dashboard.get();
 
 ## Workers
 
-| Worker | Purpose |
-|--------|---------|
-| `api-multi` | Main API - usage, billing, products, dashboard |
-| `oauth-api` | Stripe Connect, tier management |
-| `front-auth-api` | Dev auth, credentials, $19/mo billing, usage metering |
-| `sign-up` | End-user signup flow (Clerk hosted → metadata → D1 sync) |
-| `admin-dashboard` | Internal admin metrics (CF Access protected) |
+| Worker | Purpose | Key Secrets |
+|--------|---------|-------------|
+| `api-multi` | Main API - usage, billing, products, dashboard | `CLERK_SECRET_KEY`, `CLERK_SECRET_KEY_TEST` |
+| `oauth-api` | Stripe Connect, tier/product management | `STRIPE_SECRET_KEY_TEST`, `STRIPE_SECRET_KEY_LIVE` |
+| `front-auth-api` | Dev auth, credentials, $19/mo billing | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
+| `sign-up` | End-user signup flow | `CLERK_SECRET_KEY`, `CLERK_SECRET_KEY_TEST` |
+| `admin-dashboard` | Internal admin metrics | CF Access protected |
 
 ## Infrastructure Features
 

@@ -80,6 +80,20 @@ const api = new DreamAPI({
 });
 ```
 
+## Test/Live Mode
+
+Projects start in **test mode** by default. Test locally, then promote when ready.
+
+```
+1. Connect Stripe (one-time OAuth)
+2. Create project → TEST mode → pk_test_/sk_test_ keys
+3. Test on localhost
+4. Click "Promote to Live" → LIVE mode → pk_live_/sk_live_ keys
+5. Deploy with LIVE keys
+```
+
+Test products go to your Stripe test dashboard. Live products go to your real Stripe.
+
 ## Dashboard
 
 Manage everything from the dashboard:
