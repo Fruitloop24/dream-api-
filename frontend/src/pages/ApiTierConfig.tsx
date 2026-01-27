@@ -86,13 +86,62 @@ export default function ApiTierConfig() {
   const [stripeConnected, setStripeConnected] = useState(false);
   const [enableTax, setEnableTax] = useState(false);
 
-  // Check URL params for stripe connected
+  // Check URL params for stripe connected + resume pending promote
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('stripe') === 'connected') {
       setStripeConnected(true);
+
+      // Check if we have a pending promote to resume
+      const pendingPromoteJson = sessionStorage.getItem('pendingPromote');
+      if (pendingPromoteJson) {
+        sessionStorage.removeItem('pendingPromote');
+        const pendingPromote = JSON.parse(pendingPromoteJson);
+        // Auto-trigger promote after short delay (let UI settle)
+        setTimeout(async () => {
+          const confirmed = confirm(
+            'Stripe live mode connected!\n\n' +
+            'Ready to create your live products?\n\n' +
+            'Click OK to continue promoting to live.'
+          );
+          if (confirmed) {
+            // Re-trigger the promote flow
+            setLoading(true);
+            try {
+              const token = await getToken({ template: 'dream-api' });
+              if (!token) throw new Error('Not authenticated');
+
+              const response = await fetch(`${OAUTH_API}/promote-to-live`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: user?.id,
+                  publishableKey: pendingPromote.publishableKey,
+                  tiers: pendingPromote.tiers,
+                }),
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.message || errorData.error || 'Failed to promote');
+              }
+
+              // Success! Navigate to dashboard
+              navigate('/dashboard');
+            } catch (error) {
+              console.error('Promote failed:', error);
+              alert('Failed to promote: ' + (error instanceof Error ? error.message : 'Unknown error'));
+            } finally {
+              setLoading(false);
+            }
+          }
+        }, 500);
+      }
     }
-  }, []);
+  }, [getToken, user?.id, navigate]);
 
   // Load existing tiers when in edit mode or promote mode
   useEffect(() => {
@@ -535,6 +584,28 @@ export default function ApiTierConfig() {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+
+      // Handle "needs live OAuth" - redirect to live Stripe Connect
+      if (response.status === 428 && errorData.needsLiveOAuth) {
+        const confirmOAuth = confirm(
+          'To go live, you need to connect Stripe in live mode.\n\n' +
+          'This is a one-time setup. After this, you can edit live products anytime.\n\n' +
+          'Click OK to connect Stripe (live mode).'
+        );
+        if (confirmOAuth) {
+          // Store promote state so we can resume after OAuth
+          sessionStorage.setItem('pendingPromote', JSON.stringify({
+            publishableKey: publishableKeyParam,
+            projectName: projectNameParam,
+            projectType: activeTab,
+            tiers,
+          }));
+          // Redirect to live OAuth
+          window.location.href = `${OAUTH_API}/authorize?token=${token}&mode=live`;
+        }
+        return;
+      }
+
       // Handle "already has live keys" case
       if (response.status === 409 && errorData.existingLiveKey) {
         alert(`This project already has live keys!\n\nExisting key: ${errorData.existingLiveKey}\n\nUse "Edit Tiers" on the live project to make changes.`);

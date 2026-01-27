@@ -217,15 +217,37 @@ export async function handlePromoteToLive(
     tiersToPromote = tiersResult.results as any[];
   }
 
-  // Get Stripe credentials
+  // Get Stripe credentials - MUST have LIVE OAuth connection
+  // Try live-specific token first, then fall back to generic (for backwards compat)
   const stripeDataJson =
+    await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken:live`) ||
+    await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken:live`) ||
     await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`) ||
     await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`);
 
   if (!stripeDataJson) {
+    // No Stripe connection at all - need to connect first
     return new Response(
       JSON.stringify({ error: 'Stripe credentials not found. Please connect Stripe first.' }),
       { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Check if we have a LIVE-specific connection
+  // If only test token exists, we need live OAuth before promoting
+  const hasLiveToken =
+    await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken:live`) ||
+    await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken:live`);
+
+  if (!hasLiveToken) {
+    // Test OAuth exists but not live - need one-time live OAuth
+    return new Response(
+      JSON.stringify({
+        error: 'Live Stripe connection required',
+        needsLiveOAuth: true,
+        message: 'You need to connect Stripe in live mode before promoting. This is a one-time setup.',
+      }),
+      { status: 428, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
