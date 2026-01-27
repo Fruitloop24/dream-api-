@@ -34,7 +34,8 @@ export interface Env {
 
 	// Optional
 	ALLOWED_ORIGINS?: string;           // Comma-separated allowed CORS origins
-	STRIPE_WEBHOOK_SECRET?: string;     // For Connect webhook verification (per-platform)
+	STRIPE_WEBHOOK_SECRET?: string;     // For Connect webhook verification (LIVE mode)
+	STRIPE_WEBHOOK_SECRET_TEST?: string; // For Connect webhook verification (TEST mode)
 
 	// Optional R2 bucket for hosted product images (one-off store)
 	dream_api_assets?: R2Bucket;

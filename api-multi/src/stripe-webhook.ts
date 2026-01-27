@@ -92,28 +92,63 @@ export async function handleStripeWebhook(
 		apiVersion: '2025-09-30.clover',
 	});
 
-	let event: Stripe.Event;
-	try {
-		// Require webhook secret in production (fail hard if missing)
-		if (!env.STRIPE_WEBHOOK_SECRET) {
-			console.error('❌ STRIPE_WEBHOOK_SECRET required - webhook signature verification mandatory');
-			return new Response(
-				JSON.stringify({ error: 'Webhook secret not configured' }),
-				{ status: 500 }
-			);
-		}
+	// ============================================================================
+	// DUAL-MODE WEBHOOK VERIFICATION
+	// ============================================================================
+	// Test and live webhooks have different signing secrets.
+	// We try TEST secret first (more common during dev), then LIVE.
+	// This allows one endpoint to handle both test and live events.
+	// See: docs/TEST-LIVE-SEPARATION.md
+	// ============================================================================
 
-		// Verify the webhook signature (ASYNC for Cloudflare Workers)
-		// Cloudflare Workers use SubtleCrypto which requires async context
-		event = await stripe.webhooks.constructEventAsync(
-			body,
-			signature,
-			env.STRIPE_WEBHOOK_SECRET
+	// Require at least one webhook secret
+	if (!env.STRIPE_WEBHOOK_SECRET && !env.STRIPE_WEBHOOK_SECRET_TEST) {
+		console.error('❌ No webhook secret configured');
+		return new Response(
+			JSON.stringify({ error: 'Webhook secret not configured' }),
+			{ status: 500 }
 		);
-		console.log('✅ Webhook signature verified');
-	} catch (err: unknown) { // Changed 'any' to 'unknown'
-		console.error('❌ Webhook signature verification failed:', (err as Error).message); // Type assertion
-		return new Response(JSON.stringify({ error: `Webhook Error: ${(err as Error).message}` }), { status: 400 });
+	}
+
+	// Try to verify with available secrets (TEST first, then LIVE)
+	let event: Stripe.Event | null = null;
+
+	// Try TEST secret first (if available)
+	if (env.STRIPE_WEBHOOK_SECRET_TEST) {
+		try {
+			event = await stripe.webhooks.constructEventAsync(
+				body,
+				signature,
+				env.STRIPE_WEBHOOK_SECRET_TEST
+			);
+			console.log('✅ Webhook signature verified (TEST mode)');
+		} catch {
+			// TEST secret didn't work, will try LIVE below
+			console.log('⏳ TEST webhook secret failed, trying LIVE...');
+		}
+	}
+
+	// Try LIVE secret if TEST didn't work (or wasn't available)
+	if (!event && env.STRIPE_WEBHOOK_SECRET) {
+		try {
+			event = await stripe.webhooks.constructEventAsync(
+				body,
+				signature,
+				env.STRIPE_WEBHOOK_SECRET
+			);
+			console.log('✅ Webhook signature verified (LIVE mode)');
+		} catch (err: unknown) {
+			console.error('❌ Webhook signature verification failed (LIVE):', (err as Error).message);
+		}
+	}
+
+	// If neither worked, fail
+	if (!event) {
+		console.error('❌ Webhook signature verification failed (both modes)');
+		return new Response(
+			JSON.stringify({ error: 'Webhook signature verification failed' }),
+			{ status: 400 }
+		);
 	}
 
 	// ============================================================================
