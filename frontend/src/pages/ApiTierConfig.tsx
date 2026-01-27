@@ -97,48 +97,40 @@ export default function ApiTierConfig() {
       if (pendingPromoteJson) {
         sessionStorage.removeItem('pendingPromote');
         const pendingPromote = JSON.parse(pendingPromoteJson);
-        // Auto-trigger promote after short delay (let UI settle)
-        setTimeout(async () => {
-          const confirmed = confirm(
-            'Stripe live mode connected!\n\n' +
-            'Ready to create your live products?\n\n' +
-            'Click OK to continue promoting to live.'
-          );
-          if (confirmed) {
-            // Re-trigger the promote flow
-            setLoading(true);
-            try {
-              const token = await getToken({ template: 'dream-api' });
-              if (!token) throw new Error('Not authenticated');
+        // Auto-continue promote (user already clicked "Go Live" before OAuth)
+        (async () => {
+          setLoading(true);
+          try {
+            const token = await getToken({ template: 'dream-api' });
+            if (!token) throw new Error('Not authenticated');
 
-              const response = await fetch(`${OAUTH_API}/promote-to-live`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  userId: user?.id,
-                  publishableKey: pendingPromote.publishableKey,
-                  tiers: pendingPromote.tiers,
-                }),
-              });
+            const response = await fetch(`${OAUTH_API}/promote-to-live`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: user?.id,
+                publishableKey: pendingPromote.publishableKey,
+                tiers: pendingPromote.tiers,
+              }),
+            });
 
-              if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                throw new Error(errorData.message || errorData.error || 'Failed to promote');
-              }
-
-              // Success! Navigate to dashboard
-              navigate('/dashboard');
-            } catch (error) {
-              console.error('Promote failed:', error);
-              alert('Failed to promote: ' + (error instanceof Error ? error.message : 'Unknown error'));
-            } finally {
-              setLoading(false);
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+              throw new Error(errorData.message || errorData.error || 'Failed to promote');
             }
+
+            // Success! Navigate to dashboard
+            navigate('/dashboard');
+          } catch (error) {
+            console.error('Promote failed:', error);
+            alert('Failed to promote: ' + (error instanceof Error ? error.message : 'Unknown error'));
+          } finally {
+            setLoading(false);
           }
-        }, 500);
+        })();
       }
     }
   }, [getToken, user?.id, navigate]);
@@ -585,24 +577,17 @@ export default function ApiTierConfig() {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
 
-      // Handle "needs live OAuth" - redirect to live Stripe Connect
+      // Handle "needs live OAuth" - auto-redirect to live Stripe Connect
       if (response.status === 428 && errorData.needsLiveOAuth) {
-        const confirmOAuth = confirm(
-          'To go live, you need to connect Stripe in live mode.\n\n' +
-          'This is a one-time setup. After this, you can edit live products anytime.\n\n' +
-          'Click OK to connect Stripe (live mode).'
-        );
-        if (confirmOAuth) {
-          // Store promote state so we can resume after OAuth
-          sessionStorage.setItem('pendingPromote', JSON.stringify({
-            publishableKey: publishableKeyParam,
-            projectName: projectNameParam,
-            projectType: activeTab,
-            tiers,
-          }));
-          // Redirect to live OAuth
-          window.location.href = `${OAUTH_API}/authorize?token=${token}&mode=live`;
-        }
+        // Store promote state so we can resume after OAuth
+        sessionStorage.setItem('pendingPromote', JSON.stringify({
+          publishableKey: publishableKeyParam,
+          projectName: projectNameParam,
+          projectType: activeTab,
+          tiers,
+        }));
+        // Auto-redirect to live OAuth (user already clicked "Go Live")
+        window.location.href = `${OAUTH_API}/authorize?token=${token}&mode=live`;
         return;
       }
 
