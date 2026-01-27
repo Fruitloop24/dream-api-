@@ -125,9 +125,25 @@ export async function handleStripeWebhook(
 		return new Response(JSON.stringify({ received: true, idempotent: true }), { status: 200 });
 	}
 
-	const clerkClient = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
 	let eventPlatformId: string | null = null;
 	let eventPublishableKey: string | null = null;
+
+	// ============================================================================
+	// MODE-AWARE CLERK CLIENT
+	// ============================================================================
+	// CRITICAL: Test users exist in TEST Clerk, live users in LIVE Clerk.
+	// We detect mode from the publishableKey prefix (pk_test_ vs pk_live_)
+	// and use the appropriate Clerk keys.
+	// See: docs/TEST-LIVE-SEPARATION.md for full explanation
+	// ============================================================================
+	function getClerkClient(publishableKey: string | null | undefined) {
+		const isTestMode = publishableKey?.startsWith('pk_test_');
+		const secretKey = isTestMode && env.CLERK_SECRET_KEY_TEST
+			? env.CLERK_SECRET_KEY_TEST
+			: env.CLERK_SECRET_KEY;
+		console.log(`[Webhook] Using ${isTestMode ? 'TEST' : 'LIVE'} Clerk keys for pk: ${publishableKey?.substring(0, 20)}...`);
+		return createClerkClient({ secretKey });
+	}
 
 	// Handle different event types
 	switch (event.type) {
@@ -135,8 +151,10 @@ export async function handleStripeWebhook(
 			// For checkout, userId is in client_reference_id
 			const session = event.data.object as Stripe.Checkout.Session;
 			const userId = session.client_reference_id || session.metadata?.userId;
+			// Get publishableKey early so we can use the right Clerk client
+			const pkFromSession = session.metadata?.publishableKey as string | undefined;
 
-			console.log(`[Webhook] checkout.session.completed - userId: ${userId}`);
+			console.log(`[Webhook] checkout.session.completed - userId: ${userId}, pk: ${pkFromSession?.substring(0, 20)}...`);
 			console.log(`[Webhook] session metadata:`, JSON.stringify(session.metadata));
 
 			// Subscription checkout
@@ -154,14 +172,15 @@ export async function handleStripeWebhook(
 				}
 
 				console.log(`[Webhook] Attempting to update user ${userId} to plan: ${tier}`);
-				console.log(`[Webhook] Clerk secret key exists: ${!!env.CLERK_SECRET_KEY}`);
+
+				// Get mode-aware Clerk client (TEST or LIVE based on publishableKey)
+				const clerkClient = getClerkClient(pkFromSession);
 
 				// Update Clerk user metadata with purchased tier
 				try {
 					// Fetch existing metadata to preserve publishableKey
 					const existingUser = await clerkClient.users.getUser(userId);
 					const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
-					const pkFromSession = session.metadata?.publishableKey as string | undefined;
 					const publishableKey = existingPk || pkFromSession;
 					eventPlatformId = await resolvePlatformId(env, publishableKey);
 					eventPublishableKey = publishableKey || null;
@@ -242,6 +261,7 @@ export async function handleStripeWebhook(
 			// Extract customer metadata (should include userId)
 			const subscription = event.data.object as Stripe.Subscription;
 			const subUserId = subscription.metadata?.userId;
+			const pkFromSub = subscription.metadata?.publishableKey as string | undefined;
 
 			if (!subUserId) {
 				console.error('No userId in subscription metadata');
@@ -256,16 +276,18 @@ export async function handleStripeWebhook(
 				return new Response(JSON.stringify({ error: 'Missing tier metadata' }), { status: 400 });
 			}
 
+			// Get mode-aware Clerk client (TEST or LIVE based on publishableKey)
+			const subClerkClient = getClerkClient(pkFromSub);
+
 			// Update Clerk user metadata with subscription tier
 			try {
-				const existingUser = await clerkClient.users.getUser(subUserId);
+				const existingUser = await subClerkClient.users.getUser(subUserId);
 				const existingPk = existingUser.publicMetadata?.publishableKey as string | undefined;
-				const pkFromSub = subscription.metadata?.publishableKey as string | undefined;
 				const publishableKey = existingPk || pkFromSub;
 				eventPlatformId = await resolvePlatformId(env, publishableKey);
 				eventPublishableKey = publishableKey || null;
 
-				await clerkClient.users.updateUserMetadata(subUserId, {
+				await subClerkClient.users.updateUserMetadata(subUserId, {
 					publicMetadata: {
 						...existingUser.publicMetadata,
 						plan: subTier,
@@ -326,22 +348,26 @@ export async function handleStripeWebhook(
 		case 'customer.subscription.deleted': {
 			const deletedSubscription = event.data.object as Stripe.Subscription;
 			const deletedUserId = deletedSubscription.metadata?.userId;
+			const deletedPk = deletedSubscription.metadata?.publishableKey as string | undefined;
 
 			if (!deletedUserId) {
 				console.error('No userId in deleted subscription metadata');
 				return new Response(JSON.stringify({ error: 'No userId' }), { status: 400 });
 			}
 
+			// Get mode-aware Clerk client (TEST or LIVE based on publishableKey)
+			const deletedClerkClient = getClerkClient(deletedPk);
+
 			// Downgrade user back to free
 			try {
-				await clerkClient.users.updateUser(deletedUserId, {
+				await deletedClerkClient.users.updateUser(deletedUserId, {
 					publicMetadata: {
 						plan: 'free',
 					},
 				});
 				console.log(`✅ Downgraded user ${deletedUserId} to free plan`);
 
-				const publishableKey = deletedSubscription.metadata?.publishableKey as string | undefined;
+				const publishableKey = deletedPk;
 				eventPlatformId = await resolvePlatformId(env, publishableKey);
 				eventPublishableKey = publishableKey || null;
 
