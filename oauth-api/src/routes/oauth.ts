@@ -77,14 +77,20 @@ export function getCorsHeaders(request?: Request, env?: { ALLOWED_ORIGINS?: stri
  *
  * Query params:
  *   - token: Clerk session token from frontend
+ *   - mode: 'test' | 'live' (default: 'test')
  *
  * What happens:
  *   1. Verify Clerk token to get userId
  *   2. Generate random state for CSRF protection
- *   3. Store userId in KV keyed by state (10 min TTL)
- *   4. Redirect to Stripe's OAuth authorize URL
+ *   3. Store {userId, mode} in KV keyed by state (10 min TTL)
+ *   4. Redirect to Stripe's OAuth authorize URL with mode-appropriate client_id
  *
  * After this, Stripe shows their authorization page to the developer.
+ *
+ * MODE-SPECIFIC OAUTH:
+ * - Test mode uses STRIPE_CLIENT_ID_TEST → connection exists in test mode only
+ * - Live mode uses STRIPE_CLIENT_ID → connection exists in live mode only
+ * This means developers need to OAuth twice: once for test, once for live.
  */
 export async function handleAuthorize(
   request: Request,
@@ -93,6 +99,8 @@ export async function handleAuthorize(
 ): Promise<Response> {
   // Get token from query param (browser redirect can't send headers)
   const token = url.searchParams.get('token');
+  // Default to test mode - safer for new projects
+  const mode = url.searchParams.get('mode') === 'live' ? 'live' : 'test';
 
   if (!token) {
     return new Response(JSON.stringify({
@@ -122,6 +130,20 @@ export async function handleAuthorize(
     });
   }
 
+  // Get the appropriate client_id based on mode
+  const clientId = mode === 'test'
+    ? (env.STRIPE_CLIENT_ID_TEST || env.STRIPE_CLIENT_ID)
+    : env.STRIPE_CLIENT_ID;
+
+  if (!clientId) {
+    return new Response(JSON.stringify({
+      error: `Missing STRIPE_CLIENT_ID${mode === 'test' ? '_TEST' : ''} configuration`
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   // Generate random state for CSRF protection
   // This gets verified in the callback to ensure the request came from us
   const state = crypto.randomUUID();
@@ -129,20 +151,20 @@ export async function handleAuthorize(
   // Build Stripe OAuth URL
   const stripeUrl = new URL('https://connect.stripe.com/oauth/authorize');
   stripeUrl.searchParams.set('response_type', 'code');
-  stripeUrl.searchParams.set('client_id', env.STRIPE_CLIENT_ID);
+  stripeUrl.searchParams.set('client_id', clientId);
   stripeUrl.searchParams.set('scope', 'read_write');
   stripeUrl.searchParams.set('redirect_uri', `${url.origin}/callback`);
   stripeUrl.searchParams.set('state', state);
 
-  // Store userId keyed by state so we can retrieve it in callback
+  // Store {userId, mode} keyed by state so we can retrieve it in callback
   // 10-minute expiry - if they take longer, they need to start over
   await env.PLATFORM_TOKENS_KV.put(
     `oauth:state:${state}`,
-    userId,
+    JSON.stringify({ userId, mode }),
     { expirationTtl: 600 }
   );
 
-  console.log(`[OAuth] Starting authorization for user ${userId}`);
+  console.log(`[OAuth] Starting ${mode.toUpperCase()} authorization for user ${userId}`);
 
   return Response.redirect(stripeUrl.toString(), 302);
 }
@@ -158,13 +180,13 @@ export async function handleAuthorize(
  *
  * What happens:
  *   1. Verify state matches what we stored (CSRF check)
- *   2. Look up userId from state
+ *   2. Look up {userId, mode} from state
  *   3. Get platformId for this user (must already exist from signup)
- *   4. Exchange code for Stripe access token
- *   5. Store token in D1 and KV
+ *   4. Exchange code for Stripe access token using mode-appropriate client_secret
+ *   5. Store token in D1 and KV (with mode suffix)
  *   6. Redirect to frontend config page
  *
- * After this, the developer can create products.
+ * After this, the developer can create products in the specified mode.
  */
 export async function handleCallback(
   request: Request,
@@ -179,13 +201,26 @@ export async function handleCallback(
     return new Response('Missing code or state parameter', { status: 400 });
   }
 
-  // Verify state and get userId - this prevents CSRF attacks
-  const userId = await env.PLATFORM_TOKENS_KV.get(`oauth:state:${state}`);
-  if (!userId) {
+  // Verify state and get {userId, mode} - this prevents CSRF attacks
+  const stateData = await env.PLATFORM_TOKENS_KV.get(`oauth:state:${state}`);
+  if (!stateData) {
     return new Response(
       'Invalid or expired state. Please try again.',
       { status: 400 }
     );
+  }
+
+  // Parse state - handle both old format (just userId) and new format ({userId, mode})
+  let userId: string;
+  let mode: 'test' | 'live';
+  try {
+    const parsed = JSON.parse(stateData);
+    userId = parsed.userId;
+    mode = parsed.mode === 'live' ? 'live' : 'test';
+  } catch {
+    // Fallback for old format (just userId string) - assume live for backwards compat
+    userId = stateData;
+    mode = 'live';
   }
 
   // Delete state immediately - it's single-use
@@ -202,7 +237,12 @@ export async function handleCallback(
     );
   }
 
-  console.log(`[OAuth] Found platformId ${platformId} for user ${userId}`);
+  console.log(`[OAuth] Found platformId ${platformId} for user ${userId} (${mode} mode)`);
+
+  // Get the appropriate client_secret based on mode
+  const clientSecret = mode === 'test'
+    ? (env.STRIPE_CLIENT_SECRET_TEST || env.STRIPE_CLIENT_SECRET)
+    : env.STRIPE_CLIENT_SECRET;
 
   // Exchange authorization code for access token
   try {
@@ -210,7 +250,7 @@ export async function handleCallback(
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_secret: env.STRIPE_CLIENT_SECRET,
+        client_secret: clientSecret,
         code,
         grant_type: 'authorization_code',
       }),
@@ -227,15 +267,15 @@ export async function handleCallback(
 
     // Check for errors from Stripe
     if (tokenData.error || !tokenData.access_token || !tokenData.stripe_user_id) {
-      console.error('[OAuth] Stripe error:', tokenData.error_description);
-      return Response.redirect(`${env.FRONTEND_URL}/dashboard?stripe=error`, 302);
+      console.error(`[OAuth] Stripe error (${mode}):`, tokenData.error_description);
+      return Response.redirect(`${env.FRONTEND_URL}/dashboard?stripe=error&mode=${mode}`, 302);
     }
 
     // =========================================================================
     // STORE CREDENTIALS
     // We store in multiple places for different access patterns:
     // - D1: Source of truth, queryable
-    // - KV: Fast lookups by userId and platformId
+    // - KV: Fast lookups by userId and platformId (with mode suffix)
     // =========================================================================
 
     // D1: Ensure platform exists and save Stripe token
@@ -250,11 +290,24 @@ export async function handleCallback(
     );
 
     // KV: Store for fast lookup by both userId and platformId
+    // Include mode in the key so test and live tokens are separate
     const stripeCredentials = JSON.stringify({
       accessToken: tokenData.access_token,
       stripeUserId: tokenData.stripe_user_id,
     });
 
+    // Mode-specific storage
+    await env.PLATFORM_TOKENS_KV.put(
+      `user:${userId}:stripeToken:${mode}`,
+      stripeCredentials
+    );
+    await env.PLATFORM_TOKENS_KV.put(
+      `platform:${platformId}:stripeToken:${mode}`,
+      stripeCredentials
+    );
+
+    // Also store without mode suffix for backwards compatibility
+    // (existing code may look for user:xxx:stripeToken without mode)
     await env.PLATFORM_TOKENS_KV.put(
       `user:${userId}:stripeToken`,
       stripeCredentials
@@ -264,11 +317,11 @@ export async function handleCallback(
       stripeCredentials
     );
 
-    console.log(`[OAuth] Saved Stripe token for platform ${platformId}`);
+    console.log(`[OAuth] Saved ${mode.toUpperCase()} Stripe token for platform ${platformId}`);
 
-    // Redirect to config page - they can now create products
+    // Redirect to config page - they can now create products in this mode
     return Response.redirect(
-      `${env.FRONTEND_URL}/api-tier-config?stripe=connected`,
+      `${env.FRONTEND_URL}/api-tier-config?stripe=connected&mode=${mode}`,
       302
     );
 

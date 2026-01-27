@@ -339,10 +339,18 @@ export async function handleCreateProducts(
     );
   }
 
-  const stripeDataJson = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`);
+  // Look for mode-specific stripeToken first, then fall back to general
+  let stripeDataJson = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken:${mode}`);
+  if (!stripeDataJson) {
+    // Fallback to non-mode-specific token for backwards compatibility
+    stripeDataJson = await env.PLATFORM_TOKENS_KV.get(`user:${userId}:stripeToken`);
+  }
   if (!stripeDataJson) {
     return new Response(
-      JSON.stringify({ error: 'Stripe credentials not found. Please connect Stripe first.' }),
+      JSON.stringify({
+        error: `Stripe credentials not found for ${mode.toUpperCase()} mode. Please connect Stripe first.`,
+        hint: `Go to dashboard and click "Connect Stripe" to authorize ${mode} mode access.`
+      }),
       { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
