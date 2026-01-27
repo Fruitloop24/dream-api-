@@ -18,7 +18,8 @@ export function StripeAccountSection({ stripeAccountId, onCopy }: StripeAccountS
       alert('Please sign in to connect Stripe');
       return;
     }
-    window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?token=${token}`;
+    // Default to test mode - projects start in test, then promote to live
+    window.location.href = `${import.meta.env.VITE_OAUTH_API_URL}/authorize?token=${token}&mode=test`;
   };
 
   if (stripeAccountId) {
