@@ -144,13 +144,32 @@ export async function ensureApiKeySchema(env: Env) {
 }
 
 /**
- * Ensure stripe_tokens table has all required columns
+ * Ensure stripe_tokens table exists and has all required columns
  */
 export async function ensureStripeTokenSchema(env: Env) {
   if (stripeTokenSchemaChecked) return;
   stripeTokenSchemaChecked = true;
 
-  // mode - test or live
+  // Create table if it doesn't exist
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS stripe_tokens (
+        platformId TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'live',
+        stripeUserId TEXT NOT NULL,
+        accessToken TEXT NOT NULL,
+        refreshToken TEXT,
+        scope TEXT,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (platformId, mode)
+      )
+    `).run();
+    console.log('[Schema] stripe_tokens table ensured');
+  } catch (e) {
+    console.warn('[Schema] stripe_tokens create warning:', e);
+  }
+
+  // Add mode column if missing (for existing tables)
   try {
     await env.DB.prepare("ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT 'live'").run();
   } catch {}

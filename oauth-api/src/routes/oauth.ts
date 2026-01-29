@@ -328,7 +328,10 @@ export async function handleCallback(
     );
 
   } catch (error) {
-    console.error('[OAuth] Token exchange failed:', error);
-    return new Response('An internal error occurred.', { status: 500 });
+    console.error('[OAuth] Token exchange/storage failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('[OAuth] Error details:', errorMessage, errorStack);
+    return new Response(`OAuth failed: ${errorMessage}. Check worker logs for details.`, { status: 500 });
   }
 }
