@@ -204,8 +204,9 @@ export async function handleCallback(
   // Verify state and get {userId, mode} - this prevents CSRF attacks
   const stateData = await env.PLATFORM_TOKENS_KV.get(`oauth:state:${state}`);
   if (!stateData) {
+    console.error(`[OAuth Callback] State not found in KV: oauth:state:${state}`);
     return new Response(
-      'Invalid or expired state. Please try again.',
+      `Invalid or expired state. The OAuth session may have expired (10 min limit) or the worker was redeployed. Please try connecting Stripe again.`,
       { status: 400 }
     );
   }
