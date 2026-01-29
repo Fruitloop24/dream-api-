@@ -144,13 +144,38 @@ export async function ensureApiKeySchema(env: Env) {
 }
 
 /**
- * Ensure stripe_tokens table exists and has all required columns
+ * Ensure stripe_tokens table exists with correct schema
+ *
+ * IMPORTANT: Primary key must be (platformId, mode) to support both test and live tokens.
+ * If the old table has wrong primary key, we drop and recreate.
  */
 export async function ensureStripeTokenSchema(env: Env) {
   if (stripeTokenSchemaChecked) return;
   stripeTokenSchemaChecked = true;
 
-  // Create table if it doesn't exist
+  // Check if table exists and has correct schema
+  try {
+    // Try to check the table info
+    const tableInfo = await env.DB.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='stripe_tokens'"
+    ).first<{ sql: string }>();
+
+    if (tableInfo?.sql) {
+      // Table exists - check if it has the correct primary key
+      const hasCorrectPK = tableInfo.sql.includes('platformId, mode') ||
+                           tableInfo.sql.includes('platformId,mode');
+
+      if (!hasCorrectPK) {
+        console.log('[Schema] stripe_tokens has wrong primary key, recreating...');
+        // Drop and recreate with correct schema
+        await env.DB.prepare('DROP TABLE stripe_tokens').run();
+      }
+    }
+  } catch (e) {
+    console.warn('[Schema] Table check warning:', e);
+  }
+
+  // Create table with correct schema
   try {
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS stripe_tokens (
@@ -164,13 +189,8 @@ export async function ensureStripeTokenSchema(env: Env) {
         PRIMARY KEY (platformId, mode)
       )
     `).run();
-    console.log('[Schema] stripe_tokens table ensured');
+    console.log('[Schema] stripe_tokens table ready');
   } catch (e) {
     console.warn('[Schema] stripe_tokens create warning:', e);
   }
-
-  // Add mode column if missing (for existing tables)
-  try {
-    await env.DB.prepare("ALTER TABLE stripe_tokens ADD COLUMN mode TEXT DEFAULT 'live'").run();
-  } catch {}
 }
