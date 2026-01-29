@@ -140,13 +140,14 @@ await api.dashboard.get();
 | Doc | Purpose |
 |-----|---------|
 | `docs/OAUTH-FLOW.md` | **Stripe OAuth + Test/Live flow** (start here for OAuth debugging) |
+| `docs/SECURITY.md` | Security features, audit checklist, vulnerability fixes |
 | `docs/SDK-GUIDE.md` | Complete SDK reference |
 | `docs/API-REFERENCE.md` | Endpoints and data types |
 | `docs/ARCHITECTURE.md` | Technical details |
 | `docs/SIGN-UP-FLOW.md` | End-user sign-up flow (critical `clerk.client.signIn` fix) |
 | `docs/D1-SCHEMA.md` | Database schema reference |
+| `docs/PROJECT-CONTEXT.md` | Business context, target market, competitive position |
 | `docs/LIMITATIONS.md` | Constraints and considerations |
-| `docs/HYPE.md` | Marketing/pitch document |
 
 ## Architecture
 
