@@ -32,6 +32,32 @@ npm run dev
 
 Go check it out at **http://localhost:3000** - click around, try signing up. It all works. **Then come back here** - that was just the foundation.
 
+## Test vs Live Keys - IMPORTANT
+
+| Key Type | Where It Works | Use Case |
+|----------|----------------|----------|
+| `pk_test_xxx` | localhost | Development, testing with Stripe test cards |
+| `pk_live_xxx` | **Deployed sites only** | Production, real payments |
+
+**You cannot test live keys on localhost.** This is a Clerk security feature - production keys only work on production domains.
+
+### Development Flow
+1. Build and test locally with `pk_test_xxx`
+2. Test checkout with Stripe test cards (`4242 4242 4242 4242`)
+3. When ready → deploy to Vercel → set `pk_live_xxx` in env vars
+4. Test real checkout on deployed site
+
+### Deployment
+
+**Vercel (Recommended for Next.js):**
+```bash
+npx vercel --prod
+```
+Then in Vercel Dashboard → Settings → Environment Variables:
+- `NEXT_PUBLIC_DREAM_PUBLISHABLE_KEY` = `pk_live_xxx`
+
+The test flow mirrors live exactly - if it works in test, it works in live.
+
 ## Testing with Clerk Test Mode
 
 Skip email verification during development:

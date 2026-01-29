@@ -10,24 +10,35 @@ Projects **always start in TEST mode**, then get promoted to LIVE when ready.
 
 ### Stripe Connect Authentication
 
-We use **platform key + `Stripe-Account` header** (not OAuth access token):
+We use **platform key + `Stripe-Account` header** for API calls:
 
 | Mode | Platform Key | Products Created In |
 |------|--------------|---------------------|
 | Test | `STRIPE_SECRET_KEY_TEST` | Connected account's TEST Stripe |
 | Live | `STRIPE_SECRET_KEY_LIVE` | Connected account's LIVE Stripe |
 
-**Why?** OAuth access tokens are locked to the mode when OAuth happened. Platform keys let us create test/live products with a single OAuth flow.
+**Two OAuth Flows Required:**
+- **Test OAuth** (first): Connect Stripe with our test client_id → enables test product creation
+- **Live OAuth** (on promote): Connect Stripe with our live client_id → enables live product creation
+
+The `stripeUserId` (acct_xxx) is the same for both, but Stripe Connect requires separate authorization per environment.
 
 ### Dev Flow
 
 ```
-1. Connect Stripe (one OAuth) → we store stripeUserId (acct_xxx)
+1. Connect Stripe (TEST OAuth) → store stripeUserId + test token
 2. Create project → defaults to TEST → creates TEST Stripe products
-3. Test on localhost with pk_test_/sk_test_ keys
-4. Click "Promote to Live" → creates LIVE Stripe products + pk_live_/sk_live_ keys
-5. Deploy to production with LIVE keys
+3. Test on localhost with pk_test_/sk_test_ keys (no time limit!)
+4. Click "Promote to Live" → triggers LIVE OAuth if needed
+5. Live OAuth completes → creates LIVE Stripe products + pk_live_/sk_live_ keys
+6. TEST DATA IS DELETED (clean slate for production)
+7. Deploy to production with LIVE keys
 ```
+
+**On Promote:**
+- Test project data is deleted (api_keys, tiers, end_users, usage_counts)
+- Fresh live project is created
+- Dashboard shows warning: live keys only work on deployed domains
 
 ### Required Secrets (oauth-api)
 
@@ -41,6 +52,15 @@ STRIPE_SECRET_KEY_LIVE   # sk_live_xxx - for creating live products
 
 The SDK auto-detects localhost and uses TEST Clerk keys.
 
+**CRITICAL: Live keys don't work on localhost!**
+```
+pk_test_xxx + localhost    → Works ✓
+pk_live_xxx + localhost    → BLOCKED by Clerk ✗
+pk_live_xxx + deployed URL → Works ✓
+```
+
+This is a Clerk security feature - production keys only work on production domains.
+
 **Flow:**
 - `localhost:*` → SDK uses TEST Clerk keys → sign-up.workers.dev → api-multi verifies with TEST keys
 - Production domain → SDK uses LIVE Clerk keys → signup.users.panacea-tech.net → api-multi verifies with LIVE keys
@@ -48,6 +68,12 @@ The SDK auto-detects localhost and uses TEST Clerk keys.
 **Required secrets:**
 - `sign-up` worker: `CLERK_SECRET_KEY_TEST`, `CLERK_PUBLISHABLE_KEY_TEST`
 - `api-multi`: `CLERK_SECRET_KEY_TEST`, `CLERK_PUBLISHABLE_KEY_TEST`
+
+**Developer workflow:**
+1. Develop locally with `pk_test_xxx` keys
+2. Test checkout with Stripe test cards (`4242 4242 4242 4242`)
+3. Deploy to Vercel (Next.js) or CF Pages (React/Vite) with `pk_live_xxx` keys
+4. Test real checkout on deployed site
 
 See `DEPLOY.md` for full setup.
 
@@ -61,8 +87,11 @@ See `DEPLOY.md` for full setup.
 
 ## Recently Completed
 
-- [x] **Stripe Connect: platform key + Stripe-Account header** (single OAuth for test/live)
-- [x] **Products default to TEST mode** (promote to LIVE when ready)
+- [x] **Two-part OAuth flow**: Test OAuth first, Live OAuth on promote (fix: mode was missing from D1 save)
+- [x] **Delete test data on promote**: Clean slate for production (api_keys, tiers, end_users deleted)
+- [x] **Live mode warning banner**: Dashboard shows prominent warning when live project selected
+- [x] **Stripe Connect: platform key + Stripe-Account header** for API calls
+- [x] **Products default to TEST mode** (promote to LIVE when ready, no time limit)
 - [x] Localhost auto-detection for TEST/LIVE Clerk keys
 - [x] api-multi supports TEST Clerk key verification
 - [x] sign-up worker auto-detects workers.dev vs custom domain
@@ -110,6 +139,7 @@ await api.dashboard.get();
 
 | Doc | Purpose |
 |-----|---------|
+| `docs/OAUTH-FLOW.md` | **Stripe OAuth + Test/Live flow** (start here for OAuth debugging) |
 | `docs/SDK-GUIDE.md` | Complete SDK reference |
 | `docs/API-REFERENCE.md` | Endpoints and data types |
 | `docs/ARCHITECTURE.md` | Technical details |

@@ -138,6 +138,36 @@ export default function Dashboard() {
     }
   }, [showTotals, projects, getSecretKey, loadLiveTotals]);
 
+  // Check for newly promoted project (coming from promote flow)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('promoted') === 'true') {
+      const newKeysJson = sessionStorage.getItem('newLiveKeys');
+      if (newKeysJson) {
+        sessionStorage.removeItem('newLiveKeys');
+        const newKeys = JSON.parse(newKeysJson);
+        // Show the key modal with the new live keys
+        setKeyModal({
+          show: true,
+          secretKey: newKeys.secretKey,
+          mode: 'live',
+        });
+        // Show success toast - the warning banner will show automatically
+        showToast('Project promoted to LIVE! Test data has been cleaned up.', 'success');
+        // Reload projects to show the new live project
+        loadProjects().then(list => {
+          // Select the new live project
+          const liveProject = list.find((p: { publishableKey: string }) => p.publishableKey === newKeys.publishableKey);
+          if (liveProject) {
+            setSelectedPk(liveProject.publishableKey);
+          }
+        });
+      }
+      // Clean up URL
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, [loadProjects, showToast]);
+
   // --------------------------------------------------------------------------
   // HANDLERS
   // --------------------------------------------------------------------------
@@ -303,6 +333,23 @@ export default function Dashboard() {
           onRefresh={handleRefresh}
           onDeleteClick={() => setShowDeleteConfirm(true)}
         />
+
+        {/* Live Mode Warning Banner - Shows when live project selected */}
+        {selectedProject?.mode === 'live' && !showTotals && (
+          <div className="bg-amber-900/30 border border-amber-600 rounded-lg p-4 mb-6 flex items-start gap-3">
+            <span className="text-amber-400 text-xl flex-shrink-0">⚠️</span>
+            <div>
+              <p className="font-semibold text-amber-200">LIVE MODE - Deployed Domains Only</p>
+              <p className="text-sm text-amber-300/80 mt-1">
+                Live keys (<code className="bg-amber-900/50 px-1 rounded">pk_live_</code> / <code className="bg-amber-900/50 px-1 rounded">sk_live_</code>) only work on deployed sites (Vercel, CF Pages, Netlify, etc.).
+                They will NOT work on localhost due to Clerk security restrictions.
+              </p>
+              <p className="text-sm text-amber-300/60 mt-2">
+                Need to test locally? Create a new TEST project - test mode has no time limits.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation */}
         {showDeleteConfirm && selectedProject && (

@@ -13,6 +13,7 @@ Complete reference for the `dream-api-ssot` D1 database.
 | `platforms` | Developer accounts + billing | `platformId` |
 | `api_keys` | Project credentials (test/live) | `publishableKey` |
 | `tiers` | Subscription tiers or products | `(publishableKey, name)` |
+| `stripe_tokens` | Stripe Connect OAuth tokens | `(platformId, mode)` |
 | `subscriptions` | End-user subscriptions | `(platformId, publishableKey, userId)` |
 | `usage_counts` | Monthly usage tracking | `(platformId, userId)` |
 | `end_users` | Users per project | `(platformId, publishableKey, clerkUserId)` |
@@ -41,9 +42,44 @@ CREATE TABLE platforms (
 
 **Notes:**
 - `stripeCustomerId` is for OUR billing (dev pays us $19/mo)
-- NOT the same as Stripe Connect account ID (stored in KV)
+- NOT the same as Stripe Connect account ID (stored in stripe_tokens)
 - `subscriptionStatus` updated by Stripe webhooks
 - `trialEndsAt` set when subscription starts (14-day trial)
+
+---
+
+## stripe_tokens
+
+Stripe Connect OAuth tokens for test and live modes.
+
+```sql
+CREATE TABLE stripe_tokens (
+  platformId TEXT NOT NULL,              -- Owner platform
+  mode TEXT NOT NULL DEFAULT 'live',     -- 'test' or 'live'
+  stripeUserId TEXT NOT NULL,            -- Connected account ID (acct_xxx)
+  accessToken TEXT NOT NULL,             -- OAuth access token
+  refreshToken TEXT,                     -- For token refresh (if provided)
+  scope TEXT,                            -- OAuth scope granted
+  createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (platformId, mode),
+  FOREIGN KEY (platformId) REFERENCES platforms(platformId)
+);
+```
+
+**Used by:** oauth-api
+
+**Notes:**
+- **CRITICAL**: Test and live tokens are SEPARATE (different OAuth flows)
+- `stripeUserId` (acct_xxx) is the connected Stripe account ID
+- Same stripeUserId for both modes, but tokens come from different OAuth flows
+- We use platform keys + `Stripe-Account` header for API calls, not the accessToken
+- Token stored in D1 as source of truth, KV for fast lookups
+
+**Why two OAuth flows?**
+- Test OAuth uses our test client_id → creates test Stripe products
+- Live OAuth uses our live client_id → creates live Stripe products
+- Stripe Connect requires separate authorization for each environment
 
 ---
 
@@ -320,7 +356,7 @@ Columns added after initial schema (safe `ALTER TABLE ADD COLUMN`):
 | Worker | Tables Used |
 |--------|-------------|
 | front-auth-api | platforms, api_keys, events |
-| oauth-api | platforms, api_keys, tiers |
+| oauth-api | platforms, api_keys, tiers, stripe_tokens |
 | api-multi | tiers, subscriptions, usage_counts, end_users, events |
 | sign-up | end_users, usage_counts (creates initial records) |
 | admin-dashboard | platforms, end_users (read-only) |

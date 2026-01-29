@@ -428,7 +428,63 @@ export async function handlePromoteToLive(
     await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken:live`, stripeDataJson);
     await env.CUSTOMER_TOKENS_KV.put(`platform:${platformId}:stripeToken`, stripeDataJson);
 
-    console.log(`[Promote] Successfully promoted to live for platform ${platformId}`);
+    console.log(`[Promote] Successfully created live project for platform ${platformId}`);
+
+    // =========================================================================
+    // DELETE TEST DATA - Clean slate for production
+    // Test served its purpose, now we remove it to keep things simple
+    // =========================================================================
+
+    console.log(`[Promote] Cleaning up test data for ${testPublishableKey}`);
+
+    // Get test key hash for KV cleanup
+    const testKeyRow = await env.DB.prepare(
+      `SELECT secretKeyHash FROM api_keys WHERE publishableKey = ?`
+    ).bind(testPublishableKey).first<{ secretKeyHash: string }>();
+    const testSecretKeyHash = testKeyRow?.secretKeyHash;
+
+    // D1: Delete test api_keys row
+    await env.DB.prepare(
+      `DELETE FROM api_keys WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).run();
+
+    // D1: Delete test tiers
+    await env.DB.prepare(
+      `DELETE FROM tiers WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).run();
+
+    // D1: Delete test subscriptions, usage_counts, events, end_users (if any)
+    await env.DB.prepare(
+      `DELETE FROM subscriptions WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).run().catch(() => {});
+    await env.DB.prepare(
+      `DELETE FROM usage_counts WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).run().catch(() => {});
+    await env.DB.prepare(
+      `DELETE FROM events WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).run().catch(() => {});
+    await env.DB.prepare(
+      `DELETE FROM end_users WHERE publishableKey = ? AND platformId = ?`
+    ).bind(testPublishableKey, platformId).run().catch(() => {});
+
+    // KV: Clean up test key lookups
+    await env.PLATFORM_TOKENS_KV.delete(`user:${userId}:publishableKey:test`).catch(() => {});
+    await env.PLATFORM_TOKENS_KV.delete(`user:${userId}:secretKey:test`).catch(() => {});
+    await env.PLATFORM_TOKENS_KV.delete(`user:${userId}:products:test`).catch(() => {});
+    await env.PLATFORM_TOKENS_KV.delete(`publishablekey:${testPublishableKey}:platformId`).catch(() => {});
+    if (testSecretKeyHash) {
+      await env.PLATFORM_TOKENS_KV.delete(`secretkey:${testSecretKeyHash}:publishableKey`).catch(() => {});
+    }
+    await env.PLATFORM_TOKENS_KV.delete(`pk:${testPublishableKey}:secretKey`).catch(() => {});
+
+    // CUSTOMER_TOKENS_KV: Clean up test tier config
+    await env.CUSTOMER_TOKENS_KV.delete(`platform:${platformId}:tierConfig:test`).catch(() => {});
+    await env.CUSTOMER_TOKENS_KV.delete(`publishablekey:${testPublishableKey}:platformId`).catch(() => {});
+    if (testSecretKeyHash) {
+      await env.CUSTOMER_TOKENS_KV.delete(`secretkey:${testSecretKeyHash}:publishableKey`).catch(() => {});
+    }
+
+    console.log(`[Promote] Test data cleaned up. Project is now LIVE only.`);
 
     // =========================================================================
     // RETURN LIVE CREDENTIALS
@@ -443,7 +499,8 @@ export async function handlePromoteToLive(
         mode: 'live',
         projectType,
         projectName,
-        linkedTestKey: testPublishableKey,  // Which test project this came from
+        testDataDeleted: true,
+        warning: 'IMPORTANT: Live keys (pk_live_/sk_live_) only work on deployed domains, NOT localhost. Use your deployed URL (Vercel, CF Pages, etc.) for testing live mode.',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

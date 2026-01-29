@@ -600,8 +600,21 @@ export default function ApiTierConfig() {
       throw new Error(errorData.message || errorData.error || 'Failed to promote');
     }
 
+    // Parse success response to get keys and warning
+    const data = await response.json().catch(() => ({}));
+
+    // Store the new keys and warning in sessionStorage so dashboard can show them
+    if (data.publishableKey && data.secretKey) {
+      sessionStorage.setItem('newLiveKeys', JSON.stringify({
+        publishableKey: data.publishableKey,
+        secretKey: data.secretKey,
+        projectName: data.projectName,
+        warning: data.warning,
+      }));
+    }
+
     // Navigate back to dashboard - keys are shown in KeyModal there
-    navigate('/dashboard');
+    navigate('/dashboard?promoted=true');
   };
 
   if (loadingTiers) {

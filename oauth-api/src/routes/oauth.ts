@@ -286,7 +286,8 @@ export async function handleCallback(
       tokenData.stripe_user_id,
       tokenData.access_token,
       tokenData.refresh_token,
-      tokenData.scope
+      tokenData.scope,
+      mode  // CRITICAL: Pass mode so test and live tokens are stored separately in D1
     );
 
     // KV: Store for fast lookup by both userId and platformId

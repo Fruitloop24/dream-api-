@@ -29,13 +29,16 @@ import { ensureStripeTokenSchema } from './schema';
 /**
  * Save Stripe Connect credentials to D1
  *
+ * IMPORTANT: We store separate tokens for TEST and LIVE modes.
+ * This requires two OAuth flows (one with test key, one with live key).
+ *
  * @param env - Worker environment
  * @param platformId - Developer's platform ID
  * @param stripeUserId - Connected account ID (acct_xxx)
  * @param accessToken - OAuth access token for API calls
  * @param refreshToken - Token for refreshing access (if provided)
  * @param scope - OAuth scope granted
- * @param mode - 'test' or 'live' (defaults to live)
+ * @param mode - 'test' or 'live' - CRITICAL: determines which Stripe environment
  */
 export async function saveStripeToken(
   env: Env,
@@ -49,9 +52,16 @@ export async function saveStripeToken(
   // Ensure schema has mode column
   await ensureStripeTokenSchema(env);
 
-  // Insert or update token
+  // Delete existing token for this (platformId, mode) combination
+  // This ensures test and live tokens don't overwrite each other
+  // even if the table's primary key is just platformId
   await env.DB.prepare(`
-    INSERT OR REPLACE INTO stripe_tokens (
+    DELETE FROM stripe_tokens WHERE platformId = ? AND mode = ?
+  `).bind(platformId, mode).run();
+
+  // Insert the new token
+  await env.DB.prepare(`
+    INSERT INTO stripe_tokens (
       platformId,
       stripeUserId,
       accessToken,
@@ -70,7 +80,7 @@ export async function saveStripeToken(
     )
     .run();
 
-  console.log(`[Stripe] Saved token for platform ${platformId} (${mode} mode)`);
+  console.log(`[Stripe] Saved ${mode.toUpperCase()} token for platform ${platformId}`);
 }
 
 /**
