@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/Fruitloop24/dream-saas-basic/main/public/dream-logo.svg" alt="Dream API" width="120" />
 </p>
 
-<h1 align="center">Dream SaaS Template</h1>
+<h1 align="center">test-saas-react</h1>
 
 <p align="center">
   <strong>Stop building auth. Stop configuring Stripe. Start shipping.</strong>
