@@ -23,15 +23,21 @@ npm install @dream-api/sdk
 import { DreamAPI } from '@dream-api/sdk';
 const api = new DreamAPI({ publishableKey: 'pk_xxx' });
 
-## CRITICAL: Sign-Up vs Sign-In (READ THIS!)
-// Sign-Up MUST use getSignUpUrl() - routes through our worker to set user metadata
+## CRITICAL: Sign-Up vs Sign-In
+// Sign-Up MUST use getSignUpUrl() - sets user metadata (plan, publishableKey)
 <a href={api.auth.getSignUpUrl({ redirect: '/dashboard' })}>Sign Up</a>
 
-// Sign-In can use getSignInUrl() directly
+// Sign-In for returning users
 <a href={api.auth.getSignInUrl({ redirect: '/dashboard' })}>Sign In</a>
 
-// WHY: New users need metadata (publishableKey, plan) set by our worker.
-// If you bypass this, users won't have a plan and API calls fail.
+// Account settings (profile, password, security)
+<a href={api.auth.getCustomerPortalUrl({ returnUrl: '/dashboard' })}>Account</a>
+
+// Billing portal (payment methods, invoices, cancel)
+<button onClick={async () => {
+  const { url } = await api.billing.openPortal({ returnUrl: '/dashboard' });
+  window.location.href = url;
+}}>Manage Billing</button>
 
 ## CRITICAL: After Checkout - Reload Page
 // Stripe webhook takes 1-3s to update user's plan. On success, reload:
@@ -42,21 +48,58 @@ useEffect(() => {
   }
 }, []);
 
+## Minimal Complete Example
+function App() {
+  const [isReady, setIsReady] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    api.auth.init().then(() => {
+      setUser(api.auth.getUser());
+      setIsReady(true);
+    });
+  }, []);
+
+  if (!isReady) return <p>Loading...</p>;
+  if (!user) return (
+    <a href={api.auth.getSignUpUrl({ redirect: '/dashboard' })}>Get Started</a>
+  );
+
+  return (
+    <div>
+      <p>Plan: {user.plan}</p>
+      <button onClick={() => api.usage.track()}>Use Feature</button>
+      <button onClick={() => api.auth.signOut()}>Sign Out</button>
+    </div>
+  );
+}
+
+## Upgrade Flow
+const handleUpgrade = async () => {
+  const { url } = await api.billing.createCheckout({
+    tier: 'pro',
+    successUrl: window.location.origin + '/dashboard?success=true',
+    cancelUrl: window.location.origin + '/pricing',
+  });
+  window.location.href = url;
+};
+
 ## SaaS Methods
-api.auth.init()                                    // Call once on load, client-side only
-api.auth.getSignUpUrl({ redirect: '/dashboard' })  // URL for NEW users (sets metadata)
-api.auth.getSignInUrl({ redirect: '/dashboard' })  // URL for RETURNING users
-api.auth.isSignedIn()                              // boolean
-api.auth.getUser()                                 // { id, email, plan } or null
-api.auth.signOut()                                 // Signs out user
-api.usage.track()                                  // { success, usage: { usageCount, limit, remaining } }
-api.usage.check()                                  // Read usage without incrementing
+api.auth.init()                                      // Call once on load, client-side only
+api.auth.getSignUpUrl({ redirect: '/dashboard' })    // URL for NEW users
+api.auth.getSignInUrl({ redirect: '/dashboard' })    // URL for RETURNING users
+api.auth.getCustomerPortalUrl({ returnUrl: '/' })    // Account settings
+api.auth.isSignedIn()                                // boolean
+api.auth.getUser()                                   // { id, email, plan } or null
+api.auth.signOut()                                   // Signs out user
+api.usage.track()                                    // { success, usage: { usageCount, limit, remaining } }
+api.usage.check()                                    // Read usage without incrementing
 api.billing.createCheckout({ tier, successUrl, cancelUrl })  // { url }
-api.billing.openPortal()                           // { url } for billing management
-api.products.listTiers()                           // { tiers } for pricing page
+api.billing.openPortal({ returnUrl })                // { url } for billing management
+api.products.listTiers()                             // { tiers } for pricing page
 
 ## Store Methods
-api.products.list()                                // { products } with price, imageUrl, soldOut
+api.products.list()                                  // { products } with price, imageUrl, soldOut
 api.products.cartCheckout({ items, successUrl, cancelUrl })  // { url }, items = [{ priceId, quantity }]
 
 ## Environment Variables
@@ -65,41 +108,18 @@ NEXT_PUBLIC_DREAM_PUBLISHABLE_KEY=pk_xxx   (Next.js)
 
 ## Key Rules
 - Publishable key is safe for frontend (like Stripe)
-- auth.init() is CLIENT-SIDE ONLY - call in useEffect/onMounted
+- auth.init() is CLIENT-SIDE ONLY - call in useEffect
 - For Next.js: use 'use client' directive on auth components
 - features is an ARRAY - use .map() not .split()
-- price is in CENTS - divide by 100 for display: \${(price / 100).toFixed(2)}
-- Dashboard controls everything - prices, limits, features update automatically
+- price is in CENTS - divide by 100: \${(price / 100).toFixed(2)}
+- Dashboard controls everything - change there, app updates automatically
 
-## React Pattern
-const [isReady, setIsReady] = useState(false);
-useEffect(() => { api.auth.init().then(() => setIsReady(true)); }, []);
-if (!isReady) return <Loading />;
-
-## Next.js Pattern
-'use client';
-// Same as React, but MUST have 'use client' directive
-
-## Starter Templates (GitHub)
-Clone, cd into folder, open in AI editor, run /setup:
-- SaaS (React): github.com/Fruitloop24/dream-saas-basic
-- SaaS (Next.js): github.com/Fruitloop24/dream-saas-next
-- Store (React): github.com/Fruitloop24/dream-store-basic
-- Store (Next.js): github.com/Fruitloop24/dream-store-next
-- Membership (React): github.com/Fruitloop24/dream-membership-basic
-- Membership (Next.js): github.com/Fruitloop24/dream-membership-next
-
-## Quick Start with Templates
+## Starter Templates
 git clone https://github.com/Fruitloop24/dream-saas-basic
-cd dream-saas-basic
-npm install
-# Open folder in AI editor (Claude Code, Cursor, Windsurf)
-# Run: /setup
+cd dream-saas-basic && npm install
+# Open in AI editor, run: /setup
 
-## AI Commands Location
-Templates include pre-built slash commands in .claude/commands/ folder:
-- .claude/commands/setup.md - Interactive setup wizard
-- .claude/commands/pwa.md - Add PWA support (React templates only)
+Templates: dream-saas-basic, dream-saas-next, dream-store-basic, dream-store-next
 
 Help me build my app using this SDK.`;
 
@@ -322,7 +342,7 @@ const { url } = await api.billing.createCheckout({
 window.location.href = url;
 
 // Open billing portal
-const { url } = await api.billing.openPortal();
+const { url } = await api.billing.openPortal({ returnUrl: '/dashboard' });
 window.location.href = url;`}</CodeBlock>
 
         <TemplateLink
@@ -621,9 +641,9 @@ const api = new DreamAPI({
 await api.auth.init();
 
 // Get auth URLs
-api.auth.getSignUpUrl({ redirect: '/dashboard' })  // → URL string
-api.auth.getSignInUrl({ redirect: '/dashboard' })  // → URL string
-api.auth.getCustomerPortalUrl()                    // → URL string (account settings)
+api.auth.getSignUpUrl({ redirect: '/dashboard' })         // → URL string (NEW users)
+api.auth.getSignInUrl({ redirect: '/dashboard' })         // → URL string (returning users)
+api.auth.getCustomerPortalUrl({ returnUrl: '/dashboard' }) // → URL string (account settings)
 
 // Check auth state
 api.auth.isSignedIn()  // → boolean
