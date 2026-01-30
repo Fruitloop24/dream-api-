@@ -92,12 +92,13 @@ Developers always start in TEST mode:
 ## Key Architecture Decisions
 
 1. **Two Clerk instances** - Test (dev) and Live (prod) for clean separation
-2. **Two OAuth flows** - Stripe Connect requires separate auth per environment
-3. **Platform keys + Stripe-Account header** - Single pattern for test/live API calls
-4. **PK/SK split** - Same model as Stripe, devs understand it
-5. **Plan in JWT** - Can't be spoofed, set by webhooks only
-6. **Delete test data on promote** - Clean production slate
-7. **Templates are free** - Onboarding tool, not the product
+2. **Mode from pk prefix** - SDK and sign-up worker detect test/live from pk_test_/pk_live_
+3. **All auth through sign-up worker** - Ensures correct Clerk key selection for cross-domain auth
+4. **Platform keys + Stripe-Account header** - Single pattern for test/live API calls
+5. **PK/SK split** - Same model as Stripe, devs understand it
+6. **Plan in JWT** - Can't be spoofed, set by webhooks only
+7. **Delete test data on promote** - Clean production slate
+8. **Templates are free** - Onboarding tool, not the product
 
 ---
 

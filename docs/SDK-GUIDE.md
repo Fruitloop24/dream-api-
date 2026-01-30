@@ -6,16 +6,18 @@ The authoritative reference for integrating Dream API into your application.
 
 ## Principles
 
-### 1. Sign-Up Through Us, Everything Else Through Clerk
+### 1. All Auth Through Sign-Up Worker
 
-New users **must** sign up through the Dream API sign-up worker. This sets required metadata (publishableKey, plan) on their account. After initial signup, all auth flows use Clerk's hosted URLs directly.
+All auth flows route through the sign-up worker for consistent Clerk key selection. The worker reads the pk prefix and loads the matching Clerk instance (TEST or LIVE).
 
 ```
-New User:     api.auth.getSignUpUrl()  →  sign-up worker  →  Clerk hosted signup
-Returning:    api.auth.getSignInUrl()  →  Clerk hosted sign-in (direct)
-Account:      api.auth.getCustomerPortalUrl()  →  Clerk account page (direct)
-Billing:      api.billing.openPortal()  →  Stripe billing portal
+SignUp:   api.auth.getSignUpUrl()         →  sign-up worker /signup
+SignIn:   api.auth.getSignInUrl()         →  sign-up worker /signin
+Account:  api.auth.getCustomerPortalUrl() →  sign-up worker /account
+Billing:  api.billing.openPortal()        →  Stripe billing portal
 ```
+
+**Why?** The SDK loads Clerk via CDN. The Clerk key must match the mode (pk_test_ = TEST Clerk, pk_live_ = LIVE Clerk). Routing through the worker ensures correct key selection.
 
 ### 2. PK/SK Security Model
 
@@ -126,23 +128,27 @@ if (api.auth.isSignedIn()) {
 
 ### Auth URLs
 
-**Sign Up (new users)** - Routes through sign-up worker to set metadata:
+All auth URLs route through the sign-up worker for consistent Clerk key selection.
+
+**Sign Up (new users):**
 ```typescript
 const url = api.auth.getSignUpUrl({ redirect: '/dashboard' });
-// Redirect user to this URL
+// → /signup?pk=pk_test_xxx&redirect=/dashboard
 ```
 
-**Note:** The SDK consumes the `__clerk_ticket` synchronously before `isReady` becomes true, so both `/dashboard` and `/choose-plan` work as redirect destinations. See `docs/SIGN-UP-FLOW.md` for details.
-
-**Sign In (returning users)** - Direct to Clerk hosted page:
+**Sign In (returning users):**
 ```typescript
 const url = api.auth.getSignInUrl({ redirect: '/dashboard' });
+// → /signin?pk=pk_test_xxx&redirect=/dashboard
 ```
 
-**Account Management** - Clerk's account portal (profile, password, security):
+**Account Management (profile, password, security):**
 ```typescript
-const url = api.auth.getCustomerPortalUrl();
+const url = api.auth.getCustomerPortalUrl({ returnUrl: '/dashboard' });
+// → /account?pk=pk_test_xxx&redirect=/dashboard
 ```
+
+**Note:** The SDK consumes the `__clerk_ticket` synchronously before `isReady` becomes true. See `docs/SIGN-UP-FLOW.md` for details.
 
 **Billing Management** - Stripe's billing portal (payment methods, invoices):
 ```typescript
@@ -638,21 +644,18 @@ useEffect(() => {
 
 ## Critical Notes (READ THIS FIRST)
 
-### 1. Sign-Up vs Sign-In - They Are Different!
+### 1. All Auth Goes Through Sign-Up Worker
 
-**Sign-Up** MUST go through `getSignUpUrl()` - this routes through our worker that sets user metadata (publishableKey, plan). Without this, the user won't have a plan and nothing works.
+**Sign-Up** sets user metadata (publishableKey, plan). Without this, the user won't have a plan.
 
-**Sign-In** can use `getSignInUrl()` directly - just goes to Clerk.
+**Sign-In** and **Account** also go through the worker to ensure correct Clerk key selection (TEST vs LIVE based on pk prefix).
 
 ```typescript
-// NEW USER - Must use sign-up worker
 <a href={api.auth.getSignUpUrl({ redirect: '/dashboard' })}>Sign Up</a>
-
-// RETURNING USER - Direct to Clerk
 <a href={api.auth.getSignInUrl({ redirect: '/dashboard' })}>Sign In</a>
 ```
 
-**Why this matters:** If you send a new user directly to Clerk sign-up (bypassing our worker), they'll create an account but have no `plan` in their JWT. Every API call will fail.
+**Why all auth routes through our worker:** The SDK loads Clerk via CDN. The Clerk key must match the mode (pk_test_ = TEST Clerk, pk_live_ = LIVE Clerk). If mismatched, cross-domain auth breaks.
 
 ### 2. After Checkout - Plan Doesn't Update Immediately
 
@@ -738,6 +741,7 @@ tier.features.map(f => <li key={f}>{f}</li>)
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | "User token required" | JWT not set | Call `api.auth.init()` or `api.setUserToken()` |
+| "Invalid key" on deployed site | Env var has trailing `\n` | Re-add env var without newline (Vercel gotcha) |
 | Empty products/tiers | Wrong project type | SaaS has tiers, Store has products |
 | Price shows $1999 | Not dividing by 100 | Prices are in cents - divide by 100 |
 | `features.split()` fails | Features is array | Don't call split, iterate directly |

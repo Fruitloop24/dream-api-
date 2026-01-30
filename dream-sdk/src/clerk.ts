@@ -7,22 +7,17 @@
  * Auto-detects localhost vs production and uses appropriate keys.
  */
 
-// Detect if running on localhost (for development)
-function isLocalhost(): boolean {
-  if (typeof window === 'undefined') return false;
-  const hostname = window.location.hostname;
-  return hostname === 'localhost' || hostname === '127.0.0.1';
-}
-
 // End-user-api Clerk keys (shared across all devs)
-// Dev: composed-blowfish-76.clerk.accounts.dev (works on localhost)
-// Live: users.panacea-tech.net (works on real domains)
-const CLERK_DEV_KEY = 'pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
+// Test: composed-blowfish-76.clerk.accounts.dev (for pk_test_ keys)
+// Live: users.panacea-tech.net (for pk_live_ keys)
+const CLERK_TEST_KEY = 'pk_test_Y29tcG9zZWQtYmxvd2Zpc2gtNzYuY2xlcmsuYWNjb3VudHMuZGV2JA';
 const CLERK_LIVE_KEY = 'pk_live_Y2xlcmsudXNlcnMucGFuYWNlYS10ZWNoLm5ldCQ';
 
-// Auto-select key based on environment
-function getClerkKey(): string {
-  return isLocalhost() ? CLERK_DEV_KEY : CLERK_LIVE_KEY;
+// Select Clerk key based on Dream API publishable key mode
+// pk_test_xxx → test Clerk (test users, test payments)
+// pk_live_xxx → live Clerk (real users, real payments)
+function getClerkKey(mode: 'test' | 'live'): string {
+  return mode === 'test' ? CLERK_TEST_KEY : CLERK_LIVE_KEY;
 }
 
 // Pin to specific version to avoid breaking changes from Clerk updates
@@ -71,8 +66,10 @@ export class ClerkManager {
   private loaded = false;
   private token: string | null = null;
   private onTokenChange?: (token: string | null) => void;
+  private mode: 'test' | 'live';
 
-  constructor(onTokenChange?: (token: string | null) => void) {
+  constructor(mode: 'test' | 'live', onTokenChange?: (token: string | null) => void) {
+    this.mode = mode;
     this.onTokenChange = onTokenChange;
   }
 
@@ -81,6 +78,26 @@ export class ClerkManager {
    */
   async load(): Promise<void> {
     if (this.loaded || typeof window === 'undefined') return;
+
+    // Check for JWT from sign-up worker (passed directly, no Clerk needed)
+    const urlParams = new URLSearchParams(window.location.search);
+    const jwt = urlParams.get('__clerk_jwt');
+
+    if (jwt) {
+      console.log('[DreamAPI] JWT received from sign-up worker');
+      this.token = jwt;
+      this.onTokenChange?.(jwt);
+
+      // Clean URL
+      urlParams.delete('__clerk_jwt');
+      const newUrl = urlParams.toString()
+        ? `${window.location.pathname}?${urlParams}`
+        : window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+
+      this.loaded = true;
+      return;
+    }
 
     // Check if already loaded
     const existingClerk = getClerk();
@@ -96,7 +113,7 @@ export class ClerkManager {
       script.src = CLERK_CDN_URL;
       script.async = true;
       script.crossOrigin = 'anonymous';
-      script.setAttribute('data-clerk-publishable-key', getClerkKey());
+      script.setAttribute('data-clerk-publishable-key', getClerkKey(this.mode));
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('Failed to load Clerk SDK'));
       document.head.appendChild(script);
@@ -205,6 +222,9 @@ export class ClerkManager {
    * Check if user is signed in
    */
   isSignedIn(): boolean {
+    // If we have a JWT (from sign-up worker), user is signed in
+    if (this.token) return true;
+    // Otherwise check Clerk
     const clerk = getClerk();
     return !!clerk?.user && !!clerk?.session;
   }
@@ -213,6 +233,26 @@ export class ClerkManager {
    * Get current user info
    */
   getUser(): ClerkUser | null {
+    // If we have a JWT (from sign-up worker), decode it to get user info
+    if (this.token) {
+      try {
+        // JWT is base64url encoded: header.payload.signature
+        const parts = this.token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          return {
+            id: payload.sub || '',
+            email: payload.email || '',
+            plan: payload.plan || payload.publicMetadata?.plan || 'free',
+            publishableKey: payload.publishableKey || payload.publicMetadata?.publishableKey || '',
+          };
+        }
+      } catch (e) {
+        console.error('[DreamAPI] Failed to decode JWT:', e);
+      }
+    }
+
+    // Otherwise get from Clerk
     const clerk = getClerk();
     if (!clerk?.user) return null;
 

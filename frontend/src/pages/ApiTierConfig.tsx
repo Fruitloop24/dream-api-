@@ -457,7 +457,7 @@ export default function ApiTierConfig() {
         });
       }
 
-      await fetch(`${OAUTH_API}/tiers`, {
+      const res = await fetch(`${OAUTH_API}/tiers`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -472,6 +472,12 @@ export default function ApiTierConfig() {
           updates,
         }),
       });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(`Failed to update tier ${tier.name}:`, err);
+        throw new Error(`Failed to update tier ${tier.name}: ${err}`);
+      }
+      console.log(`Updated tier ${tier.name}:`, await res.clone().json());
     }
 
     // Add new tiers

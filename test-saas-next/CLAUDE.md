@@ -56,6 +56,8 @@ npx vercel --prod
 Then in Vercel Dashboard → Settings → Environment Variables:
 - `NEXT_PUBLIC_DREAM_PUBLISHABLE_KEY` = `pk_live_xxx`
 
+**IMPORTANT:** When pasting the key, ensure NO trailing newline (`\n`) gets added. A corrupted key like `pk_live_xxx\n` causes "invalid key" errors. Verify with `npx vercel env pull .env.production.local --environment=production`.
+
 The test flow mirrors live exactly - if it works in test, it works in live.
 
 ## Testing with Clerk Test Mode

@@ -1,51 +1,115 @@
 # Sign-Up Flow
 
-How end-users sign up for developer apps using Dream API.
+How end-users authenticate with developer apps using Dream API.
 
 ## Overview
 
+All auth flows route through the sign-up worker for consistent Clerk key selection.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ DEV'S APP                           SIGN-UP WORKER                      │
+│ SDK                                 SIGN-UP WORKER                      │
 │                                                                         │
-│ 1. User clicks "Get Started"                                            │
-│         │                                                               │
-│         ▼                                                               │
-│ 2. getSignUpUrl({ redirect: '/choose-plan' })                          │
-│         │                                                               │
-│         └──────────────────────► 3. /signup?pk=xxx&redirect=xxx        │
-│                                         │                               │
-│                                         ▼                               │
-│                                  4. Clerk hosted signup                 │
-│                                    (email or OAuth)                     │
-│                                         │                               │
-│                                         ▼                               │
-│                                  5. POST /oauth/complete                │
-│                                    - Set publicMetadata                 │
-│                                    - Sync to D1                         │
-│                                    - Create sign-in token               │
-│                                         │                               │
-│ 6. /choose-plan?__clerk_ticket=xxx  ◄───┘                              │
-│         │                                                               │
-│         ▼                                                               │
-│ 7. SDK consumes ticket (clerk.client.signIn)                           │
-│         │                                                               │
-│         ▼                                                               │
-│ 8. User is signed in with plan='free'                                  │
-│         │                                                               │
-│         ▼                                                               │
-│ 9. Auto-checkout or plan selection                                     │
-│         │                                                               │
-│         ▼                                                               │
-│ 10. Dashboard (paid member)                                            │
+│ getSignUpUrl()  ────────────────►  /signup?pk=xxx&redirect=url         │
+│ getSignInUrl()  ────────────────►  /signin?pk=xxx&redirect=url         │
+│ getCustomerPortalUrl() ─────────►  /account?pk=xxx&redirect=url        │
+│                                           │                             │
+│                                           ▼                             │
+│                                    Worker reads pk prefix              │
+│                                    pk_test_ → TEST Clerk               │
+│                                    pk_live_ → LIVE Clerk               │
+│                                           │                             │
+│                                           ▼                             │
+│                                    Embedded Clerk component            │
+│                                           │                             │
+│                                           ▼                             │
+│                                    Redirect with __clerk_ticket        │
+│ SDK consumes ticket  ◄──────────────────────                           │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## The Critical Fix (clerk.client.signIn)
+## Why All Auth Goes Through Sign-Up Worker
 
-The `__clerk_ticket` mechanism requires using the correct Clerk API path:
+**Problem:** The SDK loads Clerk via CDN. Clerk's key must match the mode (test/live) of the Dream API publishable key, or cross-domain auth breaks.
 
-```javascript
+**Solution:** All auth URLs go through the sign-up worker, which reads the pk prefix and loads the matching Clerk instance:
+
+```typescript
+// sign-up/src/index.ts
+function getClerkKeys(pk: string | null, env: Env) {
+  const isTestKey = pk?.startsWith('pk_test_');
+
+  if (isTestKey && env.CLERK_PUBLISHABLE_KEY_TEST) {
+    return {
+      publishableKey: env.CLERK_PUBLISHABLE_KEY_TEST,  // Test Clerk
+      secretKey: env.CLERK_SECRET_KEY_TEST,
+    };
+  }
+
+  return {
+    publishableKey: env.CLERK_PUBLISHABLE_KEY,  // Live Clerk
+    secretKey: env.CLERK_SECRET_KEY,
+  };
+}
+```
+
+## Sign-Up Worker Routes
+
+| Route | Purpose | Clerk Component |
+|-------|---------|-----------------|
+| `/signup?pk=xxx&redirect=url` | New user registration | SignUp |
+| `/signin?pk=xxx&redirect=url` | Returning user login | SignIn |
+| `/account?pk=xxx&redirect=url` | Account settings | UserProfile |
+| `/oauth/complete` | Set metadata after auth | (API endpoint) |
+
+## Sign-Up Flow Detail
+
+```
+1. User clicks "Get Started"
+2. Dev's app redirects to sign-up worker:
+   /signup?pk=pk_test_xxx&redirect=/dashboard
+
+3. Worker validates PK exists in D1
+4. Worker sets cookie: {pk, redirect}
+5. Worker serves HTML with embedded Clerk SignUp component
+   (Using TEST or LIVE Clerk based on pk prefix)
+
+6. User completes sign-up (email or OAuth)
+
+7. Page calls POST /oauth/complete with:
+   - userId (from Clerk session)
+   - publishableKey (from cookie)
+
+8. Worker sets publicMetadata: {publishableKey, plan: 'free'}
+9. Worker syncs to D1 (end_users + usage_counts)
+10. Worker creates sign-in token via Clerk API
+11. Worker redirects to dev's app with __clerk_ticket
+
+12. SDK detects ticket, consumes it:
+    clerk.client.signIn.create({ strategy: 'ticket', ticket })
+
+13. User is signed in with plan='free'
+```
+
+## SDK Integration
+
+```typescript
+// All auth URLs go through sign-up worker now
+const signupUrl = api.auth.getSignUpUrl({ redirect: '/dashboard' });
+const signinUrl = api.auth.getSignInUrl({ redirect: '/dashboard' });
+const accountUrl = api.auth.getCustomerPortalUrl({ returnUrl: '/dashboard' });
+
+// SDK builds URLs like:
+// https://sign-up.../signup?pk=pk_test_xxx&redirect=/dashboard
+// https://sign-up.../signin?pk=pk_test_xxx&redirect=/dashboard
+// https://sign-up.../account?pk=pk_test_xxx&redirect=/dashboard
+```
+
+## Ticket Consumption (Critical Fix)
+
+When Clerk is loaded via CDN, the signIn object is at `clerk.client.signIn`:
+
+```typescript
 // WRONG - clerk.signIn doesn't exist on CDN-loaded Clerk!
 clerk.signIn.create({ strategy: 'ticket', ticket })
 
@@ -53,136 +117,42 @@ clerk.signIn.create({ strategy: 'ticket', ticket })
 clerk.client.signIn.create({ strategy: 'ticket', ticket })
 ```
 
-This is the key insight that makes cross-domain sign-in work.
+The SDK handles this automatically in `dream-sdk/src/clerk.ts`.
 
-## Sign-Up Worker Routes
-
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/signup?pk=xxx&redirect=url` | GET | Show Clerk signup form |
-| `/` | GET | Handle Clerk callback (OAuth/email verification) |
-| `/oauth/complete` | POST | Set metadata, create sign-in token |
-
-### Worker Flow Detail
-
-1. **Initial Request**: Dev app redirects to `/signup?pk=xxx&redirect=/choose-plan`
-2. **Cookie Set**: Worker stores `{pk, redirect}` in cookie (survives OAuth redirect)
-3. **Clerk Signup**: User signs up via embedded Clerk component
-4. **Callback**: Clerk redirects back to worker (same domain = session exists)
-5. **Complete**: Worker detects signed-in user, calls `/oauth/complete`
-6. **Redirect**: Worker redirects to dev app with `__clerk_ticket` param
-
-### What Gets Set
+## What Gets Set
 
 **Clerk publicMetadata:**
 ```json
-{
-  "publishableKey": "pk_test_xxx",
-  "plan": "free"
-}
+{ "publishableKey": "pk_test_xxx", "plan": "free" }
 ```
 
 **D1 Tables:**
 - `end_users`: clerkUserId, email, publishableKey, platformId
 - `usage_counts`: initial record with usageCount=0
 
-## SDK Ticket Consumption
+## Clerk Test Credentials
 
-The SDK (`dream-sdk/src/clerk.ts`) automatically handles ticket consumption:
+Skip email verification during development:
 
-```typescript
-// SDK detects ticket in URL
-const ticket = new URLSearchParams(window.location.search).get('__clerk_ticket');
-
-if (ticket) {
-  // Use clerk.client.signIn (NOT clerk.signIn!)
-  const signInObj = clerk.client?.signIn;
-
-  if (signInObj && clerk.setActive) {
-    const result = await signInObj.create({ strategy: 'ticket', ticket });
-
-    if (result.status === 'complete' && result.createdSessionId) {
-      await clerk.setActive({ session: result.createdSessionId });
-      // User is now signed in!
-    }
-  }
-}
-```
-
-## Debug Console Output
-
-Successful flow shows:
-```
-[SignUp] Clerk loaded, user: user_xxx          ← Worker detected signed-in user
-[SignUp] Response: {success: true, signInToken: xxx}  ← Token created
-[SignUp] Redirecting to: http://localhost:5173/choose-plan?__clerk_ticket=xxx
-
-[DreamAPI] URL: http://localhost:5173/choose-plan?__clerk_ticket=xxx
-[DreamAPI] Ticket present: YES
-[DreamAPI] signIn available: false client.signIn: true setActive: true
-[DreamAPI] Consuming ticket...
-[DreamAPI] Ticket result: complete sess_xxx
-[DreamAPI] Session activated!
-[DreamAPI] User hydrated: true
-```
+| Type | Value |
+|------|-------|
+| Test Email | `anything+clerk_test@example.com` |
+| Verification Code | `424242` |
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `client.signIn: false` | Clerk not fully initialized | Increase wait time in SDK |
-| `Ticket present: NO` | Worker didn't add token | Check /oauth/complete response |
-| `Ticket error: expired` | Token TTL is 5 minutes | User took too long, retry |
-| `Ticket error: already used` | Token is single-use | Don't refresh page with ticket |
-| `404 on /` | Worker not handling callback | Check signup cookie exists |
-| Redirected to landing | Ticket not consumed (rare) | SDK handles this - check console logs |
-
-## Template Redirect Pattern
-
-Both `/dashboard` and `/choose-plan` work because the SDK consumes the ticket synchronously in `clerk.load()` before `isReady` becomes true.
-
-```typescript
-// ✓ Works - SDK consumes ticket before isReady=true
-dreamAPI.auth.getSignUpUrl({ redirect: '/dashboard' })
-
-// ✓ Also works - has extra ticket-wait safety code
-dreamAPI.auth.getSignUpUrl({ redirect: '/choose-plan' })
-```
-
-**Recommended by template type:**
-- **SaaS**: `/choose-plan` if user picks tier, `/dashboard` if auto-checkout
-- **Store**: `/` (guest checkout, no auth needed)
-- **Membership**: `/dashboard` (auto-checkout to single tier)
-
-## Clerk Test Credentials
-
-For automated testing without captcha:
-- **Email**: `anything+clerk_test@example.com`
-- **Verification code**: `424242`
+| `client.signIn: false` | Clerk not fully initialized | SDK handles retries |
+| `Ticket present: NO` | Worker didn't add token | Check /oauth/complete logs |
+| `Ticket error: expired` | Token TTL is 5 minutes | User took too long |
+| `Ticket error: already used` | Token is single-use | Don't refresh with ticket |
+| Live key on localhost | Clerk blocks live keys on localhost | Use test key for local dev |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `sign-up/src/index.ts` | Sign-up worker |
-| `dream-sdk/src/clerk.ts` | SDK Clerk manager with ticket consumption |
-| `templates/*/ChoosePlanPage.tsx` | Handles post-signup redirect |
-
-## Deploy Commands
-
-```bash
-# Deploy sign-up worker
-cd sign-up && npx wrangler deploy
-
-# Publish SDK (after changes)
-cd dream-sdk
-npm version patch --no-git-tag-version
-npm run build
-npm publish --access public
-
-# Update app to use new SDK
-cd your-app
-rm -rf node_modules/.vite  # Clear Vite cache!
-npm install @dream-api/sdk@latest
-npm run dev
-```
+| `sign-up/src/index.ts` | Sign-up worker (signup, signin, account routes) |
+| `dream-sdk/src/clerk.ts` | ClerkManager with mode-based key selection |
+| `dream-sdk/src/auth.ts` | AuthHelpers with URL builders |

@@ -11,29 +11,27 @@ export const CONFIG = {
   // -------------------------------------------------------------------------
   // BRAND
   // -------------------------------------------------------------------------
-  appName: 'My SaaS',
-  tagline: 'Your tagline here',
+  appName: 'MangaVault',
+  tagline: 'Unlimited manga, one subscription',
 
   // Logo: place file in public/ folder, or set to null for text-only
-  logo: null as string | null, // e.g., '/logo.png'
+  logo: null as string | null,
 
   // Theme: 'light' (professional, clean) or 'dark' (modern, bold)
-  theme: 'light' as 'light' | 'dark',
+  theme: 'dark' as 'light' | 'dark',
 
   // Primary accent color
-  // Options: 'emerald', 'sky', 'violet', 'rose', 'amber', 'zinc'
-  accentColor: 'emerald',
+  accentColor: 'rose',
 
   // -------------------------------------------------------------------------
   // HERO SECTION
   // -------------------------------------------------------------------------
   hero: {
-    headline: 'Build something amazing',
-    subheadline: 'A brief description of what your product does and why customers will love it.',
-    cta: 'Get Started',
-    ctaSubtext: 'Free to start',
-    // Hero image: place in public/, or null for no image
-    image: null as string | null, // e.g., '/hero-mockup.png'
+    headline: '10,000+ manga titles. Zero limits.',
+    subheadline: 'Read the latest chapters from Shonen Jump, seinen classics, and indie creators. New releases every day. Cancel anytime.',
+    cta: 'Start Reading',
+    ctaSubtext: '$1/month • Unlimited access',
+    image: null as string | null,
   },
 
   // -------------------------------------------------------------------------
@@ -41,8 +39,7 @@ export const CONFIG = {
   // -------------------------------------------------------------------------
   socialProof: {
     enabled: false,
-    headline: 'Trusted by teams at',
-    // Add logo images to public/logos/ folder
+    headline: 'Featured publishers',
     logos: [] as Array<{ name: string; src: string }>,
   },
 
@@ -50,26 +47,26 @@ export const CONFIG = {
   // HOW IT WORKS (3 steps)
   // -------------------------------------------------------------------------
   howItWorks: {
-    headline: 'How It Works',
-    subheadline: 'Get started in minutes',
+    headline: 'Start Reading in Seconds',
+    subheadline: 'No complicated setup',
     steps: [
       {
         number: '1',
-        title: 'Sign Up',
-        description: 'Create your free account in seconds.',
-        icon: 'user',
+        title: 'Subscribe',
+        description: 'One click, $1/month. Access everything instantly.',
+        icon: 'check',
       },
       {
         number: '2',
-        title: 'Configure',
-        description: 'Set up your preferences and get started.',
-        icon: 'settings',
+        title: 'Browse',
+        description: 'Explore our massive library by genre, popularity, or new releases.',
+        icon: 'globe',
       },
       {
         number: '3',
-        title: 'Launch',
-        description: 'Start using the platform immediately.',
-        icon: 'rocket',
+        title: 'Read',
+        description: 'Enjoy on any device. Download for offline reading.',
+        icon: 'lightning',
       },
     ],
   },
@@ -78,37 +75,37 @@ export const CONFIG = {
   // FEATURES
   // -------------------------------------------------------------------------
   features: {
-    headline: 'Everything You Need',
-    subheadline: 'Powerful features to help you succeed',
+    headline: 'Why MangaVault?',
+    subheadline: 'Built for true manga fans',
     items: [
       {
-        title: 'Easy to Use',
-        description: 'Intuitive interface that anyone can master quickly.',
-        icon: 'check',
+        title: 'Simulpub Releases',
+        description: 'Read new chapters the same day they drop in Japan.',
+        icon: 'rocket',
       },
       {
-        title: 'Secure',
-        description: 'Enterprise-grade security to protect your data.',
+        title: 'Offline Mode',
+        description: 'Download chapters and read anywhere, anytime.',
         icon: 'shield',
       },
       {
-        title: 'Fast',
-        description: 'Lightning-fast performance you can count on.',
-        icon: 'lightning',
+        title: 'No Ads Ever',
+        description: 'Pure, uninterrupted reading experience.',
+        icon: 'check',
       },
       {
-        title: 'Analytics',
-        description: 'Detailed insights to track your progress.',
+        title: 'HD Quality',
+        description: 'Crystal clear pages on any screen size.',
         icon: 'chart',
       },
       {
-        title: 'Support',
-        description: 'Friendly support team ready to help.',
+        title: 'Reading Lists',
+        description: 'Track your progress across every series.',
         icon: 'user',
       },
       {
-        title: 'Integrations',
-        description: 'Connect with your favorite tools.',
+        title: 'Multi-device Sync',
+        description: 'Pick up where you left off on any device.',
         icon: 'globe',
       },
     ],
@@ -118,31 +115,31 @@ export const CONFIG = {
   // PRICING SECTION (tiers come from API)
   // -------------------------------------------------------------------------
   pricing: {
-    headline: 'Simple Pricing',
-    subheadline: 'Start free, upgrade when you need more',
+    headline: 'Simple, Fair Pricing',
+    subheadline: 'Less than a coffee. Unlimited manga.',
   },
 
   // -------------------------------------------------------------------------
   // FAQ
   // -------------------------------------------------------------------------
   faq: {
-    headline: 'Frequently Asked Questions',
+    headline: 'Questions?',
     items: [
       {
-        question: 'How do I get started?',
-        answer: 'Simply sign up for a free account and follow our quick setup guide. You\'ll be up and running in minutes.',
+        question: 'What manga is available?',
+        answer: 'We have over 10,000 titles including popular series from Shonen Jump, seinen classics, shojo favorites, and indie creators. New series added weekly.',
+      },
+      {
+        question: 'Can I read offline?',
+        answer: 'Yes! Download any chapter to read offline. Perfect for commutes or travel.',
+      },
+      {
+        question: 'How often are new chapters released?',
+        answer: 'Popular series get simulpub releases (same day as Japan). Other series update weekly or as new volumes are published.',
       },
       {
         question: 'Can I cancel anytime?',
-        answer: 'Yes, you can cancel your subscription at any time. No long-term contracts or hidden fees.',
-      },
-      {
-        question: 'Is my data secure?',
-        answer: 'Absolutely. We use industry-standard encryption and security practices to keep your data safe.',
-      },
-      {
-        question: 'Do you offer support?',
-        answer: 'Yes, we offer support via email for all plans, with priority support for paid plans.',
+        answer: 'Absolutely. Cancel with one click, no questions asked. Your access continues until the end of your billing period.',
       },
     ],
   },
@@ -151,16 +148,19 @@ export const CONFIG = {
   // FINAL CTA
   // -------------------------------------------------------------------------
   finalCta: {
-    headline: 'Ready to get started?',
-    subheadline: 'Join thousands of happy customers today.',
-    cta: 'Start Free Trial',
+    headline: 'Ready to dive in?',
+    subheadline: 'Join 50,000+ manga readers. Start your unlimited reading today.',
+    cta: 'Get Unlimited Access',
   },
 
   // -------------------------------------------------------------------------
   // FOOTER
   // -------------------------------------------------------------------------
   footer: {
-    links: [] as Array<{ label: string; href: string }>,
+    links: [
+      { label: 'Privacy', href: '/privacy' },
+      { label: 'Terms', href: '/terms' },
+    ],
   },
 };
 

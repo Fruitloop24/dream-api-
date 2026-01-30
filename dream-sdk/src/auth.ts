@@ -25,7 +25,11 @@ export class AuthHelpers {
 
   constructor(client: DreamClient) {
     this.client = client;
-    this.clerk = new ClerkManager((token) => {
+    // Detect mode from publishable key prefix
+    const pk = client.getPublishableKey();
+    const mode: 'test' | 'live' = pk?.startsWith('pk_test_') ? 'test' : 'live';
+
+    this.clerk = new ClerkManager(mode, (token) => {
       // Auto-set token on client when Clerk session changes
       if (token) {
         this.client.setUserToken(token);
@@ -126,8 +130,8 @@ export class AuthHelpers {
   /**
    * Get the sign-in URL for returning users.
    *
-   * Redirects to Clerk's hosted sign-in page. After sign-in,
-   * users are redirected to your specified URL.
+   * Redirects to our auth worker which embeds Clerk. After sign-in,
+   * users are redirected to your specified URL with JWT.
    *
    * @example
    * ```typescript
@@ -136,27 +140,48 @@ export class AuthHelpers {
    * ```
    */
   getSignInUrl(options: AuthUrlOptions): string {
-    const clerkBaseUrl = this.client.getClerkBaseUrl();
-    return `${clerkBaseUrl}/sign-in?redirect_url=${encodeURIComponent(options.redirect)}`;
+    const pk = this.client.getPublishableKey();
+    if (!pk) {
+      throw new Error('DreamAPI: publishableKey required for auth URLs');
+    }
+
+    const baseUrl = this.client.getSignupBaseUrl();
+    const params = new URLSearchParams({
+      pk,
+      redirect: options.redirect,
+    });
+
+    return `${baseUrl}/signin?${params.toString()}`;
   }
 
   /**
    * Get the customer portal URL for account management.
    *
-   * Redirects to Clerk's hosted account page where users can
-   * manage their profile, password, and security settings.
+   * Redirects to our auth worker which embeds Clerk's UserProfile.
+   * Users can manage their profile, password, and security settings.
    *
    * Note: This is separate from billing management.
    * For billing, use api.billing.openPortal().
    *
    * @example
    * ```typescript
-   * const portalUrl = api.auth.getCustomerPortalUrl();
+   * const portalUrl = api.auth.getCustomerPortalUrl({ returnUrl: '/dashboard' });
    * window.location.href = portalUrl;
    * ```
    */
-  getCustomerPortalUrl(): string {
-    const clerkBaseUrl = this.client.getClerkBaseUrl();
-    return `${clerkBaseUrl}/user`;
+  getCustomerPortalUrl(options?: { returnUrl?: string }): string {
+    const pk = this.client.getPublishableKey();
+    if (!pk) {
+      throw new Error('DreamAPI: publishableKey required for auth URLs');
+    }
+
+    const baseUrl = this.client.getSignupBaseUrl();
+    const returnUrl = options?.returnUrl || (typeof window !== 'undefined' ? window.location.href : '/');
+    const params = new URLSearchParams({
+      pk,
+      redirect: returnUrl,
+    });
+
+    return `${baseUrl}/account?${params.toString()}`;
   }
 }

@@ -1,36 +1,36 @@
 /**
  * SIGN-UP WORKER
  *
- * ONE JOB: Sign up new users
- *
  * Flow:
- * 1. /signup?pk=xxx&redirect=xxx → show Clerk signup form
- * 2. User signs up → Clerk redirects back to /signup
- * 3. Page loads, user is signed in (same domain!)
+ * 1. /signup?pk=xxx&redirect=xxx → serve page with embedded Clerk signup
+ * 2. User signs up on OUR page (Clerk SDK embedded)
+ * 3. After signup, page calls /oauth/complete
  * 4. Set metadata, create sign-in token
  * 5. Redirect to dev app with __clerk_ticket
- * 6. Dev app SDK consumes ticket → done
  *
- * AUTO-DETECTS: workers.dev = test mode, custom domain = live mode
+ * IMPORTANT: For live keys, this worker MUST be accessed via signup.users.panacea-tech.net
+ * (subdomain of users.panacea-tech.net) so Clerk allows SDK loading.
+ *
+ * AUTO-DETECTS: pk_test_xxx = TEST Clerk, pk_live_xxx = LIVE Clerk
  */
 
 export interface Env {
-	// Live keys (custom domain: signup.users.panacea-tech.net)
+	// Live Clerk keys (for pk_live_xxx)
 	CLERK_PUBLISHABLE_KEY: string;
 	CLERK_SECRET_KEY: string;
-	// Test keys (workers.dev domain) - optional, falls back to live
+	// Test Clerk keys (for pk_test_xxx) - optional, falls back to live
 	CLERK_PUBLISHABLE_KEY_TEST?: string;
 	CLERK_SECRET_KEY_TEST?: string;
 	DB: D1Database;
 	KV: KVNamespace;
 }
 
-// Helper to get the right Clerk keys based on domain
-function getClerkKeys(request: Request, env: Env): { publishableKey: string; secretKey: string } {
-	const hostname = new URL(request.url).hostname;
-	const isWorkersDev = hostname.endsWith('.workers.dev');
+// Helper to get the right Clerk keys based on publishable key prefix
+// pk_test_xxx → TEST Clerk, pk_live_xxx → LIVE Clerk
+function getClerkKeys(pk: string | null, env: Env): { publishableKey: string; secretKey: string } {
+	const isTestKey = pk?.startsWith('pk_test_');
 
-	if (isWorkersDev && env.CLERK_PUBLISHABLE_KEY_TEST && env.CLERK_SECRET_KEY_TEST) {
+	if (isTestKey && env.CLERK_PUBLISHABLE_KEY_TEST && env.CLERK_SECRET_KEY_TEST) {
 		return {
 			publishableKey: env.CLERK_PUBLISHABLE_KEY_TEST,
 			secretKey: env.CLERK_SECRET_KEY_TEST,
@@ -64,9 +64,6 @@ export default {
 		const url = new URL(request.url);
 		const path = url.pathname;
 
-		// Auto-detect test vs live mode based on domain
-		const clerkKeys = getClerkKeys(request, env);
-
 		if (request.method === 'OPTIONS') {
 			return new Response(null, { headers: corsHeaders });
 		}
@@ -80,13 +77,17 @@ export default {
 		const cookies = parseCookies(request.headers.get('Cookie'));
 		const hasSignupCookie = !!cookies['signup_data'];
 
-		if ((path === '/signup' || (path === '/' && (hasClerkParams || hasSignupCookie))) && request.method === 'GET') {
+		// Handle /signup, /signin, /account, or / with Clerk callback params
+		const isAuthRoute = path === '/signup' || path === '/signin' || path === '/account' || (path === '/' && (hasClerkParams || hasSignupCookie));
+
+		if (isAuthRoute && request.method === 'GET') {
+			const isSignIn = path === '/signin';
+			const isAccount = path === '/account';
 			let pk = url.searchParams.get('pk');
 			let redirect = url.searchParams.get('redirect');
 
 			// Try to get from cookie if not in URL (Clerk callback case)
 			if (!pk || !redirect) {
-				const cookies = parseCookies(request.headers.get('Cookie'));
 				if (cookies['signup_data']) {
 					try {
 						const data = JSON.parse(atob(cookies['signup_data']));
@@ -110,10 +111,19 @@ export default {
 				return new Response('Invalid publishableKey - not found', { status: 400 });
 			}
 
+			// Get Clerk keys based on pk prefix (pk_test_ = test Clerk, pk_live_ = live Clerk)
+			const clerkKeys = getClerkKeys(pk, env);
+
 			// Set cookie to persist pk/redirect through Clerk redirects
 			const cookieData = btoa(JSON.stringify({ pk, redirect }));
 
-			return new Response(getSignupPageHTML(pk, redirect, clerkKeys.publishableKey), {
+			const html = isAccount
+				? getAccountPageHTML(pk, redirect, clerkKeys.publishableKey)
+				: isSignIn
+					? getSigninPageHTML(pk, redirect, clerkKeys.publishableKey)
+					: getSignupPageHTML(pk, redirect, clerkKeys.publishableKey);
+
+			return new Response(html, {
 				headers: {
 					'Content-Type': 'text/html',
 					'Set-Cookie': `signup_data=${cookieData}; Path=/; Max-Age=600; SameSite=Lax; Secure`,
@@ -129,6 +139,9 @@ export default {
 				if (!body.userId || !body.publishableKey) {
 					return jsonResponse({ error: 'Missing userId or publishableKey' }, 400);
 				}
+
+				// Get Clerk keys based on pk prefix
+				const clerkKeys = getClerkKeys(body.publishableKey, env);
 
 				// Get user from Clerk
 				const checkResponse = await fetch(`https://api.clerk.com/v1/users/${body.userId}`, {
@@ -229,6 +242,213 @@ function jsonResponse(data: any, status = 200) {
 	});
 }
 
+function getAccountPageHTML(pk: string, redirect: string, clerkPk: string): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #status {
+      color: white;
+      text-align: center;
+      background: rgba(255,255,255,0.1);
+      padding: 40px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #account-box { display: none; }
+    .back-link {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: white;
+      text-decoration: none;
+      background: rgba(255,255,255,0.2);
+      padding: 10px 20px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+    }
+    .back-link:hover { background: rgba(255,255,255,0.3); }
+  </style>
+</head>
+<body>
+  <a href="${redirect}" class="back-link">← Back to App</a>
+  <div id="status"><div class="spinner"></div><p>Loading...</p></div>
+  <div id="account-box"></div>
+
+  <script>
+    const PK = '${pk}';
+    const REDIRECT = '${redirect}';
+
+    async function init() {
+      // Load Clerk
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      script.setAttribute('data-clerk-publishable-key', '${clerkPk}');
+      document.head.appendChild(script);
+
+      while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
+      await window.Clerk.load();
+
+      // Wait for user to be available
+      for (let i = 0; i < 30; i++) {
+        if (window.Clerk.user) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      console.log('[Account] Clerk loaded, user:', window.Clerk.user?.id || 'none');
+
+      // If not signed in, redirect to sign-in
+      if (!window.Clerk.user) {
+        window.location.href = '/signin?pk=' + PK + '&redirect=' + encodeURIComponent(window.location.href);
+        return;
+      }
+
+      // Show account management
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('account-box').style.display = 'block';
+
+      window.Clerk.mountUserProfile(document.getElementById('account-box'), {
+        appearance: {
+          elements: {
+            rootBox: { width: '100%', maxWidth: '800px' },
+            card: { boxShadow: '0 20px 60px rgba(0,0,0,0.3)', borderRadius: '16px' },
+          },
+        },
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>`;
+}
+
+function getSigninPageHTML(pk: string, redirect: string, clerkPk: string): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #status {
+      color: white;
+      text-align: center;
+      background: rgba(255,255,255,0.1);
+      padding: 40px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #signin-box { display: none; }
+  </style>
+</head>
+<body>
+  <div id="status"><div class="spinner"></div><p>Loading...</p></div>
+  <div id="signin-box"></div>
+
+  <script>
+    const PK = '${pk}';
+    const REDIRECT = '${redirect}';
+
+    async function init() {
+      // Load Clerk
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      script.setAttribute('data-clerk-publishable-key', '${clerkPk}');
+      document.head.appendChild(script);
+
+      while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
+      await window.Clerk.load();
+
+      // Wait for user to be available
+      for (let i = 0; i < 30; i++) {
+        if (window.Clerk.user) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      console.log('[SignIn] Clerk loaded, user:', window.Clerk.user?.id || 'none');
+
+      // If user is signed in → get JWT and redirect
+      if (window.Clerk.user) {
+        document.getElementById('status').innerHTML = '<div class="spinner"></div><h2>Signing you in...</h2><p>Please wait...</p>';
+
+        // Get JWT from session
+        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
+        console.log('[SignIn] Got JWT:', jwt ? 'yes (' + jwt.length + ' chars)' : 'no');
+
+        // Redirect with JWT
+        let finalUrl = REDIRECT;
+        if (jwt) {
+          const url = new URL(REDIRECT, window.location.origin);
+          url.searchParams.set('__clerk_jwt', jwt);
+          finalUrl = url.toString();
+        }
+        console.log('[SignIn] Redirecting to:', finalUrl);
+        window.location.href = finalUrl;
+        return;
+      }
+
+      // No user → show signin form
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('signin-box').style.display = 'block';
+
+      window.Clerk.mountSignIn(document.getElementById('signin-box'), {
+        appearance: {
+          elements: {
+            rootBox: { width: '100%', maxWidth: '400px' },
+            card: { boxShadow: '0 20px 60px rgba(0,0,0,0.3)', borderRadius: '16px' },
+          },
+        },
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>`;
+}
+
 function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): string {
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -297,6 +517,11 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
       if (window.Clerk.user) {
         document.getElementById('status').innerHTML = '<div class="spinner"></div><h2>Setting up your account...</h2><p>Please wait...</p>';
 
+        // Get the actual JWT from Clerk session (user is signed in on OUR domain)
+        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
+        console.log('[SignUp] Got JWT:', jwt ? 'yes (' + jwt.length + ' chars)' : 'no');
+
+        // Call /oauth/complete to set metadata
         const res = await fetch('/oauth/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -305,28 +530,20 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
         const data = await res.json();
         console.log('[SignUp] Response:', data);
 
-        // Debug: Store in localStorage so we can check after redirect
-        const debug = {
-          timestamp: new Date().toISOString(),
-          userId: window.Clerk.user.id,
-          hasToken: !!data.signInToken,
-          tokenLength: data.signInToken ? data.signInToken.length : 0,
-          redirect: REDIRECT,
-          error: data.error || null
-        };
-        localStorage.setItem('dream_signup_debug', JSON.stringify(debug));
+        if (data.error) {
+          console.error('[SignUp] Error:', data.error);
+        }
 
-        // Redirect with token
+        // Redirect with JWT (not ticket) - dev's app can use this directly
         let finalUrl = REDIRECT;
-        if (data.signInToken) {
-          const url = new URL(REDIRECT);
-          url.searchParams.set('__clerk_ticket', data.signInToken);
+        if (jwt) {
+          const url = new URL(REDIRECT, window.location.origin);
+          url.searchParams.set('__clerk_jwt', jwt);
           finalUrl = url.toString();
         } else {
-          console.error('[SignUp] NO TOKEN! Response was:', data);
+          console.error('[SignUp] NO JWT!');
         }
         console.log('[SignUp] Redirecting to:', finalUrl);
-        localStorage.setItem('dream_signup_redirect', finalUrl);
         window.location.href = finalUrl;
         return;
       }

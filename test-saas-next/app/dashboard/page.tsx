@@ -33,11 +33,19 @@ function DashboardContent() {
   const theme = getThemeClasses();
   const plan = user?.plan || 'free';
 
-  // Redirect if no user
+  // Only redirect if definitely no user after giving auth time to load
   useEffect(() => {
-    if (isReady && !user) {
-      router.push('/');
-    }
+    // Give auth 5 seconds to load before redirecting
+    const timer = setTimeout(() => {
+      if (isReady && !user) {
+        router.push('/');
+      }
+    }, 5000);
+
+    // If user loads, clear the timer
+    if (user) clearTimeout(timer);
+
+    return () => clearTimeout(timer);
   }, [isReady, user, router]);
 
   const fetchUsage = useCallback(async () => {
@@ -82,17 +90,15 @@ function DashboardContent() {
     }
   };
 
-  // Handle success redirect from Stripe - reload to get fresh data
+  // Handle success from Stripe - just show message and refresh data
   useEffect(() => {
     const success = searchParams.get('success');
     if (success === 'true' && !successHandled.current) {
       successHandled.current = true;
-      setMessage('Upgrade successful!');
+      setMessage('Payment successful! Loading your plan...');
 
-      // Wait for webhook to process, then reload to get fresh data
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 2000);
+      // Clean URL immediately
+      window.history.replaceState({}, '', '/dashboard');
     }
   }, [searchParams]);
 

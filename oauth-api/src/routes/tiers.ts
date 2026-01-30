@@ -61,23 +61,31 @@ async function getPlatformId(userId: string, env: Env): Promise<string | null> {
 /**
  * Helper: Get Stripe credentials for a platform
  * Needed to create/archive products on their Stripe account
+ *
+ * IMPORTANT: This now requires mode parameter to ensure we get the correct
+ * authorization for the requested mode (test vs live).
  */
 async function getStripeCredentials(
   platformId: string,
-  env: Env
+  env: Env,
+  mode: 'test' | 'live' = 'test'
 ): Promise<{ accessToken: string; stripeUserId: string } | null> {
-  // D1 is source of truth for Stripe tokens
+  // D1 is source of truth for Stripe tokens - filter by mode
   const row = await env.DB.prepare(
-    'SELECT accessToken, stripeUserId FROM stripe_tokens WHERE platformId = ? ORDER BY createdAt DESC LIMIT 1'
+    'SELECT accessToken, stripeUserId FROM stripe_tokens WHERE platformId = ? AND mode = ? LIMIT 1'
   )
-    .bind(platformId)
+    .bind(platformId, mode)
     .first<{ accessToken: string; stripeUserId: string }>();
 
   if (row) return row;
 
-  // Fallback to KV cache
-  const json = await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+  // Fallback to KV cache with mode suffix
+  const json = await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken:${mode}`);
   if (json) return JSON.parse(json);
+
+  // Legacy fallback - generic token (for backwards compat during migration)
+  const legacyJson = await env.PLATFORM_TOKENS_KV.get(`platform:${platformId}:stripeToken`);
+  if (legacyJson) return JSON.parse(legacyJson);
 
   return null;
 }
@@ -182,6 +190,7 @@ export async function handleUpdateTier(
 ): Promise<Response> {
   const corsHeaders = getCorsHeaders(request, env);
 
+  try {
   const body = await request.json() as {
     userId?: string;
     tierName: string;
@@ -201,6 +210,9 @@ export async function handleUpdateTier(
 
   const { tierName, updates, mode = 'test', publishableKey } = body;
   const userId = authenticatedUserId;
+
+  console.log(`[Tiers] UPDATE request: tierName=${tierName}, mode=${mode}, pk=${publishableKey}, userId=${userId}`);
+  console.log(`[Tiers] Updates:`, JSON.stringify(updates));
 
   // Validate required fields
   if (!tierName) {
@@ -256,10 +268,14 @@ export async function handleUpdateTier(
 
     // Only create new Stripe price if price actually changed
     if (currentTier.price !== updates.price) {
-      const stripeData = await getStripeCredentials(platformId, env);
+      const stripeData = await getStripeCredentials(platformId, env, mode as 'test' | 'live');
       if (!stripeData) {
         return new Response(
-          JSON.stringify({ error: 'Stripe not connected - cannot update price' }),
+          JSON.stringify({
+            error: mode === 'live'
+              ? 'Live Stripe connection not found. Please re-connect Stripe in live mode.'
+              : 'Stripe not connected - cannot update price'
+          }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -382,9 +398,12 @@ export async function handleUpdateTier(
     values.push(publishableKey);
   }
 
-  await env.DB.prepare(
-    `UPDATE tiers SET ${setClauses.join(', ')} WHERE ${whereClause}`
-  ).bind(...values).run();
+  const updateQuery = `UPDATE tiers SET ${setClauses.join(', ')} WHERE ${whereClause}`;
+  console.log(`[Tiers] Running update query:`, updateQuery);
+  console.log(`[Tiers] With values:`, JSON.stringify(values));
+
+  const updateResult = await env.DB.prepare(updateQuery).bind(...values).run();
+  console.log(`[Tiers] Update result:`, JSON.stringify(updateResult));
 
   console.log(`[Tiers] Updated tier ${tierName} for platform ${platformId}${newPriceId ? ` (new priceId: ${newPriceId})` : ''}`);
 
@@ -397,6 +416,13 @@ export async function handleUpdateTier(
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+  } catch (error) {
+    console.error('[Tiers] UPDATE ERROR:', error);
+    return new Response(
+      JSON.stringify({ error: `Update failed: ${(error as Error).message}` }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 }
 
 /**
@@ -502,11 +528,15 @@ export async function handleAddTier(
     );
   }
 
-  // Get Stripe credentials
-  const stripeData = await getStripeCredentials(platformId, env);
+  // Get Stripe credentials for the requested mode
+  const stripeData = await getStripeCredentials(platformId, env, mode as 'test' | 'live');
   if (!stripeData) {
     return new Response(
-      JSON.stringify({ error: 'Stripe not connected' }),
+      JSON.stringify({
+        error: mode === 'live'
+          ? 'Live Stripe connection not found. Please re-connect Stripe in live mode.'
+          : 'Stripe not connected'
+      }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -723,7 +753,7 @@ export async function handleDeleteTier(
   }
 
   // Archive Stripe product (don't delete - might have existing subscriptions)
-  const stripeData = await getStripeCredentials(platformId, env);
+  const stripeData = await getStripeCredentials(platformId, env, mode as 'test' | 'live');
   if (stripeData && tier.productId) {
     try {
       const secretKey = getStripeSecretKey(env, mode as 'test' | 'live');
