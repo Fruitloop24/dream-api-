@@ -1,16 +1,14 @@
-'use client'
-
 /**
  * DASHBOARD - Protected user dashboard
  *
- * Uses shared config from lib/config.ts
+ * Uses shared config from src/config.ts
  */
 
-import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useDreamAPI } from '@/lib/useDreamAPI';
-import { getAccentClasses, getThemeClasses } from '@/lib/config';
-import Nav from '@/components/Nav';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useDreamAPI } from '../hooks/useDreamAPI';
+import { getAccentClasses, getThemeClasses } from '../config';
+import Nav from '../components/Nav';
 
 interface UsageData {
   usageCount: number;
@@ -19,51 +17,22 @@ interface UsageData {
   plan: string;
 }
 
-function DashboardContent() {
-  const { api, isReady, user, refreshUser } = useDreamAPI();
-  const router = useRouter();
+export default function Dashboard() {
+  const { api, isReady, user } = useDreamAPI();
+  const navigate = useNavigate();
 
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const successHandled = useRef(false);
-
 
   const accent = getAccentClasses();
   const theme = getThemeClasses();
-  // Use plan from usage API (always correct) over JWT (can be stale)
-  const plan = usage?.plan || user?.plan || 'free';
-
-  // ALWAYS refresh user data on dashboard load to get fresh metadata (plan!)
-  const hasRefreshed = useRef(false);
-  useEffect(() => {
-    if (isReady && user && !hasRefreshed.current) {
-      hasRefreshed.current = true;
-      console.log('[Dashboard] Refreshing user data to get fresh plan...');
-      refreshUser().then((freshUser) => {
-        console.log('[Dashboard] Fresh user plan:', freshUser?.plan);
-      });
-    }
-  }, [isReady, user, refreshUser]);
-
-  // Handle no-auth case - redirect to landing (success case handled above)
-  useEffect(() => {
-    if (!isReady) return;
-
-    const timer = setTimeout(() => {
-      if (!user && !successHandled.current) {
-        router.push('/');
-      }
-    }, 3000);
-
-    if (user) clearTimeout(timer);
-
-    return () => clearTimeout(timer);
-  }, [isReady, user, router]);
+  const plan = user?.plan || 'free';
 
   const fetchUsage = useCallback(async () => {
-    if (!isReady || !user) return;
+    if (!isReady) return;
     try {
       const data = await api.usage.check();
       setUsage({
@@ -75,7 +44,7 @@ function DashboardContent() {
     } catch (error) {
       console.error('Failed to fetch usage:', error);
     }
-  }, [api, isReady, user]);
+  }, [api, isReady]);
 
   // Demo: Track usage when button clicked
   const handleTrackUsage = async () => {
@@ -91,12 +60,11 @@ function DashboardContent() {
       } else {
         setMessage('Usage limit reached. Please upgrade.');
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
-      if (errorMessage.includes('limit')) {
+    } catch (error: any) {
+      if (error.message?.includes('limit')) {
         setMessage('Usage limit reached. Please upgrade.');
       } else {
-        setMessage(errorMessage);
+        setMessage(error.message || 'Something went wrong');
       }
     } finally {
       setLoading(false);
@@ -104,14 +72,14 @@ function DashboardContent() {
     }
   };
 
-  // Handle success redirect from Stripe - just reload to get fresh data from API
+  // Handle success redirect from Stripe - reload to get fresh data
   useEffect(() => {
     const success = searchParams.get('success');
     if (success === 'true' && !successHandled.current) {
       successHandled.current = true;
       setMessage('Upgrade successful!');
 
-      // Wait for webhook, then reload - usage API will have correct plan
+      // Wait for webhook to process, then reload to get fresh data
       setTimeout(() => {
         window.location.href = '/dashboard';
       }, 2000);
@@ -120,25 +88,10 @@ function DashboardContent() {
 
   // Initial usage fetch
   useEffect(() => {
-    if (isReady && user && !successHandled.current) {
+    if (isReady && !successHandled.current) {
       fetchUsage();
     }
-  }, [isReady, user, fetchUsage]);
-
-  // Show loading while checking auth
-  if (!isReady) {
-    return (
-      <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
-        <div className={`w-6 h-6 border-2 ${theme.progressBg} border-t-current rounded-full animate-spin ${theme.body}`}></div>
-      </div>
-    );
-  }
-
-  // Don't render if no user (redirect will happen)
-  if (!user) {
-    return null;
-  }
-
+  }, [isReady, fetchUsage]);
 
   return (
     <div className={`min-h-screen ${theme.pageBg}`}>
@@ -154,7 +107,7 @@ function DashboardContent() {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => router.push('/choose-plan')}
+              onClick={() => navigate('/choose-plan')}
               className={`px-4 py-2 text-sm font-medium rounded-lg ${theme.buttonSecondary} transition-colors`}
             >
               {plan === 'free' ? 'Upgrade' : 'Change Plan'}
@@ -255,7 +208,7 @@ function DashboardContent() {
           <div className={`${theme.cardBg} rounded-xl p-6`}>
             <h2 className={`text-xs ${theme.muted} font-medium uppercase tracking-wider mb-4`}>Demo Action</h2>
             <p className={`${theme.body} text-sm mb-4`}>
-              Replace this with your product&apos;s main action. Each click tracks usage.
+              Replace this with your product's main action. Each click tracks usage.
             </p>
             <button
               onClick={handleTrackUsage}
@@ -279,7 +232,7 @@ function DashboardContent() {
               Remove limits and unlock all features
             </p>
             <button
-              onClick={() => router.push('/choose-plan')}
+              onClick={() => navigate('/choose-plan')}
               className={`px-6 py-2.5 text-sm font-medium rounded-lg ${accent.bg} text-white ${accent.bgHover} transition-colors`}
             >
               View Plans
@@ -288,22 +241,5 @@ function DashboardContent() {
         )}
       </div>
     </div>
-  );
-}
-
-function DashboardLoading() {
-  const theme = getThemeClasses();
-  return (
-    <div className={`min-h-screen ${theme.pageBg} flex items-center justify-center`}>
-      <div className={`w-6 h-6 border-2 ${theme.progressBg} border-t-current rounded-full animate-spin ${theme.body}`}></div>
-    </div>
-  );
-}
-
-export default function Dashboard() {
-  return (
-    <Suspense fallback={<DashboardLoading />}>
-      <DashboardContent />
-    </Suspense>
   );
 }

@@ -243,6 +243,7 @@ function jsonResponse(data: any, status = 200) {
 }
 
 function getAccountPageHTML(pk: string, redirect: string, clerkPk: string): string {
+	const safeRedirect = escapeJS(redirect);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -293,19 +294,19 @@ function getAccountPageHTML(pk: string, redirect: string, clerkPk: string): stri
   </style>
 </head>
 <body>
-  <a href="${redirect}" class="back-link">← Back to App</a>
+  <a href="${safeRedirect}" class="back-link">← Back to App</a>
   <div id="status"><div class="spinner"></div><p>Loading...</p></div>
   <div id="account-box"></div>
 
   <script>
-    const PK = '${pk}';
-    const REDIRECT = '${redirect}';
+    const PK = '${escapeJS(pk)}';
+    const REDIRECT = '${safeRedirect}';
 
     async function init() {
       // Load Clerk
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
-      script.setAttribute('data-clerk-publishable-key', '${clerkPk}');
+      script.setAttribute('data-clerk-publishable-key', '${escapeJS(clerkPk)}');
       document.head.appendChild(script);
 
       while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
@@ -345,7 +346,13 @@ function getAccountPageHTML(pk: string, redirect: string, clerkPk: string): stri
 </html>`;
 }
 
+// Escape string for safe use in JavaScript string literals
+function escapeJS(str: string): string {
+	return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
 function getSigninPageHTML(pk: string, redirect: string, clerkPk: string): string {
+	const safeRedirect = escapeJS(redirect);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -388,14 +395,14 @@ function getSigninPageHTML(pk: string, redirect: string, clerkPk: string): strin
   <div id="signin-box"></div>
 
   <script>
-    const PK = '${pk}';
-    const REDIRECT = '${redirect}';
+    const PK = '${escapeJS(pk)}';
+    const REDIRECT = '${safeRedirect}';
 
     async function init() {
       // Load Clerk
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
-      script.setAttribute('data-clerk-publishable-key', '${clerkPk}');
+      script.setAttribute('data-clerk-publishable-key', '${escapeJS(clerkPk)}');
       document.head.appendChild(script);
 
       while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
@@ -413,19 +420,34 @@ function getSigninPageHTML(pk: string, redirect: string, clerkPk: string): strin
       if (window.Clerk.user) {
         document.getElementById('status').innerHTML = '<div class="spinner"></div><h2>Signing you in...</h2><p>Please wait...</p>';
 
-        // Get JWT from session
-        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
-        console.log('[SignIn] Got JWT:', jwt ? 'yes (' + jwt.length + ' chars)' : 'no');
+        // Ensure metadata is set (returning user)
+        await fetch('/oauth/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: window.Clerk.user.id, publishableKey: PK }),
+        });
 
-        // Redirect with JWT
-        let finalUrl = REDIRECT;
-        if (jwt) {
-          const url = new URL(REDIRECT, window.location.origin);
-          url.searchParams.set('__clerk_jwt', jwt);
-          finalUrl = url.toString();
+        // CRITICAL: Reload user to get fresh metadata (plan!) from Clerk server
+        await window.Clerk.user.reload();
+        console.log('[SignIn] User reloaded, plan:', window.Clerk.user.publicMetadata?.plan);
+
+        // Get JWT from Clerk session - now has fresh metadata
+        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
+        console.log('[SignIn] Got JWT:', jwt ? 'yes' : 'no');
+
+        // Redirect with JWT - REDIRECT should be absolute URL from SDK
+        // If absolute URL, use directly. If relative, build against current origin.
+        let redirectUrl;
+        if (REDIRECT.startsWith('http://') || REDIRECT.startsWith('https://')) {
+          redirectUrl = new URL(REDIRECT);
+        } else {
+          redirectUrl = new URL(REDIRECT, window.location.origin);
         }
-        console.log('[SignIn] Redirecting to:', finalUrl);
-        window.location.href = finalUrl;
+        if (jwt) {
+          redirectUrl.searchParams.set('__clerk_jwt', jwt);
+        }
+        console.log('[SignIn] Redirecting to:', redirectUrl.toString());
+        window.location.href = redirectUrl.toString();
         return;
       }
 
@@ -450,6 +472,7 @@ function getSigninPageHTML(pk: string, redirect: string, clerkPk: string): strin
 }
 
 function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): string {
+	const safeRedirect = escapeJS(redirect);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -492,14 +515,14 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
   <div id="signup-box"></div>
 
   <script>
-    const PK = '${pk}';
-    const REDIRECT = '${redirect}';
+    const PK = '${escapeJS(pk)}';
+    const REDIRECT = '${safeRedirect}';
 
     async function init() {
       // Load Clerk
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
-      script.setAttribute('data-clerk-publishable-key', '${clerkPk}');
+      script.setAttribute('data-clerk-publishable-key', '${escapeJS(clerkPk)}');
       document.head.appendChild(script);
 
       while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
@@ -517,11 +540,7 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
       if (window.Clerk.user) {
         document.getElementById('status').innerHTML = '<div class="spinner"></div><h2>Setting up your account...</h2><p>Please wait...</p>';
 
-        // Get the actual JWT from Clerk session (user is signed in on OUR domain)
-        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
-        console.log('[SignUp] Got JWT:', jwt ? 'yes (' + jwt.length + ' chars)' : 'no');
-
-        // Call /oauth/complete to set metadata
+        // Call /oauth/complete to set metadata first
         const res = await fetch('/oauth/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -534,17 +553,27 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
           console.error('[SignUp] Error:', data.error);
         }
 
-        // Redirect with JWT (not ticket) - dev's app can use this directly
-        let finalUrl = REDIRECT;
-        if (jwt) {
-          const url = new URL(REDIRECT, window.location.origin);
-          url.searchParams.set('__clerk_jwt', jwt);
-          finalUrl = url.toString();
+        // CRITICAL: Reload user to get fresh metadata from Clerk server
+        await window.Clerk.user.reload();
+        console.log('[SignUp] User reloaded, plan:', window.Clerk.user.publicMetadata?.plan);
+
+        // Get JWT from Clerk session - now has fresh metadata
+        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
+        console.log('[SignUp] Got JWT:', jwt ? 'yes' : 'no');
+
+        // Redirect with JWT - REDIRECT should be absolute URL from SDK
+        // If absolute URL, use directly. If relative, build against current origin.
+        let redirectUrl;
+        if (REDIRECT.startsWith('http://') || REDIRECT.startsWith('https://')) {
+          redirectUrl = new URL(REDIRECT);
         } else {
-          console.error('[SignUp] NO JWT!');
+          redirectUrl = new URL(REDIRECT, window.location.origin);
         }
-        console.log('[SignUp] Redirecting to:', finalUrl);
-        window.location.href = finalUrl;
+        if (jwt) {
+          redirectUrl.searchParams.set('__clerk_jwt', jwt);
+        }
+        console.log('[SignUp] Redirecting to:', redirectUrl.toString());
+        window.location.href = redirectUrl.toString();
         return;
       }
 

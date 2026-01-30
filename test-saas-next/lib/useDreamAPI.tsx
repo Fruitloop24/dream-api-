@@ -94,9 +94,15 @@ export function DreamAPIProvider({ children }: { children: ReactNode }) {
       try {
         const dreamApi = getDreamAPI();
         setApi(dreamApi);
+        console.log('[initAuth] Starting auth init...');
         await dreamApi.auth.init();
-        setIsSignedIn(dreamApi.auth.isSignedIn());
-        setUser(dreamApi.auth.getUser());
+
+        const signedIn = dreamApi.auth.isSignedIn();
+        const currentUser = dreamApi.auth.getUser();
+        console.log('[initAuth] After init - signedIn:', signedIn, 'user:', currentUser);
+
+        setIsSignedIn(signedIn);
+        setUser(currentUser);
         setIsReady(true);
       } catch (error) {
         console.error('[useDreamAPI] Failed to init auth:', error);
@@ -114,10 +120,23 @@ export function DreamAPIProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshUser = async (): Promise<ClerkUser | null> => {
-    if (!api) return null;
+    if (!api) {
+      console.log('[refreshUser] No API instance');
+      return null;
+    }
+
+    console.log('[refreshUser] isSignedIn before refresh:', api.auth.isSignedIn());
+    console.log('[refreshUser] user before refresh:', api.auth.getUser());
+
     await api.auth.refreshToken();
+    console.log('[refreshUser] refreshToken() called');
+
     const updatedUser = api.auth.getUser();
+    console.log('[refreshUser] user after refresh:', updatedUser);
+    console.log('[refreshUser] isSignedIn after refresh:', api.auth.isSignedIn());
+
     setUser(updatedUser);
+    setIsSignedIn(api.auth.isSignedIn());
     return updatedUser;
   };
 

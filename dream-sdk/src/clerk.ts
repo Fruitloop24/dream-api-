@@ -62,6 +62,9 @@ export interface ClerkUser {
   publishableKey: string;
 }
 
+// localStorage key for persisting JWT
+const STORAGE_KEY = 'dream_api_jwt';
+
 export class ClerkManager {
   private loaded = false;
   private token: string | null = null;
@@ -74,19 +77,19 @@ export class ClerkManager {
   }
 
   /**
-   * Load Clerk SDK (call once on page load)
+   * Load auth (call once on page load)
+   * Uses JWT from URL or localStorage - no Clerk needed on dev's domain
    */
   async load(): Promise<void> {
     if (this.loaded || typeof window === 'undefined') return;
 
-    // Check for JWT from sign-up worker (passed directly, no Clerk needed)
+    // 1. Check for JWT from sign-up worker redirect
     const urlParams = new URLSearchParams(window.location.search);
     const jwt = urlParams.get('__clerk_jwt');
 
     if (jwt) {
-      console.log('[DreamAPI] JWT received from sign-up worker');
-      this.token = jwt;
-      this.onTokenChange?.(jwt);
+      console.log('[DreamAPI] JWT received from auth worker');
+      this.setToken(jwt);
 
       // Clean URL
       urlParams.delete('__clerk_jwt');
@@ -99,15 +102,52 @@ export class ClerkManager {
       return;
     }
 
-    // Check if already loaded
+    // 2. Check localStorage for existing JWT
+    const storedJwt = localStorage.getItem(STORAGE_KEY);
+    if (storedJwt) {
+      // Verify JWT isn't expired (Clerk JWTs have exp claim)
+      try {
+        const payload = JSON.parse(atob(storedJwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp > now) {
+          console.log('[DreamAPI] Valid JWT from localStorage');
+          this.token = storedJwt;
+          this.onTokenChange?.(storedJwt);
+          this.loaded = true;
+          return;
+        } else {
+          console.log('[DreamAPI] Stored JWT expired, clearing');
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      } catch (e) {
+        console.log('[DreamAPI] Invalid stored JWT, clearing');
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+
+    // 3. For TEST mode only, try loading Clerk (more permissive with domains)
+    if (this.mode === 'test') {
+      try {
+        await this.loadClerkSDK();
+      } catch (e) {
+        console.log('[DreamAPI] Clerk load failed (expected in some environments)');
+      }
+    }
+
+    // 4. No JWT and no Clerk = not signed in (that's fine)
+    this.loaded = true;
+  }
+
+  /**
+   * Load Clerk SDK (test mode only, for better DX on localhost)
+   */
+  private async loadClerkSDK(): Promise<void> {
     const existingClerk = getClerk();
     if (existingClerk) {
-      this.loaded = true;
       await this.checkSession();
       return;
     }
 
-    // Load Clerk SDK dynamically
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement('script');
       script.src = CLERK_CDN_URL;
@@ -119,7 +159,7 @@ export class ClerkManager {
       document.head.appendChild(script);
     });
 
-    // Wait for Clerk to be available on window (script loaded but needs init time)
+    // Wait for Clerk to be available
     let clerk: ClerkInstance | undefined;
     for (let i = 0; i < 50; i++) {
       clerk = getClerk();
@@ -129,76 +169,18 @@ export class ClerkManager {
 
     if (clerk) {
       await clerk.load();
-
-      // Handle __clerk_ticket from sign-up redirect
-      const urlParams = new URLSearchParams(window.location.search);
-      const ticket = urlParams.get('__clerk_ticket');
-
-      console.log('[DreamAPI] URL:', window.location.href);
-      console.log('[DreamAPI] Ticket present:', ticket ? 'YES' : 'NO');
-
-      // Debug: Log to localStorage for debugging
-      const sdkDebug: Record<string, unknown> = {
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        hasTicket: !!ticket,
-        ticketLength: ticket ? ticket.length : 0,
-        signupDebug: localStorage.getItem('dream_signup_debug'),
-        signupRedirect: localStorage.getItem('dream_signup_redirect')
-      };
-      localStorage.setItem('dream_sdk_debug', JSON.stringify(sdkDebug));
-
-      // Wait for signIn to be available (Clerk might still be initializing)
-      // Try both clerk.signIn and clerk.client.signIn (Clerk versions differ)
-      if (ticket) {
-        for (let i = 0; i < 50; i++) {
-          const hasSignIn = clerk.signIn || clerk.client?.signIn;
-          if (hasSignIn && clerk.setActive) break;
-          await new Promise(r => setTimeout(r, 100));
-        }
-        console.log('[DreamAPI] signIn available:', !!clerk.signIn, 'client.signIn:', !!clerk.client?.signIn, 'setActive:', !!clerk.setActive);
-      }
-
-      // Get signIn from either location
-      const signInObj = clerk.signIn || clerk.client?.signIn;
-
-      if (ticket && signInObj && clerk.setActive) {
-        console.log('[DreamAPI] Consuming ticket...');
-        try {
-          const result = await signInObj.create({ strategy: 'ticket', ticket });
-          console.log('[DreamAPI] Ticket result:', result.status, result.createdSessionId);
-
-          if (result.status === 'complete' && result.createdSessionId) {
-            await clerk.setActive({ session: result.createdSessionId });
-            console.log('[DreamAPI] Session activated!');
-
-            // Wait for session to fully hydrate
-            for (let i = 0; i < 20; i++) {
-              await new Promise(r => setTimeout(r, 100));
-              if (clerk.user && clerk.session) break;
-            }
-            console.log('[DreamAPI] User hydrated:', !!clerk.user);
-
-            // Only clean URL AFTER successful sign-in
-            urlParams.delete('__clerk_ticket');
-            const newUrl = urlParams.toString()
-              ? `${window.location.pathname}?${urlParams}`
-              : window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
-          }
-        } catch (err: any) {
-          console.error('[DreamAPI] Ticket error:', err?.message, err);
-          // Don't clean URL on error - let user see what happened
-        }
-      } else if (ticket) {
-        console.error('[DreamAPI] FAILED to get signIn object! Ticket NOT consumed.');
-        console.log('[DreamAPI] clerk keys:', Object.keys(clerk));
-      }
+      // Check for existing session (test mode convenience)
+      await this.checkSession();
     }
-    this.loaded = true;
+  }
 
-    // Check for existing session
-    await this.checkSession();
+  /**
+   * Store JWT in memory and localStorage
+   */
+  private setToken(jwt: string): void {
+    this.token = jwt;
+    localStorage.setItem(STORAGE_KEY, jwt);
+    this.onTokenChange?.(jwt);
   }
 
   /**
@@ -233,10 +215,22 @@ export class ClerkManager {
    * Get current user info
    */
   getUser(): ClerkUser | null {
-    // If we have a JWT (from sign-up worker), decode it to get user info
+    // ALWAYS prefer Clerk's live user data (has fresh metadata after webhook updates)
+    const clerk = getClerk();
+    if (clerk?.user) {
+      const user = clerk.user;
+      const metadata = user.publicMetadata || {};
+      return {
+        id: user.id,
+        email: user.primaryEmailAddress?.emailAddress || '',
+        plan: (metadata.plan as string) || 'free',
+        publishableKey: (metadata.publishableKey as string) || '',
+      };
+    }
+
+    // Fallback: decode JWT if no Clerk session (edge case)
     if (this.token) {
       try {
-        // JWT is base64url encoded: header.payload.signature
         const parts = this.token.split('.');
         if (parts.length === 3) {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
@@ -252,19 +246,7 @@ export class ClerkManager {
       }
     }
 
-    // Otherwise get from Clerk
-    const clerk = getClerk();
-    if (!clerk?.user) return null;
-
-    const user = clerk.user;
-    const metadata = user.publicMetadata || {};
-
-    return {
-      id: user.id,
-      email: user.primaryEmailAddress?.emailAddress || '',
-      plan: (metadata.plan as string) || 'free',
-      publishableKey: (metadata.publishableKey as string) || '',
-    };
+    return null;
   }
 
   /**
@@ -275,37 +257,49 @@ export class ClerkManager {
   }
 
   /**
-   * Refresh token and user data from Clerk server
-   * Call after plan changes (checkout success) to get updated metadata
+   * Refresh token and user data
+   * In test mode: refreshes from Clerk session
+   * In live mode: returns current token (re-auth needed for fresh data)
    */
   async refreshToken(): Promise<string | null> {
+    // Try Clerk first (test mode)
     const clerk = getClerk();
-    if (!clerk?.session) return null;
-
-    try {
-      // Reload user data from Clerk server (gets updated publicMetadata after webhook)
-      if (clerk.user?.reload) {
-        await clerk.user.reload();
+    if (clerk?.session) {
+      try {
+        if (clerk.user?.reload) {
+          await clerk.user.reload();
+        }
+        this.token = await clerk.session.getToken({ template: JWT_TEMPLATE });
+        this.setToken(this.token);
+        return this.token;
+      } catch (err) {
+        console.error('Failed to refresh token from Clerk:', err);
       }
-
-      this.token = await clerk.session.getToken({ template: JWT_TEMPLATE });
-      this.onTokenChange?.(this.token);
-      return this.token;
-    } catch (err) {
-      console.error('Failed to refresh token:', err);
-      return null;
     }
+
+    // In live mode (JWT-only), return current token
+    // User needs to re-auth via sign-up worker for fresh metadata
+    return this.token;
   }
 
   /**
    * Sign out
    */
   async signOut(): Promise<void> {
-    const clerk = getClerk();
-    if (!clerk) return;
-    await clerk.signOut();
+    // Clear JWT from localStorage
+    localStorage.removeItem(STORAGE_KEY);
     this.token = null;
     this.onTokenChange?.(null);
+
+    // Also sign out of Clerk if loaded (test mode)
+    const clerk = getClerk();
+    if (clerk) {
+      try {
+        await clerk.signOut();
+      } catch (e) {
+        // Clerk may not be loaded in live mode
+      }
+    }
   }
 
   /**

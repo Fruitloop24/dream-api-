@@ -119,9 +119,11 @@ export class AuthHelpers {
     }
 
     const baseUrl = this.client.getSignupBaseUrl();
+    // Convert relative paths to absolute URLs so worker redirects to dev's app, not worker domain
+    const redirectUrl = this.makeAbsoluteUrl(options.redirect);
     const params = new URLSearchParams({
       pk,
-      redirect: options.redirect,
+      redirect: redirectUrl,
     });
 
     return `${baseUrl}/signup?${params.toString()}`;
@@ -146,9 +148,11 @@ export class AuthHelpers {
     }
 
     const baseUrl = this.client.getSignupBaseUrl();
+    // Convert relative paths to absolute URLs so worker redirects to dev's app, not worker domain
+    const redirectUrl = this.makeAbsoluteUrl(options.redirect);
     const params = new URLSearchParams({
       pk,
-      redirect: options.redirect,
+      redirect: redirectUrl,
     });
 
     return `${baseUrl}/signin?${params.toString()}`;
@@ -177,11 +181,32 @@ export class AuthHelpers {
 
     const baseUrl = this.client.getSignupBaseUrl();
     const returnUrl = options?.returnUrl || (typeof window !== 'undefined' ? window.location.href : '/');
+    // Convert relative paths to absolute URLs so worker redirects to dev's app, not worker domain
+    const redirectUrl = this.makeAbsoluteUrl(returnUrl);
     const params = new URLSearchParams({
       pk,
-      redirect: returnUrl,
+      redirect: redirectUrl,
     });
 
     return `${baseUrl}/account?${params.toString()}`;
+  }
+
+  /**
+   * Convert a relative path to an absolute URL using current origin.
+   * Already-absolute URLs are returned unchanged.
+   */
+  private makeAbsoluteUrl(path: string): string {
+    // Already absolute
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+
+    // In browser, prepend current origin
+    if (typeof window !== 'undefined') {
+      return new URL(path, window.location.origin).toString();
+    }
+
+    // Server-side: can't determine origin, return as-is (shouldn't happen in practice)
+    return path;
   }
 }
