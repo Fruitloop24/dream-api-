@@ -698,8 +698,13 @@ function getRefreshPageHTML(pk: string, redirect: string, clerkPk: string): stri
         redirectUrl.searchParams.set('__clerk_jwt', jwt);
       }
 
+      // Clear old JWT from target domain's localStorage via the redirect
+      // The fresh JWT in URL will be picked up by SDK
       console.log('[Refresh] Redirecting to:', redirectUrl.toString());
-      window.location.href = redirectUrl.toString();
+
+      // Add cache-busting to force fresh page load
+      redirectUrl.searchParams.set('_t', Date.now().toString());
+      window.location.replace(redirectUrl.toString());
     }
 
     init();

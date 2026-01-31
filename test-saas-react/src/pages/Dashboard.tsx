@@ -72,17 +72,24 @@ export default function Dashboard() {
     }
   };
 
-  // Handle success redirect from Stripe - reload to get fresh data
+  // Handle success redirect from Stripe - refresh token to get updated plan
   useEffect(() => {
     const success = searchParams.get('success');
+    const freshJwt = searchParams.get('__clerk_jwt');
+
     if (success === 'true' && !successHandled.current) {
       successHandled.current = true;
       setMessage('Upgrade successful!');
 
-      // Wait for webhook to process, then reload to get fresh data
+      // If we have fresh JWT from /refresh, use it and reload
+      if (freshJwt) {
+        localStorage.setItem('dream_api_jwt', freshJwt);
+      }
+
+      // Clean URL and reload to pick up fresh data
       setTimeout(() => {
         window.location.href = '/dashboard';
-      }, 2000);
+      }, 1500);
     }
   }, [searchParams]);
 
