@@ -35,7 +35,7 @@ interface ClerkInstance {
     reload?: () => Promise<void>;
   };
   session?: {
-    getToken: (options?: { template?: string }) => Promise<string>;
+    getToken: (options?: { template?: string; skipCache?: boolean }) => Promise<string>;
   };
   signIn?: {
     create: (params: { strategy: string; ticket: string }) => Promise<{ status: string; createdSessionId?: string }>;
@@ -269,7 +269,8 @@ export class ClerkManager {
         if (clerk.user?.reload) {
           await clerk.user.reload();
         }
-        this.token = await clerk.session.getToken({ template: JWT_TEMPLATE });
+        // skipCache: true forces fresh token with updated metadata (e.g. after plan change)
+        this.token = await clerk.session.getToken({ template: JWT_TEMPLATE, skipCache: true });
         this.setToken(this.token);
         return this.token;
       } catch (err) {

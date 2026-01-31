@@ -434,9 +434,9 @@ function getSigninPageHTML(pk: string, redirect: string, clerkPk: string): strin
         await window.Clerk.user.reload();
         console.log('[SignIn] User reloaded, plan:', window.Clerk.user.publicMetadata?.plan);
 
-        // Get JWT from Clerk session - now has fresh metadata
-        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
-        console.log('[SignIn] Got JWT:', jwt ? 'yes' : 'no');
+        // Get JWT - skipCache: true forces new token with updated metadata
+        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api', skipCache: true });
+        console.log('[SignIn] Got JWT (skipCache):', jwt ? 'yes' : 'no');
 
         // Redirect with JWT - REDIRECT should be absolute URL from SDK
         // If absolute URL, use directly. If relative, build against current origin.
@@ -560,9 +560,9 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
         await window.Clerk.user.reload();
         console.log('[SignUp] User reloaded, plan:', window.Clerk.user.publicMetadata?.plan);
 
-        // Get JWT from Clerk session - now has fresh metadata
-        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
-        console.log('[SignUp] Got JWT:', jwt ? 'yes' : 'no');
+        // Get JWT - skipCache: true forces new token with updated metadata
+        const jwt = await window.Clerk.session.getToken({ template: 'end-user-api', skipCache: true });
+        console.log('[SignUp] Got JWT (skipCache):', jwt ? 'yes' : 'no');
 
         // Redirect with JWT - REDIRECT should be absolute URL from SDK
         // If absolute URL, use directly. If relative, build against current origin.
@@ -677,14 +677,33 @@ function getRefreshPageHTML(pk: string, redirect: string, clerkPk: string): stri
         return;
       }
 
-      // CRITICAL: Reload user to get fresh metadata from Clerk server
-      // This picks up any changes from Stripe webhooks
-      await window.Clerk.user.reload();
-      console.log('[Refresh] User reloaded, plan:', window.Clerk.user.publicMetadata?.plan);
+      // CRITICAL: Poll until webhook updates Clerk metadata
+      // Stripe redirects here BEFORE webhook fires, so we must wait
+      const statusEl = document.getElementById('status');
+      let plan = window.Clerk.user.publicMetadata?.plan || 'free';
+      console.log('[Refresh] Initial plan:', plan);
 
-      // Get fresh JWT from Clerk session - now has updated metadata
-      const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
-      console.log('[Refresh] Got fresh JWT:', jwt ? 'yes' : 'no');
+      // Poll until plan changes from 'free' (max 20 attempts = ~20 seconds)
+      for (let attempt = 1; attempt <= 20 && plan === 'free'; attempt++) {
+        statusEl.innerHTML = '<div class="spinner"></div><h2>Updating your account...</h2><p>Please wait... (' + attempt + ')</p>';
+        await new Promise(r => setTimeout(r, 1000));
+        await window.Clerk.user.reload();
+        plan = window.Clerk.user.publicMetadata?.plan || 'free';
+        console.log('[Refresh] Poll attempt', attempt, '- plan:', plan);
+      }
+
+      if (plan === 'free') {
+        console.log('[Refresh] Timeout waiting for plan update');
+        statusEl.innerHTML = '<h2>Taking longer than expected...</h2><p>Redirecting anyway. If plan shows incorrectly, please refresh.</p>';
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        console.log('[Refresh] Plan updated to:', plan);
+        statusEl.innerHTML = '<div class="spinner"></div><h2>Plan updated!</h2><p>Redirecting...</p>';
+      }
+
+      // NOW get JWT - plan should be updated
+      const jwt = await window.Clerk.session.getToken({ template: 'end-user-api', skipCache: true });
+      console.log('[Refresh] Got fresh JWT with plan:', plan);
 
       // Build redirect URL
       let redirectUrl;
