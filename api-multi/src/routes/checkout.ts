@@ -123,7 +123,7 @@ export async function handleCreateCheckout(
 		const body = await request.json().catch((err) => {
 			console.error('❌ Failed to parse request body:', err);
 			return {};
-		}) as { tier?: string; priceId?: string };
+		}) as { tier?: string; priceId?: string; successUrl?: string; cancelUrl?: string };
 		console.log(`[Checkout] Request body: ${JSON.stringify(body)}`);
 
 		const targetTier = body.tier || 'pro';
@@ -163,10 +163,15 @@ export async function handleCreateCheckout(
 		// Use origin from request for success/cancel URLs (handles changing hash URLs)
 		const frontendUrl = origin || 'https://app.panacea-tech.net';
 
+		// Use provided URLs or fall back to defaults
+		// successUrl should point to sign-up worker's /refresh for JWT polling after plan change
+		const successUrl = body.successUrl || `${frontendUrl}/dashboard?success=true`;
+		const cancelUrl = body.cancelUrl || `${frontendUrl}/dashboard?canceled=true`;
+
 		// Build checkout session params
 		const checkoutParams: Record<string, string> = {
-			'success_url': `${frontendUrl}/dashboard?success=true`,
-			'cancel_url': `${frontendUrl}/dashboard?canceled=true`,
+			'success_url': successUrl,
+			'cancel_url': cancelUrl,
 			'customer_email': userEmail,
 			'client_reference_id': userId,
 			'mode': 'subscription',
