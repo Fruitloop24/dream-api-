@@ -192,6 +192,38 @@ export class AuthHelpers {
   }
 
   /**
+   * Get the refresh URL for updating JWT after plan changes.
+   *
+   * Use this as Stripe's success_url to ensure the JWT is refreshed
+   * with updated plan metadata after checkout completes.
+   *
+   * @example
+   * ```typescript
+   * const refreshUrl = api.auth.getRefreshUrl({ redirect: '/dashboard' });
+   * // Use as Stripe success_url
+   * await api.billing.createCheckout({
+   *   tier: 'pro',
+   *   successUrl: refreshUrl,
+   * });
+   * ```
+   */
+  getRefreshUrl(options: AuthUrlOptions): string {
+    const pk = this.client.getPublishableKey();
+    if (!pk) {
+      throw new Error('DreamAPI: publishableKey required for auth URLs');
+    }
+
+    const baseUrl = this.client.getSignupBaseUrl();
+    const redirectUrl = this.makeAbsoluteUrl(options.redirect);
+    const params = new URLSearchParams({
+      pk,
+      redirect: redirectUrl,
+    });
+
+    return `${baseUrl}/refresh?${params.toString()}`;
+  }
+
+  /**
    * Convert a relative path to an absolute URL using current origin.
    * Already-absolute URLs are returned unchanged.
    */

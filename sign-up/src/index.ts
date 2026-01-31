@@ -77,12 +77,13 @@ export default {
 		const cookies = parseCookies(request.headers.get('Cookie'));
 		const hasSignupCookie = !!cookies['signup_data'];
 
-		// Handle /signup, /signin, /account, or / with Clerk callback params
-		const isAuthRoute = path === '/signup' || path === '/signin' || path === '/account' || (path === '/' && (hasClerkParams || hasSignupCookie));
+		// Handle /signup, /signin, /account, /refresh, or / with Clerk callback params
+		const isAuthRoute = path === '/signup' || path === '/signin' || path === '/account' || path === '/refresh' || (path === '/' && (hasClerkParams || hasSignupCookie));
 
 		if (isAuthRoute && request.method === 'GET') {
 			const isSignIn = path === '/signin';
 			const isAccount = path === '/account';
+			const isRefresh = path === '/refresh';
 			let pk = url.searchParams.get('pk');
 			let redirect = url.searchParams.get('redirect');
 
@@ -117,11 +118,13 @@ export default {
 			// Set cookie to persist pk/redirect through Clerk redirects
 			const cookieData = btoa(JSON.stringify({ pk, redirect }));
 
-			const html = isAccount
-				? getAccountPageHTML(pk, redirect, clerkKeys.publishableKey)
-				: isSignIn
-					? getSigninPageHTML(pk, redirect, clerkKeys.publishableKey)
-					: getSignupPageHTML(pk, redirect, clerkKeys.publishableKey);
+			const html = isRefresh
+				? getRefreshPageHTML(pk, redirect, clerkKeys.publishableKey)
+				: isAccount
+					? getAccountPageHTML(pk, redirect, clerkKeys.publishableKey)
+					: isSignIn
+						? getSigninPageHTML(pk, redirect, clerkKeys.publishableKey)
+						: getSignupPageHTML(pk, redirect, clerkKeys.publishableKey);
 
 			return new Response(html, {
 				headers: {
@@ -589,6 +592,114 @@ function getSignupPageHTML(pk: string, redirect: string, clerkPk: string): strin
           },
         },
       });
+    }
+
+    init();
+  </script>
+</body>
+</html>`;
+}
+
+function getRefreshPageHTML(pk: string, redirect: string, clerkPk: string): string {
+	const safeRedirect = escapeJS(redirect);
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Updating Account...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #status {
+      color: white;
+      text-align: center;
+      background: rgba(255,255,255,0.1);
+      padding: 40px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h2 { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div id="status">
+    <div class="spinner"></div>
+    <h2>Updating your account...</h2>
+    <p>Please wait...</p>
+  </div>
+
+  <script>
+    const PK = '${escapeJS(pk)}';
+    const REDIRECT = '${safeRedirect}';
+
+    async function init() {
+      console.log('[Refresh] Starting token refresh...');
+
+      // Load Clerk
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      script.setAttribute('data-clerk-publishable-key', '${escapeJS(clerkPk)}');
+      document.head.appendChild(script);
+
+      while (!window.Clerk) await new Promise(r => setTimeout(r, 50));
+      await window.Clerk.load();
+
+      // Wait for user session
+      for (let i = 0; i < 30; i++) {
+        if (window.Clerk.user) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      console.log('[Refresh] Clerk loaded, user:', window.Clerk.user?.id || 'none');
+
+      // If no user, redirect to sign-in
+      if (!window.Clerk.user) {
+        console.log('[Refresh] No user session, redirecting to sign-in');
+        window.location.href = '/signin?pk=' + PK + '&redirect=' + encodeURIComponent(REDIRECT);
+        return;
+      }
+
+      // CRITICAL: Reload user to get fresh metadata from Clerk server
+      // This picks up any changes from Stripe webhooks
+      await window.Clerk.user.reload();
+      console.log('[Refresh] User reloaded, plan:', window.Clerk.user.publicMetadata?.plan);
+
+      // Get fresh JWT from Clerk session - now has updated metadata
+      const jwt = await window.Clerk.session.getToken({ template: 'end-user-api' });
+      console.log('[Refresh] Got fresh JWT:', jwt ? 'yes' : 'no');
+
+      // Build redirect URL
+      let redirectUrl;
+      if (REDIRECT.startsWith('http://') || REDIRECT.startsWith('https://')) {
+        redirectUrl = new URL(REDIRECT);
+      } else {
+        redirectUrl = new URL(REDIRECT, window.location.origin);
+      }
+
+      if (jwt) {
+        redirectUrl.searchParams.set('__clerk_jwt', jwt);
+      }
+
+      console.log('[Refresh] Redirecting to:', redirectUrl.toString());
+      window.location.href = redirectUrl.toString();
     }
 
     init();

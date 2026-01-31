@@ -54,10 +54,13 @@ export default function ChoosePlanPage() {
 
     setUpgrading(tier.name);
     try {
+      // Use refresh URL for success so JWT is updated with new plan
+      const refreshUrl = api.auth.getRefreshUrl({ redirect: '/dashboard?success=true' });
+
       const result = await api.billing.createCheckout({
         tier: tier.name,
         priceId: tier.priceId,
-        successUrl: window.location.origin + '/dashboard?success=true',
+        successUrl: refreshUrl,
         cancelUrl: window.location.origin + '/choose-plan?canceled=true',
       });
 
